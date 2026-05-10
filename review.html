@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>DoToR - Rate Your Experience</title>
+  <link rel="shortcut icon" href="./logo.jpeg" type="image/x-icon">
+  <style>
+    *{ margin:0; padding:0; box-sizing:border-box; font-family:Arial,sans-serif; }
+    body{ background:#f5f5f5; min-height:100vh; }
+
+    .header{ background:#FF6B00; padding:25px 20px; text-align:center; }
+    .header-title{ font-size:22px; font-weight:800; color:white; }
+    .header-sub{ font-size:13px; color:rgba(255,255,255,0.85); margin-top:4px; }
+
+    .content{ padding:20px; }
+
+    .card{ background:white; border-radius:16px; padding:20px; margin-bottom:15px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+    .card-title{ font-size:13px; font-weight:800; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:15px; text-align:center; }
+
+    /* Tech card */
+    .tech-row{ display:flex; align-items:center; gap:12px; margin-bottom:5px; }
+    .tech-avatar{ width:55px; height:55px; background:#1A3A6B; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:26px; }
+    .tech-name{ font-size:16px; font-weight:800; color:#1A3A6B; }
+    .tech-job{ font-size:12px; color:#888; margin-top:3px; }
+
+    /* Stars */
+    .stars-container{ display:flex; justify-content:center; gap:12px; margin:15px 0; }
+    .star{
+      font-size:42px; cursor:pointer;
+      filter:grayscale(100%);
+      transition:all 0.2s;
+    }
+    .star.active{ filter:grayscale(0%); transform:scale(1.15); }
+    .rating-label{ text-align:center; font-size:15px; font-weight:800; color:#1A3A6B; min-height:22px; }
+
+    /* Category ratings */
+    .cat-row{ display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #f5f5f5; }
+    .cat-row:last-child{ border:none; }
+    .cat-label{ font-size:13px; font-weight:700; color:#1A3A6B; }
+    .cat-stars{ display:flex; gap:5px; }
+    .cat-star{ font-size:22px; cursor:pointer; filter:grayscale(100%); transition:all 0.15s; }
+    .cat-star.on{ filter:grayscale(0%); }
+
+    /* Comment */
+    .comment-box{
+      width:100%; min-height:100px; border:2px solid #eee;
+      border-radius:12px; padding:12px; font-size:14px;
+      color:#1A3A6B; resize:none; outline:none;
+      font-family:Arial,sans-serif;
+    }
+    .comment-box:focus{ border-color:#FF6B00; }
+
+    /* Tags */
+    .tags{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .tag{
+      padding:7px 14px; border-radius:20px;
+      border:2px solid #eee; font-size:12px;
+      font-weight:700; color:#888; cursor:pointer;
+      transition:all 0.2s;
+    }
+    .tag.selected{ border-color:#FF6B00; color:#FF6B00; background:#fff5ee; }
+
+    /* Submit */
+    .submit-btn{
+      width:100%; padding:16px; background:#FF6B00;
+      color:white; font-size:17px; font-weight:800;
+      border:none; border-radius:14px; cursor:pointer;
+      margin-top:5px;
+    }
+    .submit-btn:disabled{ background:#ccc; cursor:not-allowed; }
+
+    .skip-btn{
+      width:100%; padding:12px; background:transparent;
+      color:#888; font-size:14px; font-weight:700;
+      border:none; cursor:pointer; margin-top:8px;
+    }
+
+    /* Success */
+    .success-screen{
+      display:none; text-align:center;
+      padding:60px 20px;
+    }
+    .success-icon{ font-size:80px; }
+    .success-title{ font-size:24px; font-weight:800; color:#1A3A6B; margin-top:20px; }
+    .success-sub{ font-size:14px; color:#888; margin-top:8px; }
+    .home-btn{
+      display:inline-block; margin-top:30px;
+      padding:15px 40px; background:#FF6B00;
+      color:white; font-size:16px; font-weight:800;
+      border:none; border-radius:14px; cursor:pointer;
+      text-decoration:none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="mainSection">
+
+    <div class="header">
+      <div class="header-title">⭐ Rate Your Experience</div>
+      <div class="header-sub">Help us improve DoToR!</div>
+    </div>
+
+    <div class="content">
+
+      <!-- TECH INFO -->
+      <div class="card">
+        <div class="card-title">Your Technician</div>
+        <div class="tech-row">
+          <div class="tech-avatar">👨‍🔧</div>
+          <div>
+            <div class="tech-name" id="reviewTechName">Technician</div>
+            <div class="tech-job" id="reviewJob">Repair Service</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- OVERALL RATING -->
+      <div class="card">
+        <div class="card-title">Overall Rating</div>
+        <div class="stars-container" id="mainStars">
+          <span class="star" data-val="1" onclick="setRating(1)">⭐</span>
+          <span class="star" data-val="2" onclick="setRating(2)">⭐</span>
+          <span class="star" data-val="3" onclick="setRating(3)">⭐</span>
+          <span class="star" data-val="4" onclick="setRating(4)">⭐</span>
+          <span class="star" data-val="5" onclick="setRating(5)">⭐</span>
+        </div>
+        <div class="rating-label" id="ratingLabel">Tap to rate</div>
+      </div>
+
+      <!-- CATEGORY RATINGS -->
+      <div class="card">
+        <div class="card-title">Rate Each Category</div>
+        <div class="cat-row">
+          <span class="cat-label">🔧 Repair Quality</span>
+          <div class="cat-stars" id="cat1">
+            <span class="cat-star" onclick="setCat(1,1)">⭐</span>
+            <span class="cat-star" onclick="setCat(1,2)">⭐</span>
+            <span class="cat-star" onclick="setCat(1,3)">⭐</span>
+            <span class="cat-star" onclick="setCat(1,4)">⭐</span>
+            <span class="cat-star" onclick="setCat(1,5)">⭐</span>
+          </div>
+        </div>
+        <div class="cat-row">
+          <span class="cat-label">⚡ Speed</span>
+          <div class="cat-stars" id="cat2">
+            <span class="cat-star" onclick="setCat(2,1)">⭐</span>
+            <span class="cat-star" onclick="setCat(2,2)">⭐</span>
+            <span class="cat-star" onclick="setCat(2,3)">⭐</span>
+            <span class="cat-star" onclick="setCat(2,4)">⭐</span>
+            <span class="cat-star" onclick="setCat(2,5)">⭐</span>
+          </div>
+        </div>
+        <div class="cat-row">
+          <span class="cat-label">😊 Behaviour</span>
+          <div class="cat-stars" id="cat3">
+            <span class="cat-star" onclick="setCat(3,1)">⭐</span>
+            <span class="cat-star" onclick="setCat(3,2)">⭐</span>
+            <span class="cat-star" onclick="setCat(3,3)">⭐</span>
+            <span class="cat-star" onclick="setCat(3,4)">⭐</span>
+            <span class="cat-star" onclick="setCat(3,5)">⭐</span>
+          </div>
+        </div>
+        <div class="cat-row">
+          <span class="cat-label">💰 Value for Money</span>
+          <div class="cat-stars" id="cat4">
+            <span class="cat-star" onclick="setCat(4,1)">⭐</span>
+            <span class="cat-star" onclick="setCat(4,2)">⭐</span>
+            <span class="cat-star" onclick="setCat(4,3)">⭐</span>
+            <span class="cat-star" onclick="setCat(4,4)">⭐</span>
+            <span class="cat-star" onclick="setCat(4,5)">⭐</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- QUICK TAGS -->
+      <div class="card">
+        <div class="card-title">What did you like?</div>
+        <div class="tags">
+          <span class="tag" onclick="toggleTag(this)">👨‍🔧 Professional</span>
+          <span class="tag" onclick="toggleTag(this)">⚡ Fast Service</span>
+          <span class="tag" onclick="toggleTag(this)">💰 Good Price</span>
+          <span class="tag" onclick="toggleTag(this)">✅ Quality Work</span>
+          <span class="tag" onclick="toggleTag(this)">😊 Friendly</span>
+          <span class="tag" onclick="toggleTag(this)">🔧 Expert Repair</span>
+          <span class="tag" onclick="toggleTag(this)">📱 Device Working</span>
+          <span class="tag" onclick="toggleTag(this)">🏆 Highly Recommend</span>
+        </div>
+      </div>
+
+      <!-- COMMENT -->
+      <div class="card">
+        <div class="card-title">Write a Review (Optional)</div>
+        <textarea class="comment-box" id="reviewComment" placeholder="Tell us about your experience..."></textarea>
+      </div>
+
+      <button class="submit-btn" id="submitBtn" onclick="submitReview()">
+        Submit Review 🚀
+      </button>
+
+      <button class="skip-btn" onclick="window.location.href='home.html'">
+        Skip for now
+      </button>
+
+    </div>
+
+  </div>
+
+  <!-- SUCCESS SCREEN -->
+  <div class="success-screen" id="successScreen">
+    <div class="success-icon">🎉</div>
+    <div class="success-title">Thank You!</div>
+    <div class="success-sub">Your review helps us improve DoToR<br>and rewards great technicians!</div>
+    <a href="home.html" class="home-btn">Back to Home 🏠</a>
+  </div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+  import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey:            "AIzaSyDS0hDsfqwMiMg5S9Ztp8eku83XerVtbdY",
+    authDomain:        "dotor-2e4d8.firebaseapp.com",
+    databaseURL:       "https://dotor-2e4d8-default-rtdb.firebaseio.com",
+    projectId:         "dotor-2e4d8",
+    storageBucket:     "dotor-2e4d8.firebasestorage.app",
+    messagingSenderId: "984437487718",
+    appId:             "1:984437487718:web:3d279fdf6e720f119915a7"
+  }
+
+  const app = initializeApp(firebaseConfig)
+  const db  = getDatabase(app)
+
+  // Load info
+  document.getElementById('reviewTechName').textContent = localStorage.getItem('assignedTechName') || 'Technician'
+  document.getElementById('reviewJob').textContent =
+    (localStorage.getItem('lastBrand') || '') + ' — ' + (localStorage.getItem('lastRepair') || 'Repair')
+
+  let mainRating = 0
+  const labels = ['','😞 Poor','😐 Fair','🙂 Good','😊 Very Good','🤩 Excellent!']
+
+  window.setRating = function(val) {
+    mainRating = val
+    document.querySelectorAll('#mainStars .star').forEach((s,i) => {
+      s.classList.toggle('active', i < val)
+    })
+    document.getElementById('ratingLabel').textContent = labels[val]
+  }
+
+  const catVals = {1:0,2:0,3:0,4:0}
+  window.setCat = function(cat, val) {
+    catVals[cat] = val
+    document.querySelectorAll('#cat'+cat+' .cat-star').forEach((s,i) => {
+      s.classList.toggle('on', i < val)
+    })
+  }
+
+  window.toggleTag = function(el) {
+    el.classList.toggle('selected')
+  }
+
+  window.submitReview = function() {
+    if (mainRating === 0) { alert('Please give a star rating first!'); return }
+
+    const tags = [...document.querySelectorAll('.tag.selected')].map(t => t.textContent.trim())
+    const comment = document.getElementById('reviewComment').value.trim()
+
+    const review = {
+      customerName: localStorage.getItem('custName')       || 'Customer',
+      techName:     localStorage.getItem('assignedTechName') || 'Technician',
+      brand:        localStorage.getItem('lastBrand')      || '',
+      repair:       localStorage.getItem('lastRepair')     || '',
+      rating:       mainRating,
+      quality:      catVals[1],
+      speed:        catVals[2],
+      behaviour:    catVals[3],
+      value:        catVals[4],
+      tags:         tags,
+      comment:      comment,
+      time:         new Date().toLocaleString()
+    }
+
+    push(ref(db,'reviews'), review)
+      .then(() => {
+        document.getElementById('mainSection').style.display  = 'none'
+        document.getElementById('successScreen').style.display = 'block'
+      })
+      .catch(() => alert('Failed to submit. Try again!'))
+  }
+</script>
+
+</body>
+</html>

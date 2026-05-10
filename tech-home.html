@@ -8,123 +8,72 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     .tech-home { background:#f5f5f5; min-height:100vh; }
-    .tech-header {
-      background:#1A3A6B; padding:30px 20px 20px;
-      display:flex; justify-content:space-between; align-items:center;
-    }
-    .greeting       { font-size:13px; color:rgba(255,255,255,0.8); font-weight:600; }
-    .tech-name-text { font-size:20px; color:white; font-weight:800; }
-    .tech-loc-text  { font-size:12px; color:rgba(255,255,255,0.8); font-weight:600; margin-top:2px; }
-    .tech-right     { display:flex; flex-direction:column; align-items:center; gap:8px; }
-    .profile-circle {
-      width:50px; height:50px; background:white; border-radius:50%;
-      display:flex; align-items:center; justify-content:center; font-size:26px;
-    }
-    .status-toggle {
-      background:#e8f5e9; color:#2e7d32;
-      font-size:12px; font-weight:800;
-      padding:5px 12px; border-radius:20px; cursor:pointer;
-    }
-    .earnings-row { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:15px; }
-    .earn-card {
-      background:white; border-radius:14px;
-      padding:15px 10px; text-align:center;
-      box-shadow:0 2px 8px rgba(0,0,0,0.06);
-    }
-    .earn-label  { font-size:11px; color:#888; font-weight:700; }
-    .earn-amount { font-size:18px; font-weight:800; color:#1A3A6B; margin-top:4px; }
-    .section-title { font-size:16px; font-weight:800; color:#1A3A6B; margin:20px 15px 12px; }
+    .tech-header{ background:#1A3A6B; padding:30px 20px 20px; display:flex; justify-content:space-between; align-items:center; }
+    .greeting{ font-size:13px; color:rgba(255,255,255,0.8); font-weight:600; }
+    .tech-name-text{ font-size:20px; color:white; font-weight:800; }
+    .tech-loc-text{ font-size:12px; color:rgba(255,255,255,0.8); font-weight:600; margin-top:2px; }
+    .tech-right{ display:flex; flex-direction:column; align-items:center; gap:8px; }
+    .profile-circle{ width:50px; height:50px; background:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:26px; }
+    .status-toggle{ background:#e8f5e9; color:#2e7d32; font-size:12px; font-weight:800; padding:5px 12px; border-radius:20px; cursor:pointer; }
+    .earnings-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:15px; }
+    .earn-card{ background:white; border-radius:14px; padding:15px 10px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+    .earn-label{ font-size:11px; color:#888; font-weight:700; }
+    .earn-amount{ font-size:18px; font-weight:800; color:#1A3A6B; margin-top:4px; }
+    .section-title{ font-size:16px; font-weight:800; color:#1A3A6B; margin:20px 15px 12px; }
+    .job-request-card{ background:white; border-radius:16px; padding:18px; margin-bottom:12px; box-shadow:0 2px 10px rgba(0,0,0,0.08); border-left:4px solid #FF6B00; position:relative; }
+    .job-badge{ position:absolute; top:12px; right:12px; background:#FF6B00; color:white; font-size:10px; font-weight:800; padding:3px 10px; border-radius:20px; }
+    .job-customer{ font-size:15px; font-weight:800; color:#1A3A6B; }
+    .job-type{ font-size:13px; font-weight:700; color:#FF6B00; margin-top:4px; }
+    .job-location{ font-size:12px; color:#888; font-weight:600; margin-top:3px; }
+    .job-distance{ font-size:12px; color:#888; font-weight:600; margin-top:3px; }
+    .job-actions{ display:flex; gap:10px; margin-top:15px; }
+    .accept-btn,.reject-btn{ flex:1; padding:12px; border:none; border-radius:12px; font-size:14px; font-weight:800; cursor:pointer; }
+    .accept-btn{ background:#1A3A6B; color:white; }
+    .reject-btn{ background:#ffebee; color:#c62828; }
+    .ongoing-card{ background:white; border-radius:16px; padding:18px; margin:0 15px 15px; box-shadow:0 2px 10px rgba(0,0,0,0.08); border-left:4px solid #FF6B00; }
+    .no-ongoing{ background:white; border-radius:16px; padding:20px; margin:0 15px 15px; text-align:center; color:#888; font-weight:600; font-size:13px; box-shadow:0 2px 8px rgba(0,0,0,0.05); }
+    .status-text{ font-size:12px; font-weight:800; color:#FF6B00; margin:10px 0 8px; }
 
-    /* Job request cards */
-    .job-request-card {
-      background:white; border-radius:16px; padding:18px; margin-bottom:12px;
-      box-shadow:0 2px 10px rgba(0,0,0,0.08);
-      border-left:4px solid #FF6B00; position:relative;
-    }
-    .job-badge {
-      position:absolute; top:12px; right:12px;
-      background:#FF6B00; color:white;
-      font-size:10px; font-weight:800;
-      padding:3px 10px; border-radius:20px;
-    }
-    .job-customer { font-size:15px; font-weight:800; color:#1A3A6B; }
-    .job-type     { font-size:13px; font-weight:700; color:#FF6B00; margin-top:4px; }
-    .job-location { font-size:12px; color:#888; font-weight:600; margin-top:3px; }
-    .job-distance { font-size:12px; color:#888; font-weight:600; margin-top:3px; }
-    .job-actions  { display:flex; gap:10px; margin-top:15px; }
-    .accept-btn, .reject-btn {
-      flex:1; padding:12px; border:none;
-      border-radius:12px; font-size:14px; font-weight:800; cursor:pointer;
-    }
-    .accept-btn { background:#1A3A6B; color:white; }
-    .reject-btn { background:#ffebee; color:#c62828; }
+    /* Distance */
+    .dist-banner{ background:#f5f5f5; border-radius:12px; padding:12px 15px; margin:10px 0; display:flex; justify-content:space-between; align-items:center; }
+    .dist-label{ font-size:11px; color:#888; font-weight:700; }
+    .dist-value{ font-size:20px; font-weight:800; color:#1A3A6B; }
+    .dist-eta{ background:#FF6B00; color:white; font-size:11px; font-weight:800; padding:4px 10px; border-radius:20px; }
 
-    /* Ongoing job card */
-    .ongoing-card {
-      background:white; border-radius:16px;
-      padding:18px; margin:0 15px 15px;
-      box-shadow:0 2px 10px rgba(0,0,0,0.08);
-      border-left:4px solid #FF6B00;
-    }
-    .no-ongoing {
-      background:white; border-radius:16px;
-      padding:20px; margin:0 15px 15px;
-      text-align:center; color:#888;
-      font-weight:600; font-size:13px;
-      box-shadow:0 2px 8px rgba(0,0,0,0.05);
-    }
-    .status-text { font-size:12px; font-weight:800; color:#FF6B00; margin:10px 0 8px; }
+    /* Location row */
+    .loc-row{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
+    .loc-card{ background:#f5f5f5; border-radius:12px; padding:10px; text-align:center; }
+    .loc-icon{ font-size:22px; }
+    .loc-label{ font-size:10px; font-weight:800; color:#888; text-transform:uppercase; letter-spacing:1px; margin-top:3px; }
+    .loc-name{ font-size:11px; font-weight:800; color:#1A3A6B; margin-top:2px; }
 
-    /* ── Customer live location map inside ongoing card ── */
-    .cust-map-label {
-      font-size:11px; font-weight:800; color:#888;
-      text-transform:uppercase; letter-spacing:1px;
-      margin:14px 0 6px;
-    }
-    #custMap {
-      width:100%; height:200px;
-      border-radius:12px; overflow:hidden;
-      border:2px solid #f0f0f0;
-    }
-    .map-waiting {
-      width:100%; height:200px; border-radius:12px;
-      background:#f5f5f5; display:flex;
-      align-items:center; justify-content:center;
-      color:#888; font-size:13px; font-weight:600;
-      border:2px dashed #ddd;
-    }
+    .cust-map-label{ font-size:11px; font-weight:800; color:#888; text-transform:uppercase; letter-spacing:1px; margin:12px 0 6px; }
+    #custMap{ width:100%; height:220px; border-radius:12px; overflow:hidden; border:2px solid #f0f0f0; }
 
-    .complete-btn {
-      width:100%; padding:12px; background:#FF6B00; color:white;
-      border:none; border-radius:12px; font-size:14px; font-weight:800;
-      cursor:pointer; margin-top:12px;
-    }
+    .btn-row{ display:flex; gap:8px; margin-top:10px; }
+    .nav-btn{ flex:1; padding:12px; background:#FF6B00; color:white; border:none; border-radius:12px; font-size:13px; font-weight:800; cursor:pointer; }
+    .call-cust-btn{ flex:1; padding:12px; background:#2e7d32; color:white; border:none; border-radius:12px; font-size:13px; font-weight:800; cursor:pointer; }
+    .complete-btn{ width:100%; padding:12px; background:#1A3A6B; color:white; border:none; border-radius:12px; font-size:14px; font-weight:800; cursor:pointer; margin-top:8px; }
 
-    /* Completed jobs */
-    .completed-list { display:flex; flex-direction:column; gap:10px; margin:0 15px 30px; }
-    .completed-card {
-      background:white; border-radius:14px; padding:15px;
-      display:flex; justify-content:space-between; align-items:center;
-      box-shadow:0 2px 8px rgba(0,0,0,0.05);
-    }
-    .comp-customer { font-size:13px; font-weight:800; color:#1A3A6B; }
-    .comp-type     { font-size:12px; color:#888; font-weight:600; margin-top:3px; }
-    .comp-right    { text-align:right; }
-    .comp-price    { font-size:15px; font-weight:800; color:#FF6B00; }
-    .comp-time     { font-size:11px; color:#888; font-weight:600; margin-top:3px; }
-    .no-jobs       { text-align:center; color:#888; padding:20px; font-weight:600; font-size:13px; }
+    .completed-list{ display:flex; flex-direction:column; gap:10px; margin:0 15px 30px; }
+    .completed-card{ background:white; border-radius:14px; padding:15px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 2px 8px rgba(0,0,0,0.05); }
+    .comp-customer{ font-size:13px; font-weight:800; color:#1A3A6B; }
+    .comp-type{ font-size:12px; color:#888; font-weight:600; margin-top:3px; }
+    .comp-right{ text-align:right; }
+    .comp-price{ font-size:15px; font-weight:800; color:#FF6B00; }
+    .comp-time{ font-size:11px; color:#888; font-weight:600; margin-top:3px; }
+    .no-jobs{ text-align:center; color:#888; padding:20px; font-weight:600; font-size:13px; }
   </style>
 </head>
 <body>
 
 <div class="tech-home">
 
-  <!-- HEADER -->
   <div class="tech-header">
     <div>
       <p class="greeting">Welcome Back! 👋</p>
       <h2 class="tech-name-text" id="techName">Technician</h2>
-      <p class="tech-loc-text"  id="techLoc">📍 Hyderabad</p>
+      <p class="tech-loc-text" id="techLoc">📍 Hyderabad</p>
     </div>
     <div class="tech-right">
       <div class="profile-circle">👨‍🔧</div>
@@ -132,160 +81,135 @@
     </div>
   </div>
 
-  <!-- EARNINGS -->
   <div class="earnings-row">
-    <div class="earn-card">
-      <p class="earn-label">Today</p>
-      <p class="earn-amount">₹0</p>
-    </div>
-    <div class="earn-card">
-      <p class="earn-label">This Week</p>
-      <p class="earn-amount">₹2,850</p>
-    </div>
-    <div class="earn-card">
-      <p class="earn-label">Total Jobs</p>
-      <p class="earn-amount" id="totalJobs">0</p>
-    </div>
+    <div class="earn-card"><p class="earn-label">Today</p><p class="earn-amount">₹0</p></div>
+    <div class="earn-card"><p class="earn-label">This Week</p><p class="earn-amount">₹0</p></div>
+    <div class="earn-card"><p class="earn-label">Total Jobs</p><p class="earn-amount" id="totalJobs">0</p></div>
   </div>
 
-  <!-- NEW JOB REQUESTS -->
   <h3 class="section-title">🔔 New Job Requests</h3>
-  <div id="jobs-container" style="margin:0 15px">
-    <p class="no-jobs">Loading jobs...</p>
-  </div>
+  <div id="jobs-container" style="margin:0 15px"><p class="no-jobs">Loading jobs...</p></div>
 
-  <!-- ONGOING JOB -->
   <h3 class="section-title">🔧 Ongoing Job</h3>
-  <div id="ongoing-section">
-    <div class="no-ongoing">No ongoing job right now</div>
-  </div>
+  <div id="ongoing-section"><div class="no-ongoing">No ongoing job right now</div></div>
 
-  <!-- COMPLETED JOBS -->
   <h3 class="section-title">✅ Completed Jobs</h3>
-  <div class="completed-list" id="completed-list">
-    <p class="no-jobs">No completed jobs yet</p>
-  </div>
+  <div class="completed-list" id="completed-list"><p class="no-jobs">No completed jobs yet</p></div>
 
 </div>
 
 <script type="module">
-  import { initializeApp }                           from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
   import { getDatabase, ref, onValue, update, set, remove } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
 
   const firebaseConfig = {
-    apiKey:            "AIzaSyDS0hDsfqwMiMg5S9Ztp8eku83XerVtbdY",
-    authDomain:        "dotor-2e4d8.firebaseapp.com",
-    databaseURL:       "https://dotor-2e4d8-default-rtdb.firebaseio.com",
-    projectId:         "dotor-2e4d8",
-    storageBucket:     "dotor-2e4d8.firebasestorage.app",
-    messagingSenderId: "984437487718",
-    appId:             "1:984437487718:web:3d279fdf6e720f119915a7"
+    apiKey:"AIzaSyDS0hDsfqwMiMg5S9Ztp8eku83XerVtbdY",
+    authDomain:"dotor-2e4d8.firebaseapp.com",
+    databaseURL:"https://dotor-2e4d8-default-rtdb.firebaseio.com",
+    projectId:"dotor-2e4d8",
+    storageBucket:"dotor-2e4d8.firebasestorage.app",
+    messagingSenderId:"984437487718",
+    appId:"1:984437487718:web:3d279fdf6e720f119915a7"
   }
 
   const app = initializeApp(firebaseConfig)
   const db  = getDatabase(app)
 
-  // Load technician details from localStorage
-  document.getElementById('techName').textContent = localStorage.getItem('techName')     || 'Technician'
+  document.getElementById('techName').textContent = localStorage.getItem('techName') || 'Technician'
   document.getElementById('techLoc').textContent  = '📍 ' + (localStorage.getItem('techLocation') || 'Hyderabad')
 
-  // ── Customer live-location map (inside ongoing card) ──────────────────────
-  let custMap     = null   // Leaflet map instance
-  let custMarker  = null   // 🏠 marker
-  let techMarker2 = null   // 🛵 marker (tech's own position on their map)
-  let gpsWatcher  = null   // watchPosition ID
+  let custMap=null, custMarker=null, techMarker2=null, gpsWatcher=null, distLine=null
+  let cLat=null, cLng=null, myLat=null, myLng=null
+  let currentCustPhone = ''
 
-  function initCustMap() {
-    // Only create once
-    if (custMap) return
-    custMap    = L.map('custMap').setView([17.3850, 78.4867], 14)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap'
-    }).addTo(custMap)
+  function calcDist(la1,ln1,la2,ln2){
+    const R=6371, dL=(la2-la1)*Math.PI/180, dN=(ln2-ln1)*Math.PI/180
+    const a=Math.sin(dL/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dN/2)**2
+    return(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))).toFixed(1)
+  }
 
-    const custIcon = L.divIcon({ html:'<div style="font-size:28px;line-height:1">🏠</div>', className:'', iconSize:[28,28], iconAnchor:[14,28] })
-    const techIcon = L.divIcon({ html:'<div style="font-size:28px;line-height:1">🛵</div>', className:'', iconSize:[28,28], iconAnchor:[14,28] })
+  function updateDist(){
+    if(!cLat||!myLat)return
+    const d=calcDist(myLat,myLng,cLat,cLng), e=Math.round(d/0.5)
+    const dEl=document.getElementById('mapDist'), eEl=document.getElementById('mapEta')
+    const mEl=document.getElementById('myLocName'), cEl=document.getElementById('custLocName2')
+    if(dEl)dEl.textContent=d+' km'
+    if(eEl)eEl.textContent='~'+e+' mins'
+    if(mEl)mEl.textContent='Your Location'
+    if(cEl)cEl.textContent='Customer'
+    if(custMap){
+      if(distLine)custMap.removeLayer(distLine)
+      distLine=L.polyline([[myLat,myLng],[cLat,cLng]],{color:'#FF6B00',weight:3,dashArray:'8,8'}).addTo(custMap)
+      custMap.fitBounds([[myLat,myLng],[cLat,cLng]],{padding:[40,40]})
+    }
+  }
 
-    // Listen to CUSTOMER live location from Firebase
-    onValue(ref(db, 'custLocation'), snap => {
-      if (!snap.exists()) return
-      const { lat, lng } = snap.val()
-      if (custMarker) {
-        custMarker.setLatLng([lat, lng])
-      } else {
-        custMarker = L.marker([lat, lng], { icon: custIcon })
-          .addTo(custMap)
-          .bindPopup('🏠 Customer Location')
-          .openPopup()
-      }
-      custMap.setView([lat, lng], 15)
+  function initCustMap(){
+    if(custMap)return
+    custMap=L.map('custMap').setView([17.3850,78.4867],13)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(custMap)
+    const cI=L.divIcon({html:'<div style="font-size:28px;line-height:1">🏠</div>',className:'',iconSize:[28,28],iconAnchor:[14,28]})
+    const tI=L.divIcon({html:'<div style="font-size:28px;line-height:1">🛵</div>',className:'',iconSize:[28,28],iconAnchor:[14,28]})
+
+    onValue(ref(db,'custLocation'),snap=>{
+      if(!snap.exists())return
+      cLat=snap.val().lat; cLng=snap.val().lng
+      if(custMarker){custMarker.setLatLng([cLat,cLng])}
+      else{custMarker=L.marker([cLat,cLng],{icon:cI}).addTo(custMap).bindPopup('🏠 Customer').openPopup()}
+      updateDist()
     })
 
-    // Also show the technician's own GPS on their map
-    if (navigator.geolocation) {
-      gpsWatcher = navigator.geolocation.watchPosition(
-        pos => {
-          const lat = pos.coords.latitude
-          const lng = pos.coords.longitude
-          // Push tech GPS to Firebase → customer's map shows 🛵
-          set(ref(db, 'techLocation'), { lat, lng })
-
-          if (techMarker2) {
-            techMarker2.setLatLng([lat, lng])
-          } else {
-            techMarker2 = L.marker([lat, lng], { icon: techIcon })
-              .addTo(custMap)
-              .bindPopup('🛵 You')
-          }
+    if(navigator.geolocation){
+      gpsWatcher=navigator.geolocation.watchPosition(
+        pos=>{
+          myLat=pos.coords.latitude; myLng=pos.coords.longitude
+          set(ref(db,'techLocation'),{lat:myLat,lng:myLng})
+          if(techMarker2){techMarker2.setLatLng([myLat,myLng])}
+          else{techMarker2=L.marker([myLat,myLng],{icon:tI}).addTo(custMap).bindPopup('🛵 You')}
+          updateDist()
         },
-        () => {
-          // Fallback GPS
-          set(ref(db, 'techLocation'), { lat: 17.3850, lng: 78.4867 })
-        },
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+        ()=>{myLat=17.3850;myLng=78.4867;set(ref(db,'techLocation'),{lat:myLat,lng:myLng})},
+        {enableHighAccuracy:true,maximumAge:5000,timeout:10000}
       )
     }
   }
 
-  function destroyCustMap() {
-    if (gpsWatcher !== null) {
-      navigator.geolocation.clearWatch(gpsWatcher)
-      gpsWatcher = null
-    }
-    if (custMap) {
-      custMap.remove()
-      custMap    = null
-      custMarker = null
-      techMarker2 = null
-    }
+  function destroyCustMap(){
+    if(gpsWatcher!==null){navigator.geolocation.clearWatch(gpsWatcher);gpsWatcher=null}
+    if(custMap){custMap.remove();custMap=null;custMarker=null;techMarker2=null;distLine=null}
+    cLat=null;cLng=null;myLat=null;myLng=null
   }
 
-  // ── Orders listener ───────────────────────────────────────────────────────
-  onValue(ref(db, 'orders'), snapshot => {
-    const container      = document.getElementById('jobs-container')
-    const ongoingSection = document.getElementById('ongoing-section')
-    const completedList  = document.getElementById('completed-list')
+  window.navigateToCustomer=function(){
+    if(cLat&&cLng){window.open(`https://www.google.com/maps/dir/?api=1&destination=${cLat},${cLng}`,'_blank')}
+    else{alert('Customer location not available yet!')}
+  }
 
-    container.innerHTML     = ''
-    completedList.innerHTML = ''
+  window.callCustomer=function(){
+    if(currentCustPhone){window.location.href='tel:+91'+currentCustPhone}
+    else{alert('Customer phone not available!')}
+  }
 
-    if (!snapshot.exists()) {
-      container.innerHTML      = '<p class="no-jobs">No new jobs right now!</p>'
-      ongoingSection.innerHTML = '<div class="no-ongoing">No ongoing job right now</div>'
-      destroyCustMap()
-      return
+  onValue(ref(db,'orders'),snapshot=>{
+    const container=document.getElementById('jobs-container')
+    const ongoingSection=document.getElementById('ongoing-section')
+    const completedList=document.getElementById('completed-list')
+    container.innerHTML='';completedList.innerHTML=''
+
+    if(!snapshot.exists()){
+      container.innerHTML='<p class="no-jobs">No new jobs right now!</p>'
+      ongoingSection.innerHTML='<div class="no-ongoing">No ongoing job right now</div>'
+      destroyCustMap();return
     }
 
-    let hasPending = false, hasOngoing = false, hasCompleted = false, completedCount = 0
+    let hasPending=false,hasOngoing=false,hasCompleted=false,completedCount=0
 
-    snapshot.forEach(child => {
-      const order   = child.val()
-      const orderId = child.key
+    snapshot.forEach(child=>{
+      const order=child.val(), orderId=child.key
 
-      // ── PENDING ────────────────────────────────────────────────────────────
-      if (order.status === 'pending') {
-        hasPending = true
-        container.innerHTML += `
+      if(order.status==='pending'){
+        hasPending=true
+        container.innerHTML+=`
           <div class="job-request-card">
             <div class="job-badge">New!</div>
             <p class="job-customer">👤 ${order.customerName}</p>
@@ -294,102 +218,81 @@
             <p class="job-distance">🕐 ${order.time}</p>
             <div class="job-actions">
               <button class="reject-btn" onclick="rejectJob('${orderId}')">✕ Reject</button>
-              <button class="accept-btn"
-                onclick="acceptJob('${orderId}','${order.customerName}','${order.brand}','${order.repair}','${order.location}')">
-                ✓ Accept
-              </button>
+              <button class="accept-btn" onclick="acceptJob('${orderId}','${order.customerName}','${order.brand}','${order.repair}','${order.location}','${order.customerPhone||''}')">✓ Accept</button>
             </div>
           </div>`
       }
 
-      // ── ACCEPTED / ONGOING ─────────────────────────────────────────────────
-      if (order.status === 'accepted') {
-        hasOngoing = true
-        ongoingSection.innerHTML = `
+      if(order.status==='accepted'){
+        hasOngoing=true
+        currentCustPhone = order.customerPhone || ''
+        ongoingSection.innerHTML=`
           <div class="ongoing-card">
             <p class="job-customer">👤 ${order.customerName}</p>
             <p class="job-type">📱 ${order.brand} — ${order.repair}</p>
             <p class="job-location">📍 ${order.location}</p>
             <p class="status-text">⚡ In Progress...</p>
-
-            <p class="cust-map-label">📍 Customer Live Location</p>
+            <div class="dist-banner">
+              <div><div class="dist-label">Distance to Customer</div><div class="dist-value" id="mapDist">Calculating...</div></div>
+              <div class="dist-eta" id="mapEta">-- mins</div>
+            </div>
+            <div class="loc-row">
+              <div class="loc-card"><div class="loc-icon">🛵</div><div class="loc-label">Your Location</div><div class="loc-name" id="myLocName">Fetching...</div></div>
+              <div class="loc-card"><div class="loc-icon">🏠</div><div class="loc-label">Customer</div><div class="loc-name" id="custLocName2">Waiting...</div></div>
+            </div>
+            <p class="cust-map-label">📍 Live Map</p>
             <div id="custMap"></div>
-
-            <button class="complete-btn" onclick="completeJob('${orderId}')">
-              Mark Complete ✓
-            </button>
+            <div class="btn-row">
+              <button class="nav-btn" onclick="navigateToCustomer()">🗺️ Navigate</button>
+              <button class="call-cust-btn" onclick="callCustomer()">📞 Call Customer</button>
+            </div>
+            <button class="complete-btn" onclick="completeJob('${orderId}')">✅ Mark Complete</button>
           </div>`
-
-        // Init the map AFTER the div is in the DOM
-        setTimeout(() => initCustMap(), 100)
+        setTimeout(()=>initCustMap(),100)
       }
 
-      // ── COMPLETED ──────────────────────────────────────────────────────────
-      if (order.status === 'completed') {
-        hasCompleted = true
-        completedCount++
-        completedList.innerHTML += `
+      if(order.status==='completed'){
+        hasCompleted=true;completedCount++
+        completedList.innerHTML+=`
           <div class="completed-card">
-            <div>
-              <p class="comp-customer">👤 ${order.customerName}</p>
-              <p class="comp-type">📱 ${order.brand} — ${order.repair}</p>
-            </div>
-            <div class="comp-right">
-              <p class="comp-price">✅ Done</p>
-              <p class="comp-time">${order.time || ''}</p>
-            </div>
+            <div><p class="comp-customer">👤 ${order.customerName}</p><p class="comp-type">📱 ${order.brand} — ${order.repair}</p></div>
+            <div class="comp-right"><p class="comp-price">✅ Done</p><p class="comp-time">${order.time||''}</p></div>
           </div>`
       }
     })
 
-    if (!hasPending)   container.innerHTML      = '<p class="no-jobs">No new jobs right now!</p>'
-    if (!hasOngoing) {
-      ongoingSection.innerHTML = '<div class="no-ongoing">No ongoing job right now</div>'
-      destroyCustMap()
-    }
-    if (!hasCompleted) completedList.innerHTML  = '<p class="no-jobs">No completed jobs yet</p>'
-
-    document.getElementById('totalJobs').textContent = completedCount
+    if(!hasPending)container.innerHTML='<p class="no-jobs">No new jobs right now!</p>'
+    if(!hasOngoing){ongoingSection.innerHTML='<div class="no-ongoing">No ongoing job right now</div>';destroyCustMap()}
+    if(!hasCompleted)completedList.innerHTML='<p class="no-jobs">No completed jobs yet</p>'
+    document.getElementById('totalJobs').textContent=completedCount
   })
 
-  // ── Accept job ─────────────────────────────────────────────────────────────
-  window.acceptJob = function(orderId, customerName, brand, repair, location) {
-    const techName     = localStorage.getItem('techName')     || 'Technician'
-    const techLocation = localStorage.getItem('techLocation') || 'Hyderabad'
-    const techPhone    = localStorage.getItem('techPhone')    || ''
-
-    // Save tech info to Firebase so customer tracking page reads it
-    set(ref(db, 'techInfo'), { name: techName, location: techLocation, phone: techPhone })
-
-    update(ref(db, 'orders/' + orderId), { status: 'accepted' })
-      .then(() => alert('Job Accepted! ✅ You can now see the customer\'s live location!'))
-      .catch(() => alert('Failed to accept. Try again!'))
+  window.acceptJob=function(orderId,customerName,brand,repair,location,custPhone){
+    const techName=localStorage.getItem('techName')||'Technician'
+    const techLocation=localStorage.getItem('techLocation')||'Hyderabad'
+    const techPhone=localStorage.getItem('techPhone')||''
+    currentCustPhone=custPhone
+    set(ref(db,'techInfo'),{name:techName,location:techLocation,phone:techPhone})
+    update(ref(db,'orders/'+orderId),{status:'accepted'})
+      .then(()=>alert('Job Accepted! ✅ Customer can now track you!'))
+      .catch(()=>alert('Failed to accept. Try again!'))
   }
 
-  // ── Reject job ─────────────────────────────────────────────────────────────
-  window.rejectJob = function(orderId) {
-    update(ref(db, 'orders/' + orderId), { status: 'rejected' })
-      .then(() => alert('Job Rejected!'))
+  window.rejectJob=function(orderId){
+    update(ref(db,'orders/'+orderId),{status:'rejected'}).then(()=>alert('Job Rejected!'))
   }
 
-  // ── Complete job ───────────────────────────────────────────────────────────
-  window.completeJob = function(orderId) {
-    update(ref(db, 'orders/' + orderId), { status: 'completed' })
-    remove(ref(db, 'techLocation'))
-    remove(ref(db, 'techInfo'))
-    remove(ref(db, 'custLocation'))
+  window.completeJob=function(orderId){
+    update(ref(db,'orders/'+orderId),{status:'completed'})
+    remove(ref(db,'techLocation'));remove(ref(db,'techInfo'));remove(ref(db,'custLocation'))
     destroyCustMap()
-    alert('Job Marked Complete! 🎉')
+    alert('Job Marked Complete! 🎉 Customer will be asked to review!')
   }
 
-  // ── Toggle online / offline ────────────────────────────────────────────────
-  window.toggleStatus = function() {
-    const t = document.getElementById('statusToggle')
-    if (t.textContent.includes('Online')) {
-      t.textContent = '🔴 Offline'; t.style.background = '#ffebee'; t.style.color = '#c62828'
-    } else {
-      t.textContent = '🟢 Online';  t.style.background = '#e8f5e9'; t.style.color = '#2e7d32'
-    }
+  window.toggleStatus=function(){
+    const t=document.getElementById('statusToggle')
+    if(t.textContent.includes('Online')){t.textContent='🔴 Offline';t.style.background='#ffebee';t.style.color='#c62828'}
+    else{t.textContent='🟢 Online';t.style.background='#e8f5e9';t.style.color='#2e7d32'}
   }
 </script>
 

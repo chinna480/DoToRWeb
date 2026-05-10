@@ -2,161 +2,160 @@
 <html>
 <head>
   <title>DoToR - Live Tracking</title>
-  <link rel="stylesheet" href="style.css">
   <link rel="shortcut icon" href="./logo.jpeg" type="image/x-icon">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { background:#f5f5f5; font-family:Arial,sans-serif; }
-    #map { width:100%; height:300px; }
+    *{ margin:0; padding:0; box-sizing:border-box; font-family:Arial,sans-serif; }
+    body{ background:#f5f5f5; }
 
-    .track-header {
-      background:#FF6B00;
-      padding:20px;
-      color:white;
-    }
-    .track-title { font-size:18px; font-weight:800; }
-    .track-sub   { font-size:12px; opacity:0.8; margin-top:3px; }
+    .header{ background:#FF6B00; padding:20px; display:flex; justify-content:space-between; align-items:center; }
+    .header-left .title{ font-size:20px; font-weight:800; color:white; }
+    .header-left .sub{ font-size:12px; color:rgba(255,255,255,0.85); margin-top:3px; }
+    .status-pill{ background:rgba(255,255,255,0.25); color:white; font-size:11px; font-weight:800; padding:6px 14px; border-radius:20px; }
 
-    .track-content { padding:15px; }
+    #map{ width:100%; height:300px; }
 
-    .info-card {
-      background:white;
-      border-radius:16px;
-      padding:18px;
-      margin-bottom:12px;
-      box-shadow:0 2px 8px rgba(0,0,0,0.06);
-    }
-    .info-title {
-      font-size:11px; font-weight:800;
-      color:#888; text-transform:uppercase;
-      letter-spacing:1px; margin-bottom:10px;
-    }
-    .info-row {
-      display:flex; justify-content:space-between;
-      padding:7px 0; border-bottom:1px solid #f5f5f5; font-size:13px;
-    }
-    .info-row:last-child { border:none; }
-    .info-label { color:#888; font-weight:600; }
-    .info-value { color:#1A3A6B; font-weight:800; }
+    .content{ padding:15px; }
 
-    .status-steps { display:flex; flex-direction:column; gap:12px; }
-    .step { display:flex; align-items:center; gap:12px; }
-    .dot { width:14px; height:14px; border-radius:50%; flex-shrink:0; }
-    .dot.done    { background:#FF6B00; }
-    .dot.active  { background:#1A3A6B; animation: pulse 1.2s infinite; }
-    .dot.pending { background:#ddd; }
-    @keyframes pulse {
-      0%,100% { transform:scale(1); opacity:1; }
-      50%      { transform:scale(1.3); opacity:0.7; }
+    /* Distance + ETA banner */
+    .dist-banner{
+      background:#1A3A6B; border-radius:16px;
+      padding:15px 20px; margin-bottom:12px;
+      display:flex; justify-content:space-between; align-items:center;
     }
-    .step-label { font-size:13px; font-weight:700; color:#1A3A6B; }
+    .dist-left .dist-label{ font-size:11px; color:rgba(255,255,255,0.7); font-weight:700; }
+    .dist-left .dist-value{ font-size:24px; font-weight:800; color:white; margin-top:2px; }
+    .dist-eta{ background:#FF6B00; color:white; font-size:12px; font-weight:800; padding:6px 14px; border-radius:20px; }
 
-    .tech-row { display:flex; align-items:center; gap:12px; }
-    .tech-avatar {
-      width:48px; height:48px; background:#1A3A6B;
-      border-radius:50%; display:flex;
-      align-items:center; justify-content:center;
-      font-size:22px; flex-shrink:0;
-    }
-    .tech-name { font-size:15px; font-weight:800; color:#1A3A6B; }
-    .tech-sub  { font-size:12px; color:#888; margin-top:2px; }
-    .rating {
-      margin-left:auto; background:#fff5ee;
-      color:#FF6B00; font-size:12px; font-weight:800;
-      padding:4px 10px; border-radius:20px; white-space:nowrap;
-    }
+    /* Location row */
+    .loc-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+    .loc-card{ background:white; border-radius:14px; padding:14px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+    .loc-icon{ font-size:28px; }
+    .loc-label{ font-size:10px; font-weight:800; color:#888; text-transform:uppercase; letter-spacing:1px; margin-top:4px; }
+    .loc-name{ font-size:12px; font-weight:800; color:#1A3A6B; margin-top:3px; }
 
-    .call-btn {
-      width:100%; padding:16px;
-      background:#1A3A6B; color:white;
-      font-size:16px; font-weight:800;
-      border:none; border-radius:14px;
-      cursor:pointer; margin-top:5px;
-      display:flex; align-items:center;
-      justify-content:center; gap:8px;
-      text-decoration:none;
-    }
-    .call-btn.disabled { background:#aaa; cursor:not-allowed; }
+    /* Cards */
+    .card{ background:white; border-radius:16px; padding:18px; margin-bottom:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+    .card-title{ font-size:11px; font-weight:800; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; }
+
+    /* Tech info */
+    .tech-row{ display:flex; align-items:center; gap:12px; }
+    .tech-avatar{ width:50px; height:50px; background:#1A3A6B; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:24px; }
+    .tech-name-text{ font-size:15px; font-weight:800; color:#1A3A6B; }
+    .tech-sub{ font-size:12px; color:#888; margin-top:2px; }
+    .rating-badge{ margin-left:auto; background:#fff5ee; color:#FF6B00; font-size:12px; font-weight:800; padding:5px 12px; border-radius:20px; }
+
+    /* Order info */
+    .info-row{ display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #f5f5f5; font-size:13px; }
+    .info-row:last-child{ border:none; }
+    .info-label{ color:#888; font-weight:600; }
+    .info-value{ color:#1A3A6B; font-weight:800; }
+
+    /* Status steps */
+    .steps{ display:flex; flex-direction:column; gap:10px; }
+    .step{ display:flex; align-items:center; gap:12px; }
+    .dot{ width:14px; height:14px; border-radius:50%; flex-shrink:0; }
+    .dot.done{ background:#FF6B00; }
+    .dot.active{ background:#1A3A6B; animation:pulse 1.5s infinite; }
+    .dot.pending{ background:#ddd; }
+    @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .step-label{ font-size:13px; font-weight:700; color:#1A3A6B; }
+
+    /* Buttons */
+    .call-btn{ width:100%; padding:15px; background:#1A3A6B; color:white; font-size:16px; font-weight:800; border:none; border-radius:14px; cursor:pointer; margin-bottom:10px; }
+    .review-btn{ width:100%; padding:15px; background:#FF6B00; color:white; font-size:16px; font-weight:800; border:none; border-radius:14px; cursor:pointer; display:none; }
   </style>
 </head>
 <body>
 
-  <div class="track-header">
-    <div class="track-title">🛵 Live Tracking</div>
-    <div class="track-sub" id="trackStatus">⏳ Waiting for technician to accept...</div>
+  <div class="header">
+    <div class="header-left">
+      <div class="title">🛵 Live Tracking</div>
+      <div class="sub" id="statusSub">Waiting for technician...</div>
+    </div>
+    <div class="status-pill" id="statusPill">🟡 Pending</div>
   </div>
 
   <div id="map"></div>
 
-  <div class="track-content">
+  <div class="content">
+
+    <!-- DISTANCE BANNER -->
+    <div class="dist-banner">
+      <div class="dist-left">
+        <div class="dist-label">Distance</div>
+        <div class="dist-value" id="distVal">--</div>
+      </div>
+      <div class="dist-eta" id="etaVal">ETA: --</div>
+    </div>
+
+    <!-- LOCATION CARDS -->
+    <div class="loc-row">
+      <div class="loc-card">
+        <div class="loc-icon">🏠</div>
+        <div class="loc-label">Your Location</div>
+        <div class="loc-name" id="custLocName">Fetching...</div>
+      </div>
+      <div class="loc-card">
+        <div class="loc-icon">🛵</div>
+        <div class="loc-label">Technician</div>
+        <div class="loc-name" id="techLocName">Waiting...</div>
+      </div>
+    </div>
 
     <!-- TECHNICIAN INFO -->
-    <div class="info-card">
-      <div class="info-title">Your Technician</div>
+    <div class="card">
+      <div class="card-title">Your Technician</div>
       <div class="tech-row">
         <div class="tech-avatar">👨‍🔧</div>
         <div>
-          <div class="tech-name" id="techNameDisplay">Finding technician...</div>
-          <div class="tech-sub"  id="techSubDisplay">Will update on accept</div>
+          <div class="tech-name-text" id="techNameDisplay">Connecting...</div>
+          <div class="tech-sub">⭐ Verified Expert Technician</div>
         </div>
-        <div class="rating">⭐ 4.8</div>
+        <div class="rating-badge">⭐ 4.8</div>
       </div>
     </div>
 
     <!-- ORDER INFO -->
-    <div class="info-card">
-      <div class="info-title">Order Details</div>
+    <div class="card">
+      <div class="card-title">Order Details</div>
       <div class="info-row">
         <span class="info-label">Device</span>
-        <span class="info-value" id="trackBrand">-</span>
+        <span class="info-value" id="orderBrand">-</span>
       </div>
       <div class="info-row">
         <span class="info-label">Repair</span>
-        <span class="info-value" id="trackRepair">-</span>
+        <span class="info-value" id="orderRepair">-</span>
       </div>
       <div class="info-row">
-        <span class="info-label">Location</span>
-        <span class="info-value" id="trackLocation">-</span>
+        <span class="info-label">Your Location</span>
+        <span class="info-value" id="orderLoc">-</span>
       </div>
       <div class="info-row">
-        <span class="info-label">ETA</span>
-        <span class="info-value">~30 mins</span>
+        <span class="info-label">Status</span>
+        <span class="info-value" id="orderStatus">Pending</span>
       </div>
     </div>
 
     <!-- STATUS STEPS -->
-    <div class="info-card">
-      <div class="info-title">Live Status</div>
-      <div class="status-steps">
-        <div class="step">
-          <div class="dot done"></div>
-          <div class="step-label">✅ Order Confirmed</div>
-        </div>
-        <div class="step">
-          <div class="dot pending" id="dot-onway"></div>
-          <div class="step-label">🚗 Technician On The Way</div>
-        </div>
-        <div class="step">
-          <div class="dot pending" id="dot-repair"></div>
-          <div class="step-label">🔧 Repair In Progress</div>
-        </div>
-        <div class="step">
-          <div class="dot pending" id="dot-done"></div>
-          <div class="step-label">✅ Repair Done!</div>
-        </div>
+    <div class="card">
+      <div class="card-title">Live Status</div>
+      <div class="steps">
+        <div class="step"><div class="dot done"></div><div class="step-label">✅ Order Confirmed</div></div>
+        <div class="step"><div class="dot active" id="dot2"></div><div class="step-label">🚗 Technician On The Way</div></div>
+        <div class="step"><div class="dot pending" id="dot3"></div><div class="step-label">🔧 Repair In Progress</div></div>
+        <div class="step"><div class="dot pending" id="dot4"></div><div class="step-label">✅ Repair Done!</div></div>
       </div>
     </div>
 
-    <a id="callBtn" class="call-btn disabled" href="#" onclick="return handleCall(event)">
-      📞 Call Technician
-    </a>
+    <button class="call-btn" id="callBtn" onclick="callTechnician()">📞 Call Technician</button>
+    <button class="review-btn" id="reviewBtn" onclick="goToReview()">⭐ Rate Your Experience</button>
 
   </div>
 
 <script type="module">
-  import { initializeApp }           from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
   import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
 
   const firebaseConfig = {
@@ -172,113 +171,116 @@
   const app = initializeApp(firebaseConfig)
   const db  = getDatabase(app)
 
-  // ── Order details from localStorage ──────────────────────────────────────
-  document.getElementById('trackBrand').textContent    = localStorage.getItem('lastBrand')    || '-'
-  document.getElementById('trackRepair').textContent   = localStorage.getItem('lastRepair')   || '-'
-  document.getElementById('trackLocation').textContent = localStorage.getItem('custLocation') || '-'
+  // Load order details from localStorage
+  document.getElementById('orderBrand').textContent  = localStorage.getItem('lastBrand')    || '-'
+  document.getElementById('orderRepair').textContent = localStorage.getItem('lastRepair')   || '-'
+  document.getElementById('orderLoc').textContent    = localStorage.getItem('custLocation') || '-'
+  document.getElementById('custLocName').textContent = localStorage.getItem('custLocation') || 'Your Location'
 
-  // ── Initialise Leaflet map ────────────────────────────────────────────────
-  const map = L.map('map').setView([17.3850, 78.4867], 14)
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap'
-  }).addTo(map)
-
-  const custIcon = L.divIcon({ html:'<div style="font-size:30px;line-height:1">🏠</div>', className:'', iconSize:[30,30], iconAnchor:[15,30] })
-  const techIcon = L.divIcon({ html:'<div style="font-size:30px;line-height:1">🛵</div>', className:'', iconSize:[30,30], iconAnchor:[15,30] })
-
-  let custMarker = null
-  let techMarker = null
-
-  // ── CUSTOMER pushes their live GPS to Firebase so TECHNICIAN can track ───
-  //    Also places the 🏠 marker on their own map
-  if (navigator.geolocation) {
-    navigator.geolocation.watchPosition(
-      pos => {
-        const lat = pos.coords.latitude
-        const lng = pos.coords.longitude
-
-        // Push customer GPS to Firebase → technician's map reads this
-        set(ref(db, 'custLocation'), { lat, lng })
-
-        // Place / move customer marker on their own map
-        if (custMarker) {
-          custMarker.setLatLng([lat, lng])
-        } else {
-          custMarker = L.marker([lat, lng], { icon: custIcon })
-            .addTo(map)
-            .bindPopup('📍 Your Location')
-            .openPopup()
-          map.setView([lat, lng], 15)
-        }
-      },
-      () => {
-        // Geolocation denied — use stored area as fallback
-        const fallbackLat = 17.3850, fallbackLng = 78.4867
-        set(ref(db, 'custLocation'), { lat: fallbackLat, lng: fallbackLng })
-        if (!custMarker) {
-          custMarker = L.marker([fallbackLat, fallbackLng], { icon: custIcon })
-            .addTo(map)
-            .bindPopup('📍 Your Location (approx)')
-            .openPopup()
-        }
-      },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-    )
+  // Haversine distance
+  function calcDist(lat1, lng1, lat2, lng2) {
+    const R = 6371
+    const dLat = (lat2-lat1)*Math.PI/180
+    const dLng = (lng2-lng1)*Math.PI/180
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2
+    return (R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))).toFixed(1)
   }
 
-  // ── TECHNICIAN live location → shows 🛵 on customer's map ────────────────
-  onValue(ref(db, 'techLocation'), snap => {
-    if (snap.exists()) {
-      const { lat, lng } = snap.val()
-      if (techMarker) {
-        techMarker.setLatLng([lat, lng])
-      } else {
-        techMarker = L.marker([lat, lng], { icon: techIcon })
-          .addTo(map)
-          .bindPopup('🛵 Technician Coming!')
-          .openPopup()
+  // Map init
+  const map = L.map('map').setView([17.3850, 78.4867], 13)
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map)
+
+  const custIcon = L.divIcon({ html:'<div style="font-size:32px;line-height:1">🏠</div>', className:'', iconSize:[32,32], iconAnchor:[16,32] })
+  const techIcon = L.divIcon({ html:'<div style="font-size:32px;line-height:1">🛵</div>', className:'', iconSize:[32,32], iconAnchor:[16,32] })
+
+  let custMarker=null, techMarker=null, distLine=null
+  let cLat=null, cLng=null, tLat=null, tLng=null
+
+  function updateMapAndDist() {
+    if (!cLat || !tLat) return
+    const dist = calcDist(cLat, cLng, tLat, tLng)
+    const eta  = Math.round(dist / 0.5)
+    document.getElementById('distVal').textContent = dist + ' km'
+    document.getElementById('etaVal').textContent  = 'ETA: ~' + eta + ' mins'
+
+    if (distLine) map.removeLayer(distLine)
+    distLine = L.polyline([[cLat,cLng],[tLat,tLng]], { color:'#FF6B00', weight:3, dashArray:'8,8' }).addTo(map)
+    map.fitBounds([[cLat,cLng],[tLat,tLng]], { padding:[50,50] })
+  }
+
+  // Get customer GPS → save to Firebase
+  if (navigator.geolocation) {
+    navigator.geolocation.watchPosition(pos => {
+      cLat = pos.coords.latitude
+      cLng = pos.coords.longitude
+      set(ref(db,'custLocation'), { lat:cLat, lng:cLng })
+      if (custMarker) { custMarker.setLatLng([cLat,cLng]) }
+      else {
+        custMarker = L.marker([cLat,cLng],{icon:custIcon}).addTo(map).bindPopup('🏠 Your Location').openPopup()
+        map.setView([cLat,cLng],14)
       }
-      document.getElementById('trackStatus').textContent  = '🛵 Technician is on the way!'
-      document.getElementById('dot-onway').className      = 'dot active'
-    } else {
-      document.getElementById('trackStatus').textContent  = '⏳ Waiting for technician to accept...'
-      document.getElementById('dot-onway').className      = 'dot pending'
-    }
+      updateMapAndDist()
+    }, () => {
+      cLat=17.3850; cLng=78.4867
+      set(ref(db,'custLocation'),{lat:cLat,lng:cLng})
+      custMarker = L.marker([cLat,cLng],{icon:custIcon}).addTo(map).bindPopup('🏠 Your Location').openPopup()
+    }, { enableHighAccuracy:true })
+  }
+
+  // Listen technician live location
+  onValue(ref(db,'techLocation'), snap => {
+    if (!snap.exists()) return
+    tLat = snap.val().lat
+    tLng = snap.val().lng
+    document.getElementById('statusSub').textContent  = '🛵 Technician is on the way!'
+    document.getElementById('statusPill').textContent = '🟢 Coming'
+    document.getElementById('techLocName').textContent = 'On the way'
+    document.getElementById('orderStatus').textContent = 'Accepted'
+    document.getElementById('dot2').classList.remove('active'); document.getElementById('dot2').classList.add('done')
+    document.getElementById('dot3').classList.add('active')
+
+    if (techMarker) { techMarker.setLatLng([tLat,tLng]) }
+    else { techMarker = L.marker([tLat,tLng],{icon:techIcon}).addTo(map).bindPopup('🛵 Technician').openPopup() }
+    updateMapAndDist()
   })
 
-  // ── Technician INFO (name + phone) → shown to customer ───────────────────
-  onValue(ref(db, 'techInfo'), snap => {
-    const btn = document.getElementById('callBtn')
-    if (snap.exists()) {
-      const { name = 'Technician', location = '', phone = '' } = snap.val()
-      document.getElementById('techNameDisplay').textContent = name
-      document.getElementById('techSubDisplay').textContent  = location ? '📍 ' + location : 'Expert Technician'
-
-      if (phone) {
-        btn.href      = 'tel:+91' + phone
-        btn.innerHTML = '📞 Call ' + name
-        btn.classList.remove('disabled')
-      } else {
-        btn.href      = '#'
-        btn.innerHTML = '📞 Call Technician'
-        btn.classList.add('disabled')
-      }
-    } else {
-      document.getElementById('techNameDisplay').textContent = 'Waiting for technician...'
-      document.getElementById('techSubDisplay').textContent  = 'Will update on accept'
-      btn.href      = '#'
-      btn.innerHTML = '📞 Call Technician'
-      btn.classList.add('disabled')
-    }
+  // Listen technician info (name + phone)
+  onValue(ref(db,'techInfo'), snap => {
+    if (!snap.exists()) return
+    const info = snap.val()
+    document.getElementById('techNameDisplay').textContent = info.name || 'Technician'
+    localStorage.setItem('assignedTechPhone', info.phone || '')
+    localStorage.setItem('assignedTechName',  info.name  || 'Technician')
   })
 
-  window.handleCall = function(e) {
-    if (document.getElementById('callBtn').classList.contains('disabled')) {
-      alert('Technician not assigned yet. Please wait!')
-      e.preventDefault()
-      return false
+  // Listen order status for completed
+  onValue(ref(db,'orders'), snap => {
+    if (!snap.exists()) return
+    snap.forEach(child => {
+      if (child.val().status === 'completed') {
+        document.getElementById('dot3').classList.remove('active'); document.getElementById('dot3').classList.add('done')
+        document.getElementById('dot4').classList.add('done')
+        document.getElementById('statusSub').textContent  = '✅ Repair Completed!'
+        document.getElementById('statusPill').textContent = '✅ Done'
+        document.getElementById('orderStatus').textContent = 'Completed!'
+        document.getElementById('reviewBtn').style.display = 'block'
+      }
+    })
+  })
+
+  // Call technician
+  window.callTechnician = function() {
+    const phone = localStorage.getItem('assignedTechPhone')
+    if (phone && phone !== '') {
+      window.location.href = 'tel:+91' + phone
+    } else {
+      alert('Technician phone number not available yet!\nPlease wait for technician to accept.')
     }
-    return true
+  }
+
+  // Go to review page
+  window.goToReview = function() {
+    window.location.href = 'review.html'
   }
 </script>
 

@@ -1,0 +1,405 @@
+<!-- FULL WORKING TECHNICIAN PAGE -->
+<!-- SAVE AS tech-tracking.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Technician Tracking</title>
+
+  <link rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <link rel="stylesheet"
+    href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+
+  <style>
+
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+      font-family:Arial,sans-serif;
+    }
+
+    body{
+      background:#f5f5f5;
+    }
+
+    .header{
+      background:#1A3A6B;
+      color:white;
+      padding:20px;
+    }
+
+    .title{
+      font-size:22px;
+      font-weight:800;
+    }
+
+    .sub{
+      margin-top:4px;
+      font-size:13px;
+      opacity:0.8;
+    }
+
+    #map{
+      width:100%;
+      height:350px;
+    }
+
+    .content{
+      padding:15px;
+    }
+
+    .card{
+      background:white;
+      border-radius:16px;
+      padding:18px;
+      margin-bottom:15px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .row{
+      display:flex;
+      justify-content:space-between;
+      padding:12px 0;
+      border-bottom:1px solid #eee;
+    }
+
+    .row:last-child{
+      border:none;
+    }
+
+    .label{
+      color:#777;
+      font-weight:600;
+    }
+
+    .value{
+      color:#1A3A6B;
+      font-weight:800;
+    }
+
+    .btn{
+      width:100%;
+      padding:16px;
+      border:none;
+      border-radius:14px;
+      color:white;
+      font-size:16px;
+      font-weight:800;
+      cursor:pointer;
+      margin-bottom:12px;
+    }
+
+    .navigate{
+      background:#FF6B00;
+    }
+
+    .complete{
+      background:#2e7d32;
+    }
+
+  </style>
+
+</head>
+
+<body>
+
+<div class="header">
+
+  <div class="title">
+    📍 Customer Tracking
+  </div>
+
+  <div class="sub">
+    Reach customer location
+  </div>
+
+</div>
+
+<div id="map"></div>
+
+<div class="content">
+
+  <div class="card">
+
+    <div class="row">
+      <span class="label">Distance</span>
+      <span class="value" id="distance">
+        Calculating...
+      </span>
+    </div>
+
+    <div class="row">
+      <span class="label">ETA</span>
+      <span class="value" id="eta">
+        Calculating...
+      </span>
+    </div>
+
+  </div>
+
+  <button
+    class="btn navigate"
+    onclick="navigateCustomer()"
+  >
+    🗺️ Navigate
+  </button>
+
+  <button
+    class="btn complete"
+    onclick="completeJob()"
+  >
+    ✅ Complete Job
+  </button>
+
+</div>
+
+<script type="module">
+
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+
+import {
+  getDatabase,
+  ref,
+  set,
+  onValue
+}
+from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
+
+const firebaseConfig = {
+
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  databaseURL: "YOUR_DATABASE_URL",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_BUCKET",
+  messagingSenderId: "YOUR_MSG_ID",
+  appId: "YOUR_APP_ID"
+
+}
+
+const app = initializeApp(firebaseConfig)
+
+const db = getDatabase(app)
+
+const orderId = "order_001"
+
+const map = L.map('map').setView([17.3850,78.4867],13)
+
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+).addTo(map)
+
+const custIcon = L.divIcon({
+  html:'<div style="font-size:30px">🏠</div>',
+  className:'',
+  iconSize:[30,30]
+})
+
+const techIcon = L.divIcon({
+  html:'<div style="font-size:30px">🛵</div>',
+  className:'',
+  iconSize:[30,30]
+})
+
+let custMarker = null
+let techMarker = null
+let routingControl = null
+
+let customerLat = null
+let customerLng = null
+
+let techLat = null
+let techLng = null
+
+function calculateDistance(lat1, lon1, lat2, lon2){
+
+  const R = 6371
+
+  const dLat = (lat2-lat1) * Math.PI/180
+  const dLon = (lon2-lon1) * Math.PI/180
+
+  const a =
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1*Math.PI/180) *
+    Math.cos(lat2*Math.PI/180) *
+    Math.sin(dLon/2) *
+    Math.sin(dLon/2)
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+
+  return R * c
+}
+
+function updateUI(){
+
+  if(
+    customerLat !== null &&
+    customerLng !== null &&
+    techLat !== null &&
+    techLng !== null
+  ){
+
+    const distance = calculateDistance(
+      customerLat,
+      customerLng,
+      techLat,
+      techLng
+    )
+
+    document.getElementById('distance').textContent =
+      distance.toFixed(2) + ' KM'
+
+    const eta = Math.round(distance * 4)
+
+    document.getElementById('eta').textContent =
+      eta + ' mins'
+
+    if(routingControl){
+      map.removeControl(routingControl)
+    }
+
+    if(L.Routing){
+
+      routingControl = L.Routing.control({
+
+        waypoints:[
+          L.latLng(techLat, techLng),
+          L.latLng(customerLat, customerLng)
+        ],
+
+        routeWhileDragging:false,
+        addWaypoints:false,
+        draggableWaypoints:false,
+        fitSelectedRoutes:true,
+        show:false
+
+      }).addTo(map)
+
+    }
+
+  }
+
+}
+
+onValue(
+
+  ref(db, 'orders/' + orderId + '/custLocation'),
+
+  snapshot => {
+
+    if(snapshot.exists()){
+
+      const data = snapshot.val()
+
+      customerLat = data.lat
+      customerLng = data.lng
+
+      if(custMarker){
+
+        custMarker.setLatLng([
+          customerLat,
+          customerLng
+        ])
+
+      }else{
+
+        custMarker = L.marker(
+          [customerLat, customerLng],
+          { icon:custIcon }
+        ).addTo(map)
+         .bindPopup('🏠 Customer')
+         .openPopup()
+
+      }
+
+      updateUI()
+
+    }
+
+  }
+
+)
+
+if(navigator.geolocation){
+
+  navigator.geolocation.watchPosition(
+
+    position => {
+
+      techLat = position.coords.latitude
+      techLng = position.coords.longitude
+
+      set(
+        ref(db, 'orders/' + orderId + '/techLocation'),
+        {
+          lat: techLat,
+          lng: techLng
+        }
+      )
+
+      if(techMarker){
+
+        techMarker.setLatLng([
+          techLat,
+          techLng
+        ])
+
+      }else{
+
+        techMarker = L.marker(
+          [techLat, techLng],
+          { icon:techIcon }
+        ).addTo(map)
+         .bindPopup('🛵 You')
+         .openPopup()
+
+      }
+
+      updateUI()
+
+    },
+
+    error => {
+      console.log(error)
+    },
+
+    {
+      enableHighAccuracy:true
+    }
+
+  )
+
+}
+
+window.navigateCustomer = function(){
+
+  const url =
+  `https://www.google.com/maps/dir/?api=1&destination=${customerLat},${customerLng}`
+
+  window.open(url,'_blank')
+
+}
+
+window.completeJob = function(){
+
+  alert('Job Completed')
+
+}
+
+</script>
+
+</body>
+</html>
