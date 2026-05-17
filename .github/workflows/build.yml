@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,6 +26,12 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Install Expo CLI
+        run: npm install -g expo-cli
+
+      - name: Generate android folder
+        run: npx expo prebuild --platform android --no-install
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
