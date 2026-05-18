@@ -4,19 +4,11 @@ import { useRouter } from 'expo-router'
 import { ref, update } from 'firebase/database'
 import { useState } from 'react'
 import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+  Alert, Image, KeyboardAvoidingView, Platform,
+  ScrollView, StyleSheet, Text, TextInput,
+  TouchableOpacity, View
 } from 'react-native'
 import { db } from '../firebase/config'
-import { registerForNotifications } from '../utils/notifications'
 
 const SKILLS = [
   '📱 Phone Repair',
@@ -31,12 +23,13 @@ const EXP = ['0 - 1 Year', '1 - 2 Years', '2 - 5 Years', '5+ Years']
 
 export default function TechLoginScreen() {
   const router = useRouter()
-  const [name, setName]           = useState('')
-  const [phone, setPhone]         = useState('')
-  const [location, setLocation]   = useState('')
-  const [exp, setExp]             = useState('')
-  const [selSkills, setSelSkills] = useState([])
-  const [showExp, setShowExp]     = useState(false)
+
+  const [name, setName]               = useState('')
+  const [phone, setPhone]             = useState('')
+  const [location, setLocation]       = useState('')
+  const [exp, setExp]                 = useState('')
+  const [selSkills, setSelSkills]     = useState([])
+  const [showExp, setShowExp]         = useState(false)
   const [certificate, setCertificate] = useState(null)
   const [aadhar, setAadhar]           = useState(null)
 
@@ -46,61 +39,28 @@ export default function TechLoginScreen() {
     )
   }
 
-  // ── Certificate: pick from gallery ─────────────────────────────────────────
-  const pickCertificate = async () => {
-    Alert.alert('Upload Certificate', 'Choose option', [
-      {
-        text: '📷 Camera', onPress: async () => {
-          const { status } = await ImagePicker.requestCameraPermissionsAsync()
-          if (status !== 'granted') { Alert.alert('Permission needed', 'Allow camera access'); return }
-          const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 })
-          if (!result.canceled) setCertificate(result.assets[0].uri)
-        }
-      },
-      {
-        text: '🖼️ Gallery', onPress: async () => {
-          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-          if (status !== 'granted') { Alert.alert('Permission needed', 'Allow gallery access'); return }
-          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.8 })
-          if (!result.canceled) setCertificate(result.assets[0].uri)
-        }
-      },
-      { text: 'Cancel', style: 'cancel' }
-    ])
+  const pickImage = async (onDone) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to your gallery!')
+      return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    })
+    if (!result.canceled) onDone(result.assets[0].uri)
   }
 
-  // ── Aadhar: pick from camera or gallery ────────────────────────────────────
-  const pickAadhar = async () => {
-    Alert.alert('Upload Aadhar Card', 'Choose option', [
-      {
-        text: '📷 Camera', onPress: async () => {
-          const { status } = await ImagePicker.requestCameraPermissionsAsync()
-          if (status !== 'granted') { Alert.alert('Permission needed', 'Allow camera access'); return }
-          const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 })
-          if (!result.canceled) setAadhar(result.assets[0].uri)
-        }
-      },
-      {
-        text: '🖼️ Gallery', onPress: async () => {
-          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-          if (status !== 'granted') { Alert.alert('Permission needed', 'Allow gallery access'); return }
-          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.8 })
-          if (!result.canceled) setAadhar(result.assets[0].uri)
-        }
-      },
-      { text: 'Cancel', style: 'cancel' }
-    ])
-  }
-
-  // ── Register ────────────────────────────────────────────────────────────────
   const register = async () => {
-    if (!name)                  { Alert.alert('Error', 'Enter your name!');              return }
+    if (!name)                  { Alert.alert('Error', 'Enter your name!');             return }
     if (phone.length !== 10)    { Alert.alert('Error', 'Enter valid 10 digit number!'); return }
-    if (!location)              { Alert.alert('Error', 'Enter your location!');          return }
-    if (!exp)                   { Alert.alert('Error', 'Select your experience!');       return }
-    if (selSkills.length === 0) { Alert.alert('Error', 'Select at least one skill!');   return }
-    if (!certificate)           { Alert.alert('Error', 'Upload your Certificate!');      return }
-    if (!aadhar)                { Alert.alert('Error', 'Upload your Aadhar Card!');      return }
+    if (!location)              { Alert.alert('Error', 'Enter your location!');         return }
+    if (!exp)                   { Alert.alert('Error', 'Select your experience!');      return }
+    if (selSkills.length === 0) { Alert.alert('Error', 'Select at least one skill!');  return }
+    if (!certificate)           { Alert.alert('Error', 'Upload your Certificate!');    return }
+    if (!aadhar)                { Alert.alert('Error', 'Upload your Aadhar Card!');    return }
 
     await AsyncStorage.clear()
     await AsyncStorage.setItem('techName',     name)
@@ -109,19 +69,39 @@ export default function TechLoginScreen() {
     await AsyncStorage.setItem('techExp',      exp)
     await AsyncStorage.setItem('techSkills',   JSON.stringify(selSkills))
 
-    const token = await registerForNotifications()
-    if (token) {
-      await AsyncStorage.setItem('pushToken', token)
-      await update(ref(db, 'techs/' + phone), { pushToken: token, name, phone, location })
-    }
+    try {
+      await update(ref(db, 'techs/' + phone), { name, phone, location })
+    } catch (e) {}
 
     router.replace('/screens/TechHomeScreen')
   }
+
+  const UploadBox = ({ value, icon, label, onPress }) => (
+    <TouchableOpacity
+      style={[s.uploadBox, value && s.uploadBoxDone]}
+      onPress={onPress}
+    >
+      {value ? (
+        <>
+          <Image source={{ uri: value }} style={s.uploadPreview} />
+          <Text style={s.uploadDoneTxt}>✅ {label} Uploaded</Text>
+          <Text style={s.uploadChangeTxt}>Tap to change</Text>
+        </>
+      ) : (
+        <>
+          <Text style={s.uploadIcon}>{icon}</Text>
+          <Text style={s.uploadTxt}>Tap to upload {label}</Text>
+          <Text style={s.uploadSub}>JPG, PNG accepted</Text>
+        </>
+      )}
+    </TouchableOpacity>
+  )
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
 
+        {/* HEADER */}
         <View style={s.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={s.back}>←</Text>
@@ -167,7 +147,9 @@ export default function TechLoginScreen() {
             <Text style={s.label}>Experience</Text>
             <TouchableOpacity style={s.field} onPress={() => setShowExp(!showExp)}>
               <Text style={s.fIcon}>⭐</Text>
-              <Text style={[s.input, { color: exp ? '#1A3A6B' : '#aaa' }]}>{exp || 'Select Experience'}</Text>
+              <Text style={[s.input, { color: exp ? '#1A3A6B' : '#aaa' }]}>
+                {exp || 'Select Experience'}
+              </Text>
               <Text style={{ color: '#888' }}>{showExp ? '▲' : '▼'}</Text>
             </TouchableOpacity>
             {showExp && (
@@ -196,50 +178,16 @@ export default function TechLoginScreen() {
             </View>
           </View>
 
-          {/* CERTIFICATE UPLOAD */}
+          {/* CERTIFICATE */}
           <View style={s.group}>
             <Text style={s.label}>Upload Certificate</Text>
-            <TouchableOpacity
-              style={[s.uploadBox, certificate && s.uploadBoxDone]}
-              onPress={pickCertificate}
-            >
-              {certificate ? (
-                <>
-                  <Image source={{ uri: certificate }} style={s.uploadPreview} />
-                  <Text style={s.uploadDoneTxt}>✅ Certificate Uploaded</Text>
-                  <Text style={s.uploadChangeTxt}>Tap to change</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={s.uploadIcon}>📄</Text>
-                  <Text style={s.uploadTxt}>Tap to upload Certificate</Text>
-                  <Text style={s.uploadSub}>JPG, PNG accepted</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <UploadBox value={certificate} icon="📄" label="Certificate" onPress={() => pickImage(setCertificate)} />
           </View>
 
-          {/* AADHAR UPLOAD */}
+          {/* AADHAR */}
           <View style={s.group}>
             <Text style={s.label}>Upload Aadhar Card</Text>
-            <TouchableOpacity
-              style={[s.uploadBox, aadhar && s.uploadBoxDone]}
-              onPress={pickAadhar}
-            >
-              {aadhar ? (
-                <>
-                  <Image source={{ uri: aadhar }} style={s.uploadPreview} />
-                  <Text style={s.uploadDoneTxt}>✅ Aadhar Uploaded</Text>
-                  <Text style={s.uploadChangeTxt}>Tap to change</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={s.uploadIcon}>🪪</Text>
-                  <Text style={s.uploadTxt}>Tap to upload Aadhar Card</Text>
-                  <Text style={s.uploadSub}>JPG, PNG accepted</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <UploadBox value={aadhar} icon="🪪" label="Aadhar Card" onPress={() => pickImage(setAadhar)} />
           </View>
 
           {/* REGISTER */}

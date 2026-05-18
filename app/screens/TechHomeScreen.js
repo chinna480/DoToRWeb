@@ -11,7 +11,6 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
 import { db } from '../firebase/config';
 import { calcDistance } from '../utils/distance';
 import {
@@ -23,21 +22,32 @@ import {
   notifyTechNewJob,
 } from '../utils/notifications';
 
+// ✅ Safe import — won't crash if react-native-maps is not installed
+let MapView, Marker, Polyline
+try {
+  const Maps = require('react-native-maps')
+  MapView  = Maps.default
+  Marker   = Maps.Marker
+  Polyline = Maps.Polyline
+} catch (e) {
+  MapView = null
+}
+
 export default function TechHomeScreen() {
   const router = useRouter()
-  const [techName, setTechName]       = useState('Technician')
-  const [techLoc, setTechLoc]         = useState('')
-  const [isOnline, setIsOnline]       = useState(true)
-  const [pendingJobs, setPending]     = useState([])
-  const [ongoingJob, setOngoing]      = useState(null)
-  const [completedJobs, setCompleted] = useState([])
-  const [totalJobs, setTotal]         = useState(0)
-  const [custLat, setCustLat]         = useState(null)
-  const [custLng, setCustLng]         = useState(null)
-  const [myLat, setMyLat]             = useState(17.3850)
-  const [myLng, setMyLng]             = useState(78.4867)
-  const [distance, setDistance]       = useState('--')
-  const [eta, setEta]                 = useState('--')
+  const [techName, setTechName]          = useState('Technician')
+  const [techLoc, setTechLoc]            = useState('')
+  const [isOnline, setIsOnline]          = useState(true)
+  const [pendingJobs, setPending]        = useState([])
+  const [ongoingJob, setOngoing]         = useState(null)
+  const [completedJobs, setCompleted]    = useState([])
+  const [totalJobs, setTotal]            = useState(0)
+  const [custLat, setCustLat]            = useState(null)
+  const [custLng, setCustLng]            = useState(null)
+  const [myLat, setMyLat]               = useState(17.3850)
+  const [myLng, setMyLng]               = useState(78.4867)
+  const [distance, setDistance]          = useState('--')
+  const [eta, setEta]                    = useState('--')
   const [currentCustPhone, setCustPhone] = useState('')
   const watchRef       = useRef(null)
   const mapRef         = useRef(null)
@@ -88,7 +98,6 @@ export default function TechHomeScreen() {
     if (t) techPushToken.current = t
   }
 
-  // ── Logout ─────────────────────────────────────────────────────────────────
   const logout = () => {
     Alert.alert('Logout?', 'Are you sure?', [
       { text: 'Cancel' },
@@ -173,27 +182,31 @@ export default function TechHomeScreen() {
   const rejectJob = (orderId) => {
     Alert.alert('Reject Job?', 'Are you sure?', [
       { text: 'Cancel' },
-      { text: 'Reject', style: 'destructive', onPress: () => {
-        update(ref(db, 'orders/' + orderId), { status: 'rejected' })
-      }}
+      {
+        text: 'Reject', style: 'destructive', onPress: () => {
+          update(ref(db, 'orders/' + orderId), { status: 'rejected' })
+        }
+      }
     ])
   }
 
   const completeJob = (orderId) => {
     Alert.alert('Mark Complete?', 'Job is done?', [
       { text: 'Cancel' },
-      { text: 'Complete ✅', onPress: async () => {
-        update(ref(db, 'orders/' + orderId), { status: 'completed' })
-        remove(ref(db, 'techLocation'))
-        remove(ref(db, 'techInfo'))
-        remove(ref(db, 'custLocation'))
-        if (watchRef.current) { watchRef.current.remove(); watchRef.current = null }
-        if (ongoingJob?.customerPushToken) {
-          await notifyCustomerJobDone(ongoingJob.customerPushToken)
+      {
+        text: 'Complete ✅', onPress: async () => {
+          update(ref(db, 'orders/' + orderId), { status: 'completed' })
+          remove(ref(db, 'techLocation'))
+          remove(ref(db, 'techInfo'))
+          remove(ref(db, 'custLocation'))
+          if (watchRef.current) { watchRef.current.remove(); watchRef.current = null }
+          if (ongoingJob?.customerPushToken) {
+            await notifyCustomerJobDone(ongoingJob.customerPushToken)
+          }
+          await notifyTechJobDone()
+          Alert.alert('🎉 Job Complete!', 'Great work! Customer will be asked to review.')
         }
-        await notifyTechJobDone()
-        Alert.alert('🎉 Job Complete!', 'Great work! Customer will be asked to review.')
-      }}
+      }
     ])
   }
 
@@ -221,7 +234,6 @@ export default function TechHomeScreen() {
           <Text style={s.loc}>📍 {techLoc}</Text>
         </View>
         <View style={s.headerRight}>
-          {/* ── Profile button ── */}
           <TouchableOpacity
             style={s.avatar}
             onPress={() => router.push('/screens/TechProfileScreen')}
@@ -318,7 +330,8 @@ export default function TechHomeScreen() {
             </View>
           </View>
 
-          {(custLat || myLat) && (
+          {/* ✅ Safe MapView — only renders if react-native-maps is installed */}
+          {MapView && (custLat || myLat) && (
             <MapView
               ref={mapRef}
               style={s.map}
