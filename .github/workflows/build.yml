@@ -1,37 +1,47 @@
-name: Build DoToR APK
+name: Build Android APK
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '18'
           cache: 'npm'
-
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
 
       - name: Install dependencies
         run: npm install
 
-      - name: Install Expo CLI
-        run: npm install -g expo-cli
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Generate android folder
-        run: npx expo prebuild --platform android --no-install
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Create .env file
+        run: |
+          echo "GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}" >> .env
+
+      - name: Install Expo CLI
+        run: npm install -g expo-cli @expo/cli
+
+      - name: Prebuild
+        run: npx expo prebuild --clean
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
@@ -39,11 +49,12 @@ jobs:
       - name: Build APK
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: DoToR-APK
-          path: android/app/build/outputs/apk/release/*.apk
-          retention-days: 7
+          name: DoToR-release
+          path: android/app/build/outputs/apk/release/app-release.apk

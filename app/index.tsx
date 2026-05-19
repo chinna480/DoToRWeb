@@ -1,9 +1,3 @@
-// app/index.js  (or your root entry file)
-// Checks if user is already logged in and redirects to correct screen
-// Customer → HomeScreen
-// Technician → TechHomeScreen
-// Nobody → RoleScreen
-
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useRouter } from 'expo-router'
 import { useEffect } from 'react'
@@ -22,13 +16,10 @@ export default function Index() {
       const techPhone = await AsyncStorage.getItem('techPhone')
 
       if (techPhone) {
-        // Technician was logged in
         router.replace('/screens/TechHomeScreen')
       } else if (custPhone) {
-        // Customer was logged in
         router.replace('/screens/HomeScreen')
       } else {
-        // Nobody logged in — show role screen
         router.replace('/screens/RoleScreen')
       }
     } catch (e) {
@@ -36,7 +27,6 @@ export default function Index() {
     }
   }
 
-  // Show a simple loading spinner while checking
   return (
     <View style={{ flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
       <ActivityIndicator size="large" color="#FF6B00" />

@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
+    "scheme": "dotor",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/images/logo.png",
@@ -16,26 +17,55 @@
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
+      "package": "com.dotor.app",
+      "googleServicesFile": "./google-services.json",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyD5ecLfVJ9t15XhnEQgMjyJC1YbOPJIXEg"
+        }
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
-        "VIBRATE"
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
       ]
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.dotor.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "DoToR needs your location to show technician tracking",
         "NSCameraUsageDescription": "DoToR needs camera to upload photos",
         "NSPhotoLibraryUsageDescription": "DoToR needs gallery access to upload photos"
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyD5ecLfVJ9t15XhnEQgMjyJC1YbOPJIXEg"
       }
     },
     "plugins": [
+      "expo-router",
       "expo-location",
-      "expo-image-picker"
-    ]
+      "expo-image-picker",
+      [
+        "expo-notifications",
+        {
+          "color": "#FF6B00",
+          "sounds": []
+        }
+      ],
+      [
+        "react-native-maps",
+        {
+          "googleMapsApiKey": "AIzaSyD5ecLfVJ9t15XhnEQgMjyJC1YbOPJIXEg"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }
