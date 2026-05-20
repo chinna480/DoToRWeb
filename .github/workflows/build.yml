@@ -66,12 +66,7 @@ jobs:
 
       - name: Test JS Bundle
         run: |
-          npx react-native bundle \
-            --platform android \
-            --dev false \
-            --entry-file index.js \
-            --bundle-output /tmp/test.bundle \
-            --assets-dest /tmp/assets 2>&1
+          npx expo export --platform android 2>&1
 
       - name: Build APK
         run: |
