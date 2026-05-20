@@ -168,6 +168,7 @@ export default function TechHomeScreen() {
     const name  = await AsyncStorage.getItem('techName')     || 'Technician'
     const loc   = await AsyncStorage.getItem('techLocation') || ''
     const phone = await AsyncStorage.getItem('techPhone')    || ''
+    await AsyncStorage.setItem('currentOrderId', orderId)
     set(ref(db, 'techInfo'), { name, location: loc, phone })
     update(ref(db, 'orders/' + orderId), { status: 'accepted' })
       .then(async () => {
@@ -362,6 +363,12 @@ export default function TechHomeScreen() {
             <TouchableOpacity style={s.callBtn} onPress={callCustomer}>
               <Text style={s.callTxt}>📞 Call</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={s.chatBtn}
+              onPress={() => router.push(`/screens/ChatScreen?orderId=${ongoingJob.id}&role=tech&customerName=${encodeURIComponent(ongoingJob.customerName || 'Customer')}&techName=${encodeURIComponent(techName)}`)}
+            >
+              <Text style={s.chatTxt}>💬 Chat</Text>
+            </TouchableOpacity>
           </View>
           <TouchableOpacity style={s.completeBtn} onPress={() => completeJob(ongoingJob.id)}>
             <Text style={s.completeTxt}>✅ Mark Complete</Text>
@@ -444,6 +451,8 @@ const s = StyleSheet.create({
   navTxt:        { color: '#fff', fontSize: 13, fontWeight: '800' },
   callBtn:       { flex: 1, backgroundColor: '#2e7d32', padding: 12, borderRadius: 12, alignItems: 'center' },
   callTxt:       { color: '#fff', fontSize: 13, fontWeight: '800' },
+  chatBtn:       { flex: 1, backgroundColor: '#FF6B00', padding: 12, borderRadius: 12, alignItems: 'center' },
+  chatTxt:       { color: '#fff', fontSize: 13, fontWeight: '800' },
   completeBtn:   { backgroundColor: '#1A3A6B', padding: 13, borderRadius: 12, alignItems: 'center' },
   completeTxt:   { color: '#fff', fontSize: 14, fontWeight: '800' },
   completedCard: { backgroundColor: '#fff', borderRadius: 14, padding: 15, marginHorizontal: 15, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 2 },

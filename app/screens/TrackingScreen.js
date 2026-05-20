@@ -43,6 +43,7 @@ export default function TrackingScreen() {
   const [repair, setRepair]       = useState('-')
   const [location, setLocation]   = useState('-')
   const [jobDone, setJobDone]     = useState(false)
+  const [orderId, setOrderId]     = useState('')
 
   const watchRef    = useRef(null)
   const unsubsRef   = useRef([])
@@ -64,9 +65,11 @@ export default function TrackingScreen() {
 
   const init = async () => {
     try {
+      const o  = await AsyncStorage.getItem('lastOrderId')
       const b  = await AsyncStorage.getItem('lastBrand')
       const r  = await AsyncStorage.getItem('lastRepair')
       const l  = await AsyncStorage.getItem('custLocation')
+      if (o)  setOrderId(o)
       if (b)  setBrand(b)
       if (r)  setRepair(r)
       if (l)  setLocation(l)
@@ -262,11 +265,25 @@ export default function TrackingScreen() {
         </TouchableOpacity>
 
         {/* REVIEW BUTTON — appears when job done */}
-        {jobDone && (
-          <TouchableOpacity style={s.reviewBtn} onPress={() => router.push('/screens/ReviewScreen')}>
-            <Text style={s.reviewTxt}>⭐ Rate Your Experience</Text>
+        {/* CHAT & REVIEW BUTTONS */}
+        <View style={s.actionRow}>
+          <TouchableOpacity
+            style={s.chatBtnTrack}
+            onPress={() => {
+              const name = techName || 'Technician'
+              const oid = orderId || 'current'
+              router.push(`/screens/ChatScreen?orderId=${oid}&role=cust&techName=${encodeURIComponent(name)}&customerName=${encodeURIComponent('You')}`)
+            }}
+          >
+            <Text style={s.chatBtnTxt}>💬 Chat with Technician</Text>
           </TouchableOpacity>
-        )}
+
+          {jobDone && (
+            <TouchableOpacity style={s.reviewBtn} onPress={() => router.push('/screens/ReviewScreen')}>
+              <Text style={s.reviewTxt}>⭐ Rate Your Experience</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         <View style={{ height: 40 }} />
       </View>
@@ -315,6 +332,9 @@ const s = StyleSheet.create({
   stepLabel:      { fontSize: 13, fontWeight: '700', color: '#1A3A6B' },
   callBtn:        { backgroundColor: '#1A3A6B', padding: 15, borderRadius: 14, alignItems: 'center', marginBottom: 10 },
   callTxt:        { color: '#fff', fontSize: 16, fontWeight: '800' },
-  reviewBtn:      { backgroundColor: '#FF6B00', padding: 15, borderRadius: 14, alignItems: 'center' },
+  actionRow:      { gap: 10, marginBottom: 20 },
+  chatBtnTrack:   { backgroundColor: '#FF6B00', padding: 15, borderRadius: 14, alignItems: 'center' },
+  chatBtnTxt:     { color: '#fff', fontSize: 16, fontWeight: '800' },
+  reviewBtn:      { backgroundColor: '#2e7d32', padding: 15, borderRadius: 14, alignItems: 'center' },
   reviewTxt:      { color: '#fff', fontSize: 16, fontWeight: '800' },
 })

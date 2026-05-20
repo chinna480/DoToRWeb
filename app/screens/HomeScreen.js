@@ -90,19 +90,28 @@ export default function HomeScreen() {
       time:               new Date().toLocaleTimeString(),
     }
 
-    push(ref(db, 'orders'), order)
-      .then(async () => {
-        await notifyCustomerBookingConfirmed(selectedBrand, repair)
-        Alert.alert(
-          '✅ Booking Confirmed!',
-          `Brand: ${selectedBrand}\nRepair: ${repair}\n\nTrack your technician?`,
-          [
-            { text: 'Track Now', onPress: () => router.push('/screens/TrackingScreen') },
-            { text: 'Later' }
-          ]
-        )
-      })
-      .catch(() => Alert.alert('Error', 'Booking failed! Try again.'))
+    try {
+      const newOrderRef = await push(ref(db, 'orders'), order)
+      const orderId = newOrderRef.key
+      await AsyncStorage.setItem('lastOrderId', orderId)
+      await AsyncStorage.setItem('lastBrand',  selectedBrand)
+      await AsyncStorage.setItem('lastRepair', repair)
+      await AsyncStorage.setItem('lastCustName', name)
+
+      await notifyCustomerBookingConfirmed(selectedBrand, repair)
+      Alert.alert(
+        '✅ Booking Confirmed!',
+        `Brand: ${selectedBrand}\nRepair: ${repair}\n\nTrack your technician?`,
+        [
+          { text: 'Track Now', onPress: () => router.push('/screens/TrackingScreen') },
+          { text: '💬 Chat', onPress: () => router.push(`/screens/ChatScreen?orderId=${orderId}&role=cust&customerName=${encodeURIComponent(name)}`) },
+          { text: '💰 Pay', onPress: () => router.push('/screens/PaymentScreen') },
+          { text: 'Later' }
+        ]
+      )
+    } catch (e) {
+      Alert.alert('Error', 'Booking failed! Try again.')
+    }
   }
 
   const WHY = [
@@ -139,10 +148,15 @@ export default function HomeScreen() {
       </View>
 
       {/* BANNER */}
-      <View style={s.banner}>
-        <Text style={s.bannerText}>🔧 Expert Repair at Your Doorstep!</Text>
-        <Text style={s.bannerSub}>Book in 30 seconds!</Text>
-      </View>
+      <TouchableOpacity style={s.banner} onPress={() => router.push('/screens/ScheduleScreen')}>
+        <View>
+          <Text style={s.bannerText}>🔧 Expert Repair at Your Doorstep!</Text>
+          <Text style={s.bannerSub}>Book in 30 seconds!</Text>
+        </View>
+        <View style={s.bannerCta}>
+          <Text style={s.bannerCtaTxt}>📅 Schedule</Text>
+        </View>
+      </TouchableOpacity>
 
       {/* STEP 1 */}
       <Text style={s.sectionTitle}>Step 1 — Select Device</Text>
@@ -217,9 +231,11 @@ const s = StyleSheet.create({
   avatar:           { width: 50, height: 50, backgroundColor: '#fff', borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
   searchBar:        { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', padding: 12, borderRadius: 14, margin: 15, elevation: 3 },
   searchInput:      { flex: 1, fontSize: 13, color: '#333' },
-  banner:           { backgroundColor: '#1A3A6B', padding: 18, borderRadius: 14, marginHorizontal: 15, marginBottom: 5 },
+  banner:           { backgroundColor: '#1A3A6B', padding: 18, borderRadius: 14, marginHorizontal: 15, marginBottom: 5, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   bannerText:       { color: '#fff', fontSize: 15, fontWeight: '800' },
   bannerSub:        { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 3 },
+  bannerCta:        { backgroundColor: '#FF6B00', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  bannerCtaTxt:     { color: '#fff', fontSize: 12, fontWeight: '800' },
   sectionTitle:     { fontSize: 16, fontWeight: '800', color: '#1A3A6B', marginHorizontal: 15, marginTop: 20, marginBottom: 12 },
   deviceGrid:       { flexDirection: 'row', gap: 12, marginHorizontal: 15 },
   deviceCard:       { flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 22, alignItems: 'center', borderWidth: 2, borderColor: 'transparent', elevation: 3 },
