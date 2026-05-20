@@ -110,7 +110,6 @@ export default function CustomerProfileScreen() {
 
   const MENU = [
     { icon: '❓', label: 'Help & Support',   sub: null,                   onPress: () => Alert.alert('Help', 'Email: support@dotor.in') },
-    { icon: '💳', label: 'Payment',          sub: 'Pay via UPI, Card, COD', onPress: () => router.push('/screens/PaymentScreen') },
     { icon: '📅', label: 'Schedule',         sub: 'Book appointment',       onPress: () => router.push('/screens/ScheduleScreen') },
     { icon: '📋', label: 'My Orders',        sub: `${totalOrders} total`, onPress: () => Alert.alert('Orders', `Total: ${totalOrders}\nCompleted: ${completedOrders}\nPending: ${totalOrders - completedOrders}`) },
     { icon: '🛡️', label: 'Safety',           sub: null,                   onPress: () => Alert.alert('Safety', 'Your safety is our priority!') },

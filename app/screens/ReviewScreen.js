@@ -7,6 +7,7 @@ import { db } from '../firebase/config'
 
 export default function ReviewScreen() {
   const router = useRouter()
+  const [activeTab, setActiveTab] = useState('home')
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -29,59 +30,93 @@ export default function ReviewScreen() {
     setSubmitted(true)
   }
 
+  const CUST_TABS = [
+    { key: 'home',     icon: '🏠', label: 'Home' },
+    { key: 'orders',   icon: '📋', label: 'Orders' },
+    { key: 'profile',  icon: '👤', label: 'Profile' },
+  ]
+
+  const switchTab = (key) => {
+    if (key === 'home') { setActiveTab('home'); return }
+    if (key === 'orders') { router.push('/screens/HomeScreen'); return }
+    if (key === 'profile') { router.push('/screens/CustomerProfileScreen'); return }
+  }
+
+  const renderTabBar = () => (
+    <View style={s.tabBar}>
+      {CUST_TABS.map(tab => (
+        <TouchableOpacity
+          key={tab.key}
+          style={[s.tabItem, activeTab === tab.key && s.tabItemActive]}
+          onPress={() => switchTab(tab.key)}
+        >
+          <Text style={[s.tabIcon, activeTab === tab.key && s.tabIconActive]}>{tab.icon}</Text>
+          <Text style={[s.tabLabel, activeTab === tab.key && s.tabLabelActive]}>{tab.label}</Text>
+          {activeTab === tab.key && <View style={s.tabIndicator} />}
+        </TouchableOpacity>
+      ))}
+    </View>
+  )
+
   if (submitted) {
     return (
-      <View style={s.center}>
-        <Text style={s.thankIcon}>🎉</Text>
-        <Text style={s.thankTitle}>Thank You!</Text>
-        <Text style={s.thankSub}>Your review helps us improve</Text>
-        <TouchableOpacity style={s.homeBtn} onPress={() => router.replace('/screens/HomeScreen')}>
-          <Text style={s.homeBtnTxt}>Back to Home</Text>
-        </TouchableOpacity>
+      <View style={{ flex: 1, backgroundColor: '#fff' }}>
+        <View style={s.center}>
+          <Text style={s.thankIcon}>🎉</Text>
+          <Text style={s.thankTitle}>Thank You!</Text>
+          <Text style={s.thankSub}>Your review helps us improve</Text>
+          <TouchableOpacity style={s.homeBtn} onPress={() => router.replace('/screens/HomeScreen')}>
+            <Text style={s.homeBtnTxt}>Back to Home</Text>
+          </TouchableOpacity>
+        </View>
+        {renderTabBar()}
       </View>
     )
   }
 
   return (
-    <ScrollView style={s.container}>
-      <View style={s.header}>
-        <Text style={s.title}>⭐ Rate Your Experience</Text>
-        <Text style={s.sub}>How was your repair service?</Text>
-      </View>
-
-      <View style={s.card}>
-        <Text style={s.label}>Tap to rate</Text>
-        <View style={s.stars}>
-          {[1, 2, 3, 4, 5].map(star => (
-            <TouchableOpacity key={star} onPress={() => setRating(star)}>
-              <Text style={[s.star, rating >= star && s.starActive]}>★</Text>
-            </TouchableOpacity>
-          ))}
+    <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+      <ScrollView style={s.container}>
+        <View style={s.header}>
+          <Text style={s.title}>⭐ Rate Your Experience</Text>
+          <Text style={s.sub}>How was your repair service?</Text>
         </View>
-        <Text style={s.ratingLabel}>
-          {rating === 0 ? 'No rating yet' : ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent!'][rating]}
-        </Text>
-      </View>
 
-      <View style={s.card}>
-        <Text style={s.label}>Write a comment (optional)</Text>
-        <TextInput
-          style={s.textArea}
-          placeholder="Tell us about your experience..."
-          placeholderTextColor="#aaa"
-          multiline
-          numberOfLines={4}
-          value={comment}
-          onChangeText={setComment}
-        />
-      </View>
+        <View style={s.card}>
+          <Text style={s.label}>Tap to rate</Text>
+          <View style={s.stars}>
+            {[1, 2, 3, 4, 5].map(star => (
+              <TouchableOpacity key={star} onPress={() => setRating(star)}>
+                <Text style={[s.star, rating >= star && s.starActive]}>★</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={s.ratingLabel}>
+            {rating === 0 ? 'No rating yet' : ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent!'][rating]}
+          </Text>
+        </View>
 
-      <TouchableOpacity style={s.submitBtn} onPress={submitReview}>
-        <Text style={s.submitTxt}>Submit Review →</Text>
-      </TouchableOpacity>
+        <View style={s.card}>
+          <Text style={s.label}>Write a comment (optional)</Text>
+          <TextInput
+            style={s.textArea}
+            placeholder="Tell us about your experience..."
+            placeholderTextColor="#aaa"
+            multiline
+            numberOfLines={4}
+            value={comment}
+            onChangeText={setComment}
+          />
+        </View>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <TouchableOpacity style={s.submitBtn} onPress={submitReview}>
+          <Text style={s.submitTxt}>Submit Review →</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 90 }} />
+      </ScrollView>
+      {renderTabBar()}
+    </View>
   )
 }
 

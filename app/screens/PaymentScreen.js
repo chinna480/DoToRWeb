@@ -45,6 +45,7 @@ const PAYMENT_METHODS = [
 
 export default function PaymentScreen() {
   const router = useRouter()
+  const [activeTab, setActiveTab] = useState('home')
   const [selectedMethod, setSelectedMethod] = useState(null)
   const [amount] = useState(299)
   const [showUPI, setShowUPI] = useState(false)
@@ -95,181 +96,218 @@ export default function PaymentScreen() {
     Alert.alert('📱 UPI ID', `Pay to this UPI ID:\n\n${upiId}\n\nYou can copy it manually from above.`)
   }
 
+  const CUST_TABS = [
+    { key: 'home',     icon: '🏠', label: 'Home' },
+    { key: 'orders',   icon: '📋', label: 'Orders' },
+    { key: 'profile',  icon: '👤', label: 'Profile' },
+  ]
+
+  const switchTab = (key) => {
+    if (key === 'home') { setActiveTab('home'); return }
+    if (key === 'orders') { router.push('/screens/HomeScreen'); return }
+    if (key === 'profile') { router.push('/screens/CustomerProfileScreen'); return }
+  }
+
+  const renderTabBar = () => (
+    <View style={s.tabBar}>
+      {CUST_TABS.map(tab => (
+        <TouchableOpacity
+          key={tab.key}
+          style={[s.tabItem, activeTab === tab.key && s.tabItemActive]}
+          onPress={() => switchTab(tab.key)}
+        >
+          <Text style={[s.tabIcon, activeTab === tab.key && s.tabIconActive]}>{tab.icon}</Text>
+          <Text style={[s.tabLabel, activeTab === tab.key && s.tabLabelActive]}>{tab.label}</Text>
+          {activeTab === tab.key && <View style={s.tabIndicator} />}
+        </TouchableOpacity>
+      ))}
+    </View>
+  )
+
   if (showUPI) {
     return (
-      <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
-        <View style={s.header}>
-          <TouchableOpacity onPress={() => setShowUPI(false)}>
-            <Text style={s.back}>←</Text>
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>📱 UPI Payment</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <View style={s.amountCard}>
-          <Text style={s.amountLabel}>Amount to Pay</Text>
-          <Text style={s.amountVal}>₹{amount}</Text>
-        </View>
-
-        <View style={s.upiCard}>
-          <Text style={s.upiLabel}>Scan or enter UPI ID</Text>
-          <View style={s.upiInputRow}>
-            <TextInput
-              style={s.upiInput}
-              value={upiId}
-              onChangeText={setUpiId}
-              placeholder="example@upi"
-              placeholderTextColor="#aaa"
-              autoCapitalize="none"
-            />
-            <TouchableOpacity style={s.copyBtn} onPress={copyUPI}>
-              <Text style={s.copyTxt}>📋</Text>
+      <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+        <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
+          <View style={s.header}>
+            <TouchableOpacity onPress={() => setShowUPI(false)}>
+              <Text style={s.back}>←</Text>
             </TouchableOpacity>
+            <Text style={s.headerTitle}>📱 UPI Payment</Text>
+            <View style={{ width: 40 }} />
           </View>
 
-          <TouchableOpacity style={s.payNowBtn} onPress={payWithUPI}>
-            <Text style={s.payNowTxt}>Pay ₹{amount} via UPI →</Text>
-          </TouchableOpacity>
+          <View style={s.amountCard}>
+            <Text style={s.amountLabel}>Amount to Pay</Text>
+            <Text style={s.amountVal}>₹{amount}</Text>
+          </View>
 
-          <Text style={s.upiNote}>Supported apps: Google Pay, PhonePe, Paytm, BHIM</Text>
-        </View>
+          <View style={s.upiCard}>
+            <Text style={s.upiLabel}>Scan or enter UPI ID</Text>
+            <View style={s.upiInputRow}>
+              <TextInput
+                style={s.upiInput}
+                value={upiId}
+                onChangeText={setUpiId}
+                placeholder="example@upi"
+                placeholderTextColor="#aaa"
+                autoCapitalize="none"
+              />
+              <TouchableOpacity style={s.copyBtn} onPress={copyUPI}>
+                <Text style={s.copyTxt}>📋</Text>
+              </TouchableOpacity>
+            </View>
 
-        <View style={{ height: 40 }} />
-      </ScrollView>
+            <TouchableOpacity style={s.payNowBtn} onPress={payWithUPI}>
+              <Text style={s.payNowTxt}>Pay ₹{amount} via UPI →</Text>
+            </TouchableOpacity>
+
+            <Text style={s.upiNote}>Supported apps: Google Pay, PhonePe, Paytm, BHIM</Text>
+          </View>
+
+          <View style={{ height: 90 }} />
+        </ScrollView>
+        {renderTabBar()}
+      </View>
     )
   }
 
   if (showCard) {
     return (
-      <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
-        <View style={s.header}>
-          <TouchableOpacity onPress={() => setShowCard(false)}>
-            <Text style={s.back}>←</Text>
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>💳 Card Payment</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <View style={s.amountCard}>
-          <Text style={s.amountLabel}>Amount to Pay</Text>
-          <Text style={s.amountVal}>₹{amount}</Text>
-        </View>
-
-        <View style={s.cardForm}>
-          <Text style={s.formLabel}>Card Number</Text>
-          <TextInput
-            style={s.formInput}
-            placeholder="1234 5678 9012 3456"
-            placeholderTextColor="#aaa"
-            keyboardType="numeric"
-            maxLength={19}
-          />
-          <View style={s.formRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.formLabel}>Expiry</Text>
-              <TextInput
-                style={s.formInput}
-                placeholder="MM/YY"
-                placeholderTextColor="#aaa"
-                keyboardType="numeric"
-                maxLength={5}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.formLabel}>CVV</Text>
-              <TextInput
-                style={s.formInput}
-                placeholder="123"
-                placeholderTextColor="#aaa"
-                keyboardType="numeric"
-                maxLength={4}
-                secureTextEntry
-              />
-            </View>
+      <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+        <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
+          <View style={s.header}>
+            <TouchableOpacity onPress={() => setShowCard(false)}>
+              <Text style={s.back}>←</Text>
+            </TouchableOpacity>
+            <Text style={s.headerTitle}>💳 Card Payment</Text>
+            <View style={{ width: 40 }} />
           </View>
-          <Text style={s.formLabel}>Cardholder Name</Text>
-          <TextInput
-            style={s.formInput}
-            placeholder="John Doe"
-            placeholderTextColor="#aaa"
-          />
 
-          <TouchableOpacity style={s.payNowBtn} onPress={() => Alert.alert('✅ Payment Successful!', 'Your payment of ₹299 has been processed.')}>
-            <Text style={s.payNowTxt}>Pay ₹{amount} →</Text>
-          </TouchableOpacity>
+          <View style={s.amountCard}>
+            <Text style={s.amountLabel}>Amount to Pay</Text>
+            <Text style={s.amountVal}>₹{amount}</Text>
+          </View>
 
-          <Text style={s.secureNote}>🔒 Secured with 256-bit encryption</Text>
-        </View>
+          <View style={s.cardForm}>
+            <Text style={s.formLabel}>Card Number</Text>
+            <TextInput
+              style={s.formInput}
+              placeholder="1234 5678 9012 3456"
+              placeholderTextColor="#aaa"
+              keyboardType="numeric"
+              maxLength={19}
+            />
+            <View style={s.formRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.formLabel}>Expiry</Text>
+                <TextInput
+                  style={s.formInput}
+                  placeholder="MM/YY"
+                  placeholderTextColor="#aaa"
+                  keyboardType="numeric"
+                  maxLength={5}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.formLabel}>CVV</Text>
+                <TextInput
+                  style={s.formInput}
+                  placeholder="123"
+                  placeholderTextColor="#aaa"
+                  keyboardType="numeric"
+                  maxLength={4}
+                  secureTextEntry
+                />
+              </View>
+            </View>
+            <Text style={s.formLabel}>Cardholder Name</Text>
+            <TextInput
+              style={s.formInput}
+              placeholder="John Doe"
+              placeholderTextColor="#aaa"
+            />
 
-        <View style={{ height: 40 }} />
-      </ScrollView>
+            <TouchableOpacity style={s.payNowBtn} onPress={() => Alert.alert('✅ Payment Successful!', 'Your payment of ₹299 has been processed.')}>
+              <Text style={s.payNowTxt}>Pay ₹{amount} →</Text>
+            </TouchableOpacity>
+
+            <Text style={s.secureNote}>🔒 Secured with 256-bit encryption</Text>
+          </View>
+
+          <View style={{ height: 90 }} />
+        </ScrollView>
+        {renderTabBar()}
+      </View>
     )
   }
 
   return (
-    <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
-      {/* HEADER */}
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={s.back}>←</Text>
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>💳 Payment</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      {/* AMOUNT */}
-      <View style={s.amountCard}>
-        <Text style={s.amountLabel}>Total Amount</Text>
-        <Text style={s.amountVal}>₹{amount}</Text>
-        <Text style={s.amountSub}>Repair service charge (inclusive of all taxes)</Text>
-      </View>
-
-      {/* PAYMENT METHODS */}
-      <Text style={s.sectionTitle}>Select Payment Method</Text>
-      <View style={s.methodsCard}>
-        {PAYMENT_METHODS.map((method, i) => (
-          <TouchableOpacity
-            key={method.id}
-            style={[
-              s.methodItem,
-              i === PAYMENT_METHODS.length - 1 && { borderBottomWidth: 0 },
-              selectedMethod === method.id && s.methodItemActive,
-            ]}
-            onPress={() => setSelectedMethod(method.id)}
-          >
-            <View style={[s.methodIconBox, { backgroundColor: method.color + '20' }]}>
-              <Text style={s.methodIcon}>{method.icon}</Text>
-            </View>
-            <View style={s.methodInfo}>
-              <Text style={s.methodName}>{method.name}</Text>
-              <Text style={s.methodDesc}>{method.desc}</Text>
-            </View>
-            <View style={[s.radioBtn, selectedMethod === method.id && s.radioBtnActive]}>
-              {selectedMethod === method.id && <View style={s.radioDot} />}
-            </View>
+    <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+      <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
+        {/* HEADER */}
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={s.back}>←</Text>
           </TouchableOpacity>
-        ))}
-      </View>
+          <Text style={s.headerTitle}>💳 Payment</Text>
+          <View style={{ width: 40 }} />
+        </View>
 
-      {/* PROCEED */}
-      <TouchableOpacity
-        style={[s.proceedBtn, !selectedMethod && s.proceedBtnDisabled]}
-        onPress={proceedPayment}
-        disabled={!selectedMethod}
-      >
-        <Text style={s.proceedTxt}>
-          {selectedMethod === 'cod' ? 'Confirm Cash on Delivery →' : `Pay ₹${amount} →`}
-        </Text>
-      </TouchableOpacity>
+        {/* AMOUNT */}
+        <View style={s.amountCard}>
+          <Text style={s.amountLabel}>Total Amount</Text>
+          <Text style={s.amountVal}>₹{amount}</Text>
+          <Text style={s.amountSub}>Repair service charge (inclusive of all taxes)</Text>
+        </View>
 
-      {/* SECURITY */}
-      <View style={s.securityNote}>
-        <Text style={s.securityIcon}>🔒</Text>
-        <Text style={s.securityTxt}>Your payment info is secure. We never store card details.</Text>
-      </View>
+        {/* PAYMENT METHODS */}
+        <Text style={s.sectionTitle}>Select Payment Method</Text>
+        <View style={s.methodsCard}>
+          {PAYMENT_METHODS.map((method, i) => (
+            <TouchableOpacity
+              key={method.id}
+              style={[
+                s.methodItem,
+                i === PAYMENT_METHODS.length - 1 && { borderBottomWidth: 0 },
+                selectedMethod === method.id && s.methodItemActive,
+              ]}
+              onPress={() => setSelectedMethod(method.id)}
+            >
+              <View style={[s.methodIconBox, { backgroundColor: method.color + '20' }]}>
+                <Text style={s.methodIcon}>{method.icon}</Text>
+              </View>
+              <View style={s.methodInfo}>
+                <Text style={s.methodName}>{method.name}</Text>
+                <Text style={s.methodDesc}>{method.desc}</Text>
+              </View>
+              <View style={[s.radioBtn, selectedMethod === method.id && s.radioBtnActive]}>
+                {selectedMethod === method.id && <View style={s.radioDot} />}
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        {/* PROCEED */}
+        <TouchableOpacity
+          style={[s.proceedBtn, !selectedMethod && s.proceedBtnDisabled]}
+          onPress={proceedPayment}
+          disabled={!selectedMethod}
+        >
+          <Text style={s.proceedTxt}>
+            {selectedMethod === 'cod' ? 'Confirm Cash on Delivery →' : `Pay ₹${amount} →`}
+          </Text>
+        </TouchableOpacity>
+
+        {/* SECURITY */}
+        <View style={s.securityNote}>
+          <Text style={s.securityIcon}>🔒</Text>
+          <Text style={s.securityTxt}>Your payment info is secure. We never store card details.</Text>
+        </View>
+
+        <View style={{ height: 90 }} />
+      </ScrollView>
+      {renderTabBar()}
+    </View>
   )
 }
 
@@ -324,4 +362,14 @@ const s = StyleSheet.create({
   formInput:     { borderWidth: 2, borderColor: '#eee', borderRadius: 12, padding: 12, fontSize: 14, color: '#1A3A6B', fontWeight: '600' },
   formRow:       { flexDirection: 'row', gap: 12 },
   secureNote:    { textAlign: 'center', fontSize: 12, color: '#888', marginTop: 15, fontWeight: '600' },
+
+  // ── Bottom Tab Bar ──
+  tabBar:        { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },
+  tabItem:       { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, position: 'relative' },
+  tabItemActive: {},
+  tabIcon:       { fontSize: 22, opacity: 0.5 },
+  tabIconActive: { opacity: 1 },
+  tabLabel:      { fontSize: 10, fontWeight: '600', color: '#888', marginTop: 2 },
+  tabLabelActive:{ color: '#FF6B00', fontWeight: '800' },
+  tabIndicator:  { position: 'absolute', top: -1, width: 24, height: 3, backgroundColor: '#FF6B00', borderRadius: 2, alignSelf: 'center' },
 })

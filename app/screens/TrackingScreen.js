@@ -29,6 +29,7 @@ try {
 
 export default function TrackingScreen() {
   const router = useRouter()
+  const [activeTab, setActiveTab]   = useState('home')
 
   const [custLat, setCustLat]     = useState(17.3850)
   const [custLng, setCustLng]     = useState(78.4867)
@@ -44,10 +45,13 @@ export default function TrackingScreen() {
   const [location, setLocation]   = useState('-')
   const [jobDone, setJobDone]     = useState(false)
   const [orderId, setOrderId]     = useState('')
+  const [custName, setCustName]   = useState('Customer')
 
   const watchRef    = useRef(null)
   const unsubsRef   = useRef([])
   const mounted     = useRef(true)
+  const custPosRef  = useRef({ lat: 17.3850, lng: 78.4867 })
+  const techPosRef  = useRef(null)
 
   useEffect(() => {
     mounted.current = true
@@ -69,10 +73,12 @@ export default function TrackingScreen() {
       const b  = await AsyncStorage.getItem('lastBrand')
       const r  = await AsyncStorage.getItem('lastRepair')
       const l  = await AsyncStorage.getItem('custLocation')
+      const n  = await AsyncStorage.getItem('lastCustName') || await AsyncStorage.getItem('custName') || 'Customer'
       if (o)  setOrderId(o)
       if (b)  setBrand(b)
       if (r)  setRepair(r)
       if (l)  setLocation(l)
+      if (n)  setCustName(n)
       await startGPS()
       startListeners()
     } catch (e) {
@@ -90,6 +96,7 @@ export default function TrackingScreen() {
           if (!mounted.current) return
           const lat = pos.coords.latitude
           const lng = pos.coords.longitude
+          custPosRef.current = { lat, lng }
           setCustLat(lat)
           setCustLng(lng)
           set(ref(db, 'custLocation'), { lat, lng }).catch(() => {})
@@ -104,15 +111,11 @@ export default function TrackingScreen() {
     const u1 = onValue(ref(db, 'techLocation'), snap => {
       if (!mounted.current || !snap.exists()) return
       const { lat, lng } = snap.val()
+      techPosRef.current = { lat, lng }
       setTechLat(lat)
       setTechLng(lng)
       setStatusMsg('🛵 Technician is on the way!')
-      setCustLat(prev => {
-        const d = calcDistance(prev, custLng, lat, lng)
-        setDistance(d + ' km')
-        setEta('~' + Math.round(d / 0.5) + ' mins')
-        return prev
-      })
+      // Distance is recalculated automatically by the useEffect below
     })
     unsubsRef.current.push(u1)
 
@@ -136,6 +139,22 @@ export default function TrackingScreen() {
     unsubsRef.current.push(u3)
   }
 
+  const recalcDistance = (custPos, techPos) => {
+    if (!custPos || !techPos) return
+    const d = parseFloat(calcDistance(custPos.lat, custPos.lng, techPos.lat, techPos.lng))
+    setDistance(d + ' km')
+    const SPEED = 0.3 // km/min (~18 km/h — realistic city speed)
+    const etaMins = Math.round(d / SPEED)
+    setEta('~' + Math.max(1, etaMins) + ' mins')
+  }
+
+  // Recalculate distance whenever GPS or tech location changes
+  useEffect(() => {
+    if (custLat && techLat) {
+      recalcDistance({ lat: custLat, lng: custLng }, { lat: techLat, lng: techLng })
+    }
+  }, [custLat, custLng, techLat, techLng])
+
   const callTech = () => {
     if (techPhone) {
       Linking.openURL('tel:+91' + techPhone).catch(() => Alert.alert('Error', 'Cannot make call!'))
@@ -151,143 +170,171 @@ export default function TrackingScreen() {
     { label: '✅ Repair Done!',          done: jobDone },
   ]
 
+  const TABS = [
+    { key: 'home',     icon: '🏠', label: 'Home' },
+    { key: 'orders',   icon: '📋', label: 'Orders' },
+    { key: 'profile',  icon: '👤', label: 'Profile' },
+  ]
+
+  const switchTab = (key) => {
+    if (key === 'home') { setActiveTab('home'); return }
+    if (key === 'orders') { router.push('/screens/HomeScreen'); return }
+    if (key === 'profile') { router.push('/screens/CustomerProfileScreen'); return }
+  }
+
   return (
-    <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
+    <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+      <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
 
-      {/* HEADER */}
-      <View style={s.header}>
-        <View>
-          <Text style={s.title}>🛵 Live Tracking</Text>
-          <Text style={s.sub}>{statusMsg}</Text>
-        </View>
-        <View style={[s.pill, { backgroundColor: jobDone ? '#2e7d32' : '#FF6B00' }]}>
-          <Text style={s.pillTxt}>{jobDone ? '✅ Done' : '🟢 Live'}</Text>
-        </View>
-      </View>
-
-      {/* MAP or PLACEHOLDER */}
-      {MapView ? (
-        <MapView
-          style={s.map}
-          region={{
-            latitude:       (custLat + (techLat || custLat)) / 2,
-            longitude:      (custLng + (techLng || custLng)) / 2,
-            latitudeDelta:  0.05,
-            longitudeDelta: 0.05,
-          }}
-        >
-          <Marker coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Your Location" />
-          {techLat && <Marker coordinate={{ latitude: techLat, longitude: techLng }} title="🛵 Technician" pinColor="#FF6B00" />}
-          {techLat && (
-            <Polyline
-              coordinates={[
-                { latitude: custLat, longitude: custLng },
-                { latitude: techLat, longitude: techLng },
-              ]}
-              strokeColor="#FF6B00"
-              strokeWidth={3}
-              lineDashPattern={[8, 8]}
-            />
-          )}
-        </MapView>
-      ) : (
-        <View style={s.mapPlaceholder}>
-          <Text style={s.mapIcon}>🗺️</Text>
-          <Text style={s.mapTxt}>{techLat ? '🛵 Technician is moving towards you!' : '⏳ Waiting for technician...'}</Text>
-        </View>
-      )}
-
-      <View style={s.content}>
-
-        {/* DISTANCE BANNER */}
-        <View style={s.distBanner}>
+        {/* HEADER */}
+        <View style={s.header}>
           <View>
-            <Text style={s.distLabel}>Distance</Text>
-            <Text style={s.distVal}>{distance}</Text>
+            <Text style={s.title}>🛵 Live Tracking</Text>
+            <Text style={s.sub}>{statusMsg}</Text>
           </View>
-          <View style={s.etaPill}>
-            <Text style={s.etaTxt}>ETA: {eta}</Text>
-          </View>
-        </View>
-
-        {/* LOCATION CARDS */}
-        <View style={s.locRow}>
-          <View style={s.locCard}>
-            <Text style={s.locIcon}>🏠</Text>
-            <Text style={s.locLabel}>YOUR LOCATION</Text>
-            <Text style={s.locName}>{location}</Text>
-          </View>
-          <View style={s.locCard}>
-            <Text style={s.locIcon}>🛵</Text>
-            <Text style={s.locLabel}>TECHNICIAN</Text>
-            <Text style={s.locName}>{techLat ? 'On the way' : 'Waiting...'}</Text>
+          <View style={[s.pill, { backgroundColor: jobDone ? '#2e7d32' : '#FF6B00' }]}>
+            <Text style={s.pillTxt}>{jobDone ? '✅ Done' : '🟢 Live'}</Text>
           </View>
         </View>
 
-        {/* TECHNICIAN CARD */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>YOUR TECHNICIAN</Text>
-          <View style={s.techRow}>
-            <View style={s.techAvatar}><Text style={{ fontSize: 26 }}>👨‍🔧</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.techName}>{techName}</Text>
-              <Text style={s.techSub}>⭐ Verified Expert Technician</Text>
-            </View>
-            <View style={s.ratingBadge}><Text style={s.ratingTxt}>⭐ 4.8</Text></View>
-          </View>
-        </View>
-
-        {/* ORDER DETAILS */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>ORDER DETAILS</Text>
-          {[['Device', brand], ['Repair', repair], ['Location', location]].map(([l, v]) => (
-            <View key={l} style={s.infoRow}>
-              <Text style={s.infoLabel}>{l}</Text>
-              <Text style={s.infoVal}>{v || '-'}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* STATUS STEPS */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>LIVE STATUS</Text>
-          {STEPS.map((step, i) => (
-            <View key={i} style={s.step}>
-              <View style={[s.dot, step.done ? s.dotDone : i === STEPS.findIndex(s => !s.done) ? s.dotActive : s.dotPending]} />
-              <Text style={s.stepLabel}>{step.label}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* CALL BUTTON */}
-        <TouchableOpacity style={s.callBtn} onPress={callTech}>
-          <Text style={s.callTxt}>📞 Call Technician</Text>
-        </TouchableOpacity>
-
-        {/* REVIEW BUTTON — appears when job done */}
-        {/* CHAT & REVIEW BUTTONS */}
-        <View style={s.actionRow}>
-          <TouchableOpacity
-            style={s.chatBtnTrack}
-            onPress={() => {
-              const name = techName || 'Technician'
-              const oid = orderId || 'current'
-              router.push(`/screens/ChatScreen?orderId=${oid}&role=cust&techName=${encodeURIComponent(name)}&customerName=${encodeURIComponent('You')}`)
+        {/* MAP or PLACEHOLDER */}
+        {MapView ? (
+          <MapView
+            style={s.map}
+            region={{
+              latitude:       (custLat + (techLat || custLat)) / 2,
+              longitude:      (custLng + (techLng || custLng)) / 2,
+              latitudeDelta:  0.05,
+              longitudeDelta: 0.05,
             }}
           >
-            <Text style={s.chatBtnTxt}>💬 Chat with Technician</Text>
+            <Marker coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Your Location" />
+            {techLat && <Marker coordinate={{ latitude: techLat, longitude: techLng }} title="🛵 Technician" pinColor="#FF6B00" />}
+            {techLat && (
+              <Polyline
+                coordinates={[
+                  { latitude: custLat, longitude: custLng },
+                  { latitude: techLat, longitude: techLng },
+                ]}
+                strokeColor="#FF6B00"
+                strokeWidth={3}
+                lineDashPattern={[8, 8]}
+              />
+            )}
+          </MapView>
+        ) : (
+          <View style={s.mapPlaceholder}>
+            <Text style={s.mapIcon}>🗺️</Text>
+            <Text style={s.mapTxt}>{techLat ? '🛵 Technician is moving towards you!' : '⏳ Waiting for technician...'}</Text>
+          </View>
+        )}
+
+        <View style={s.content}>
+
+          {/* DISTANCE BANNER */}
+          <View style={s.distBanner}>
+            <View>
+              <Text style={s.distLabel}>Distance</Text>
+              <Text style={s.distVal}>{distance}</Text>
+            </View>
+            <View style={s.etaPill}>
+              <Text style={s.etaTxt}>ETA: {eta}</Text>
+            </View>
+          </View>
+
+          {/* LOCATION CARDS */}
+          <View style={s.locRow}>
+            <View style={s.locCard}>
+              <Text style={s.locIcon}>🏠</Text>
+              <Text style={s.locLabel}>YOUR LOCATION</Text>
+              <Text style={s.locName}>{location}</Text>
+            </View>
+            <View style={s.locCard}>
+              <Text style={s.locIcon}>🛵</Text>
+              <Text style={s.locLabel}>TECHNICIAN</Text>
+              <Text style={s.locName}>{techLat ? 'On the way' : 'Waiting...'}</Text>
+            </View>
+          </View>
+
+          {/* TECHNICIAN CARD */}
+          <View style={s.card}>
+            <Text style={s.cardTitle}>YOUR TECHNICIAN</Text>
+            <View style={s.techRow}>
+              <View style={s.techAvatar}><Text style={{ fontSize: 26 }}>👨‍🔧</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.techName}>{techName}</Text>
+                <Text style={s.techSub}>⭐ Verified Expert Technician</Text>
+              </View>
+              <View style={s.ratingBadge}><Text style={s.ratingTxt}>⭐ 4.8</Text></View>
+            </View>
+          </View>
+
+          {/* ORDER DETAILS */}
+          <View style={s.card}>
+            <Text style={s.cardTitle}>ORDER DETAILS</Text>
+            {[['Device', brand], ['Repair', repair], ['Location', location]].map(([l, v]) => (
+              <View key={l} style={s.infoRow}>
+                <Text style={s.infoLabel}>{l}</Text>
+                <Text style={s.infoVal}>{v || '-'}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* STATUS STEPS */}
+          <View style={s.card}>
+            <Text style={s.cardTitle}>LIVE STATUS</Text>
+            {STEPS.map((step, i) => (
+              <View key={i} style={s.step}>
+                <View style={[s.dot, step.done ? s.dotDone : i === STEPS.findIndex(s => !s.done) ? s.dotActive : s.dotPending]} />
+                <Text style={s.stepLabel}>{step.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* CALL BUTTON */}
+          <TouchableOpacity style={s.callBtn} onPress={callTech}>
+            <Text style={s.callTxt}>📞 Call Technician</Text>
           </TouchableOpacity>
 
-          {jobDone && (
-            <TouchableOpacity style={s.reviewBtn} onPress={() => router.push('/screens/ReviewScreen')}>
-              <Text style={s.reviewTxt}>⭐ Rate Your Experience</Text>
+          {/* CHAT & REVIEW BUTTONS */}
+          <View style={s.actionRow}>
+            <TouchableOpacity
+              style={s.chatBtnTrack}
+              onPress={() => {
+                const name = techName || 'Technician'
+                const oid = orderId || 'current'
+                router.push(`/screens/ChatScreen?orderId=${oid}&role=cust&techName=${encodeURIComponent(name)}&customerName=${encodeURIComponent(custName)}`)
+              }}
+            >
+              <Text style={s.chatBtnTxt}>💬 Chat with Technician</Text>
             </TouchableOpacity>
-          )}
-        </View>
 
-        <View style={{ height: 40 }} />
+            {jobDone && (
+              <TouchableOpacity style={s.reviewBtn} onPress={() => router.push('/screens/ReviewScreen')}>
+                <Text style={s.reviewTxt}>⭐ Rate Your Experience</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={{ height: 90 }} />
+        </View>
+      </ScrollView>
+
+      {/* BOTTOM TAB BAR */}
+      <View style={s.tabBar}>
+        {TABS.map(tab => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[s.tabItem, activeTab === tab.key && s.tabItemActive]}
+            onPress={() => switchTab(tab.key)}
+          >
+            <Text style={[s.tabIcon, activeTab === tab.key && s.tabIconActive]}>{tab.icon}</Text>
+            <Text style={[s.tabLabel, activeTab === tab.key && s.tabLabelActive]}>{tab.label}</Text>
+            {activeTab === tab.key && <View style={s.tabIndicator} />}
+          </TouchableOpacity>
+        ))}
       </View>
-    </ScrollView>
+    </View>
   )
 }
 
@@ -337,4 +384,14 @@ const s = StyleSheet.create({
   chatBtnTxt:     { color: '#fff', fontSize: 16, fontWeight: '800' },
   reviewBtn:      { backgroundColor: '#2e7d32', padding: 15, borderRadius: 14, alignItems: 'center' },
   reviewTxt:      { color: '#fff', fontSize: 16, fontWeight: '800' },
+
+  // ── Bottom Tab Bar ──
+  tabBar:        { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },
+  tabItem:       { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, position: 'relative' },
+  tabItemActive: {},
+  tabIcon:       { fontSize: 22, opacity: 0.5 },
+  tabIconActive: { opacity: 1 },
+  tabLabel:      { fontSize: 10, fontWeight: '600', color: '#888', marginTop: 2 },
+  tabLabelActive:{ color: '#FF6B00', fontWeight: '800' },
+  tabIndicator:  { position: 'absolute', top: -1, width: 24, height: 3, backgroundColor: '#FF6B00', borderRadius: 2, alignSelf: 'center' },
 })

@@ -23,6 +23,7 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState('')
   const [myName, setMyName] = useState('')
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('chat')
   const scrollRef = useRef(null)
 
   useEffect(() => {
@@ -118,6 +119,38 @@ export default function ChatScreen() {
   const otherName = role === 'cust' ? (techName || 'Technician') : (customerName || 'Customer')
   const otherRole = role === 'cust' ? 'tech' : 'cust'
 
+  // Tab navigation
+  const isCust = role === 'cust'
+  const TABS = isCust
+    ? [
+        { key: 'chat',      label: 'Chat',   icon: '💬' },
+        { key: 'home',      label: 'Home',   icon: '🏠' },
+        { key: 'orders',    label: 'Orders', icon: '📋' },
+        { key: 'profile',   label: 'Profile',icon: '👤' },
+      ]
+    : [
+        { key: 'chat',      label: 'Chat',   icon: '💬' },
+        { key: 'home',      label: 'Home',   icon: '🏠' },
+        { key: 'pending',   label: 'Pending',icon: '⏳' },
+        { key: 'completed', label: 'Done',   icon: '✅' },
+        { key: 'profile',   label: 'Profile',icon: '👤' },
+      ]
+
+  const switchTab = (key) => {
+    if (key === 'chat') { setActiveTab('chat'); return }
+    setActiveTab(key)
+    if (key === 'home') {
+      router.replace(isCust ? '/' : '/screens/TechHomeScreen')
+    } else if (key === 'orders') {
+      router.replace('/')
+    } else if (key === 'pending' || key === 'completed') {
+      // Navigate to TechHomeScreen with a pending redirect note
+      router.replace('/screens/TechHomeScreen')
+    } else if (key === 'profile') {
+      router.replace(isCust ? '/screens/CustomerProfileScreen' : '/screens/TechProfileScreen')
+    }
+  }
+
   return (
     <KeyboardAvoidingView
       style={s.container}
@@ -208,6 +241,28 @@ export default function ChatScreen() {
             <Text style={s.sendTxt}>➤</Text>
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* BOTTOM TAB BAR */}
+      <View style={s.tabBar}>
+        {TABS.map(tab => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[
+              s.tabItem,
+              activeTab === tab.key && s.tabItemActive,
+            ]}
+            onPress={() => switchTab(tab.key)}
+          >
+            <Text style={[s.tabIcon, activeTab === tab.key && s.tabIconActive]}>
+              {tab.icon}
+            </Text>
+            <Text style={[s.tabLabel, activeTab === tab.key && s.tabLabelActive]}>
+              {tab.label}
+            </Text>
+            {activeTab === tab.key && <View style={s.tabIndicator} />}
+          </TouchableOpacity>
+        ))}
       </View>
     </KeyboardAvoidingView>
   )
@@ -325,4 +380,44 @@ const s = StyleSheet.create({
   },
   sendBtnDisabled: { backgroundColor: '#ddd' },
   sendTxt: { fontSize: 18, color: '#fff' },
+
+  // Bottom Tab Bar
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#e8e8e8',
+    paddingBottom: 25,
+    paddingTop: 8,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+    position: 'relative',
+  },
+  tabItemActive: {},
+  tabIcon: { fontSize: 20, opacity: 0.5 },
+  tabIconActive: { opacity: 1 },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#999',
+    marginTop: 2,
+  },
+  tabLabelActive: { color: '#FF6B00', fontWeight: '800' },
+  tabIndicator: {
+    position: 'absolute',
+    top: 0,
+    width: 24,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#FF6B00',
+  },
 })

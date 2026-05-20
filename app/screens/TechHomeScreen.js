@@ -35,13 +35,15 @@ try {
 
 export default function TechHomeScreen() {
   const router = useRouter()
-  const [techName, setTechName]          = useState('Technician')
-  const [techLoc, setTechLoc]            = useState('')
-  const [isOnline, setIsOnline]          = useState(true)
-  const [pendingJobs, setPending]        = useState([])
-  const [ongoingJob, setOngoing]         = useState(null)
-  const [completedJobs, setCompleted]    = useState([])
-  const [totalJobs, setTotal]            = useState(0)
+  const [activeTab, setActiveTab]          = useState('home')
+  const [techName, setTechName]            = useState('Technician')
+  const [techLoc, setTechLoc]              = useState('')
+  const [isOnline, setIsOnline]            = useState(true)
+  const [pendingJobs, setPending]          = useState([])
+  const [ongoingJob, setOngoing]           = useState(null)
+  const [completedJobs, setCompleted]      = useState([])
+  const [totalJobs, setTotal]              = useState(0)
+  const [dailyCompleted, setDailyCompleted] = useState(0)
   const [custLat, setCustLat]            = useState(null)
   const [custLng, setCustLng]            = useState(null)
   const [myLat, setMyLat]               = useState(17.3850)
@@ -52,6 +54,7 @@ export default function TechHomeScreen() {
   const watchRef       = useRef(null)
   const mapRef         = useRef(null)
   const techPushToken  = useRef(null)
+  const techLocRef     = useRef('')
   const sentNearby     = useRef(false)
   const sentArrived    = useRef(false)
   const prevPendingIds = useRef(new Set())
@@ -74,10 +77,11 @@ export default function TechHomeScreen() {
 
   useEffect(() => {
     if (!custLat || !myLat || !ongoingJob) return
-    const d = calcDistance(myLat, myLng, custLat, custLng)
-    const etaMins = Math.round(d / 0.5)
+    const d = parseFloat(calcDistance(myLat, myLng, custLat, custLng))
+    const SPEED = 0.3 // km/min (~18 km/h — realistic city speed)
+    const etaMins = Math.round(d / SPEED)
     setDistance(d + ' km')
-    setEta('~' + etaMins + ' mins')
+    setEta('~' + Math.max(1, etaMins) + ' mins')
     const custToken = ongoingJob?.customerPushToken
     if (etaMins <= 5 && !sentNearby.current) {
       sentNearby.current = true
@@ -95,6 +99,7 @@ export default function TechHomeScreen() {
     const t = await AsyncStorage.getItem('pushToken')
     setTechName(n || 'Technician')
     setTechLoc(l || 'Your Location')
+    techLocRef.current = (l || '').toLowerCase().trim()
     if (t) techPushToken.current = t
   }
 
@@ -127,19 +132,28 @@ export default function TechHomeScreen() {
   const listenOrders = () => {
     const unsub = onValue(ref(db, 'orders'), snapshot => {
       if (!snapshot.exists()) {
-        setPending([]); setOngoing(null); setCompleted([]); setTotal(0)
+        setPending([]); setOngoing(null); setCompleted([]); setTotal(0); setDailyCompleted(0)
         prevPendingIds.current = new Set()
         return
       }
-      const pending = [], completed = []
-      let ongoing = null, count = 0
+      const allPending = [], completed = []
+      let ongoing = null, count = 0, dailyCount = 0
 
       snapshot.forEach(child => {
         const order = { id: child.key, ...child.val() }
-        if (order.status === 'pending')   pending.push(order)
+        if (order.status === 'pending')   allPending.push(order)
         if (order.status === 'accepted')  ongoing = order
-        if (order.status === 'completed') { completed.push(order); count++ }
+        if (order.status === 'completed') {
+          completed.push(order); count++
+          dailyCount++
+        }
       })
+
+      // Filter pending jobs by technician's location area
+      const filterLoc = techLocRef.current
+      const pending = filterLoc
+        ? allPending.filter(o => (o.location || '').toLowerCase().trim() === filterLoc)
+        : allPending
 
       pending.forEach(order => {
         if (!prevPendingIds.current.has(order.id)) {
@@ -152,6 +166,7 @@ export default function TechHomeScreen() {
       setOngoing(ongoing)
       setCompleted(completed)
       setTotal(count)
+      setDailyCompleted(dailyCount)
       if (ongoing) setCustPhone(ongoing.customerPhone || '')
     })
 
@@ -170,7 +185,7 @@ export default function TechHomeScreen() {
     const phone = await AsyncStorage.getItem('techPhone')    || ''
     await AsyncStorage.setItem('currentOrderId', orderId)
     set(ref(db, 'techInfo'), { name, location: loc, phone })
-    update(ref(db, 'orders/' + orderId), { status: 'accepted' })
+    update(ref(db, 'orders/' + orderId), { status: 'accepted', techPhone: phone, techName: name })
       .then(async () => {
         Alert.alert('✅ Job Accepted!', 'Customer can now track you!')
         if (order.customerPushToken) {
@@ -224,21 +239,25 @@ export default function TechHomeScreen() {
     else Alert.alert('Not Available', 'Customer phone not available!')
   }
 
-  return (
-    <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
+  const TABS = [
+    { key: 'home',     icon: '🏠', label: 'Home' },
+    { key: 'pending',  icon: '📋', label: 'Pending' },
+    { key: 'completed', icon: '✅', label: 'Completed' },
+    { key: 'profile',  icon: '👤', label: 'Profile' },
+  ]
 
+  // ── HOME TAB ──
+  const renderHomeTab = () => (
+    <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
       {/* HEADER */}
       <View style={s.header}>
         <View>
           <Text style={s.greeting}>Welcome Back! 👋</Text>
           <Text style={s.name}>{techName}</Text>
-          <Text style={s.loc}>📍 {techLoc}</Text>
+          <Text style={s.loc}>📍 Serving {techLoc}</Text>
         </View>
         <View style={s.headerRight}>
-          <TouchableOpacity
-            style={s.avatar}
-            onPress={() => router.push('/screens/TechProfileScreen')}
-          >
+          <TouchableOpacity style={s.avatar} onPress={() => router.push('/screens/TechProfileScreen')}>
             <Text style={{ fontSize: 24 }}>🔧</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -259,7 +278,7 @@ export default function TechHomeScreen() {
       <View style={s.earningsRow}>
         <View style={s.earnCard}>
           <Text style={s.earnLabel}>Today's Jobs</Text>
-          <Text style={s.earnAmt}>{totalJobs}</Text>
+          <Text style={s.earnAmt}>{dailyCompleted}</Text>
         </View>
         <View style={s.earnCard}>
           <Text style={s.earnLabel}>Pending</Text>
@@ -270,32 +289,6 @@ export default function TechHomeScreen() {
           <Text style={[s.earnAmt, { fontSize: 13 }]}>{isOnline ? '🟢 Active' : '🔴 Off'}</Text>
         </View>
       </View>
-
-      {/* PENDING JOBS */}
-      <Text style={s.sectionTitle}>📋 Pending Jobs</Text>
-      {pendingJobs.length === 0 ? (
-        <View style={s.emptyCard}>
-          <Text style={s.emptyTxt}>No new jobs right now</Text>
-        </View>
-      ) : (
-        pendingJobs.map(order => (
-          <View key={order.id} style={s.jobCard}>
-            <View style={s.newBadge}><Text style={s.newBadgeTxt}>NEW</Text></View>
-            <Text style={s.jobCust}>👤 {order.customerName}</Text>
-            <Text style={s.jobType}>📱 {order.brand} — {order.repair}</Text>
-            <Text style={s.jobLoc}>📍 {order.location}</Text>
-            <Text style={s.jobTime}>🕐 {order.time}</Text>
-            <View style={s.jobActions}>
-              <TouchableOpacity style={s.rejectBtn} onPress={() => rejectJob(order.id)}>
-                <Text style={s.rejectTxt}>✕ Reject</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.acceptBtn} onPress={() => acceptJob(order.id, order)}>
-                <Text style={s.acceptTxt}>✓ Accept</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))
-      )}
 
       {/* ONGOING JOB */}
       <Text style={s.sectionTitle}>🔧 Ongoing Job</Text>
@@ -331,7 +324,7 @@ export default function TechHomeScreen() {
             </View>
           </View>
 
-          {/* ✅ Safe MapView — only renders if react-native-maps is installed */}
+          {/* ✅ Safe MapView */}
           {MapView && (custLat || myLat) && (
             <MapView
               ref={mapRef}
@@ -376,11 +369,92 @@ export default function TechHomeScreen() {
         </View>
       )}
 
-      {/* COMPLETED JOBS */}
-      <Text style={s.sectionTitle}>✅ Completed Jobs</Text>
+      {/* QUICK ACTIONS */}
+      <Text style={s.sectionTitle}>⚡ Quick Actions</Text>
+      <View style={s.quickRow}>
+        <TouchableOpacity style={s.quickCard} onPress={() => setActiveTab('pending')}>
+          <Text style={s.quickIcon}>📋</Text>
+          <Text style={s.quickLabel}>Pending Jobs</Text>
+          <View style={s.quickBadge}><Text style={s.quickBadgeTxt}>{pendingJobs.length}</Text></View>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.quickCard} onPress={() => setActiveTab('completed')}>
+          <Text style={s.quickIcon}>✅</Text>
+          <Text style={s.quickLabel}>Completed</Text>
+          <Text style={s.quickSub}>{dailyCompleted} today</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.quickCard} onPress={logout}>
+          <Text style={s.quickIcon}>🚪</Text>
+          <Text style={s.quickLabel}>Logout</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={{ height: 90 }} />
+    </ScrollView>
+  )
+
+  // ── PENDING TAB ──
+  const renderPendingTab = () => (
+    <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
+      <View style={[s.header, { backgroundColor: '#FF6B00' }]}>
+        <View>
+          <Text style={s.greeting}>📋 Pending Jobs</Text>
+          <Text style={s.name}>{pendingJobs.length} jobs waiting</Text>
+        </View>
+      </View>
+
+      {pendingJobs.length === 0 ? (
+        <View style={{ padding: 50, alignItems: 'center' }}>
+          <Text style={{ fontSize: 50, marginBottom: 15 }}>🎉</Text>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3A6B' }}>All caught up!</Text>
+          <Text style={{ fontSize: 13, color: '#888', marginTop: 5 }}>No pending jobs right now</Text>
+        </View>
+      ) : (
+        pendingJobs.map(order => (
+          <View key={order.id} style={s.jobCard}>
+            <View style={s.newBadge}><Text style={s.newBadgeTxt}>NEW</Text></View>
+            <Text style={s.jobCust}>👤 {order.customerName}</Text>
+            <Text style={s.jobType}>📱 {order.brand} — {order.repair}</Text>
+            <Text style={s.jobLoc}>📍 {order.location}</Text>
+            <Text style={s.jobTime}>🕐 {order.time}</Text>
+            <View style={s.jobActions}>
+              {ongoingJob ? (
+                <View style={{ flex: 1, backgroundColor: '#fff3e0', padding: 10, borderRadius: 10, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#e65100' }}>⚠️ Complete current job first</Text>
+                </View>
+              ) : (
+                <>
+                  <TouchableOpacity style={s.rejectBtn} onPress={() => rejectJob(order.id)}>
+                    <Text style={s.rejectTxt}>✕ Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.acceptBtn} onPress={() => acceptJob(order.id, order)}>
+                    <Text style={s.acceptTxt}>✓ Accept</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        ))
+      )}
+
+      <View style={{ height: 90 }} />
+    </ScrollView>
+  )
+
+  // ── COMPLETED TAB ──
+  const renderCompletedTab = () => (
+    <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
+      <View style={[s.header, { backgroundColor: '#FF6B00' }]}>
+        <View>
+          <Text style={s.greeting}>✅ Completed Jobs</Text>
+          <Text style={s.name}>{completedJobs.length} total · {dailyCompleted} today</Text>
+        </View>
+      </View>
+
       {completedJobs.length === 0 ? (
-        <View style={s.emptyCard}>
-          <Text style={s.emptyTxt}>No completed jobs yet</Text>
+        <View style={{ padding: 50, alignItems: 'center' }}>
+          <Text style={{ fontSize: 50, marginBottom: 15 }}>📦</Text>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3A6B' }}>No completed jobs yet</Text>
+          <Text style={{ fontSize: 13, color: '#888', marginTop: 5 }}>Your completed jobs will appear here!</Text>
         </View>
       ) : (
         completedJobs.map((order, i) => (
@@ -388,6 +462,7 @@ export default function TechHomeScreen() {
             <View>
               <Text style={s.compCust}>👤 {order.customerName}</Text>
               <Text style={s.compType}>📱 {order.brand} — {order.repair}</Text>
+              <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📍 {order.location}</Text>
             </View>
             <View style={s.compRight}>
               <Text style={s.compPrice}>✅ Done</Text>
@@ -397,8 +472,50 @@ export default function TechHomeScreen() {
         ))
       )}
 
-      <View style={{ height: 40 }} />
+      <View style={{ height: 90 }} />
     </ScrollView>
+  )
+
+  // ── PROFILE TAB ──
+  const renderProfileTab = () => {
+    setTimeout(() => {
+      router.push('/screens/TechProfileScreen')
+      setActiveTab('home')
+    }, 50)
+    return <View style={{ flex: 1, backgroundColor: '#f5f5f5' }} />
+  }
+
+  // Show loading while navigating to profile
+  if (activeTab === 'profile') {
+    return <View style={{ flex: 1, backgroundColor: '#f5f5f5' }} />
+  }
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+      {activeTab === 'home' && renderHomeTab()}
+      {activeTab === 'pending' && renderPendingTab()}
+      {activeTab === 'completed' && renderCompletedTab()}
+
+      {/* BOTTOM TAB BAR */}
+      <View style={s.tabBar}>
+        {TABS.map(tab => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[s.tabItem, activeTab === tab.key && s.tabItemActive]}
+            onPress={() => setActiveTab(tab.key)}
+          >
+            <Text style={[s.tabIcon, activeTab === tab.key && s.tabIconActive]}>{tab.icon}</Text>
+            <Text style={[s.tabLabel, activeTab === tab.key && s.tabLabelActive]}>{tab.label}</Text>
+            {tab.key === 'pending' && pendingJobs.length > 0 && (
+              <View style={s.tabBadge}>
+                <Text style={s.tabBadgeTxt}>{pendingJobs.length > 9 ? '9+' : pendingJobs.length}</Text>
+              </View>
+            )}
+            {activeTab === tab.key && <View style={s.tabIndicator} />}
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
   )
 }
 
@@ -461,4 +578,25 @@ const s = StyleSheet.create({
   compRight:     { alignItems: 'flex-end' },
   compPrice:     { fontSize: 14, fontWeight: '800', color: '#FF6B00' },
   compTime:      { fontSize: 11, color: '#888', marginTop: 3 },
+
+  // ── Quick Actions ──
+  quickRow:      { flexDirection: 'row', gap: 10, marginHorizontal: 15, marginBottom: 20 },
+  quickCard:     { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 16, alignItems: 'center', elevation: 3, position: 'relative' },
+  quickIcon:     { fontSize: 28 },
+  quickLabel:    { fontSize: 11, fontWeight: '700', color: '#1A3A6B', marginTop: 6 },
+  quickSub:      { fontSize: 10, color: '#888', marginTop: 2 },
+  quickBadge:    { position: 'absolute', top: 6, right: 6, backgroundColor: '#FF6B00', width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  quickBadgeTxt: { fontSize: 10, fontWeight: '800', color: '#fff' },
+
+  // ── Bottom Tab Bar ──
+  tabBar:        { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },
+  tabItem:       { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, position: 'relative' },
+  tabItemActive: {},
+  tabIcon:       { fontSize: 22, opacity: 0.5 },
+  tabIconActive: { opacity: 1 },
+  tabLabel:      { fontSize: 10, fontWeight: '600', color: '#888', marginTop: 2 },
+  tabLabelActive:{ color: '#FF6B00', fontWeight: '800' },
+  tabIndicator:  { position: 'absolute', top: -1, width: 24, height: 3, backgroundColor: '#FF6B00', borderRadius: 2, alignSelf: 'center' },
+  tabBadge:      { position: 'absolute', top: 0, right: '15%', backgroundColor: '#FF6B00', width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  tabBadgeTxt:   { fontSize: 9, fontWeight: '800', color: '#fff' },
 })
