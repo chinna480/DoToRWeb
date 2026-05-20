@@ -274,24 +274,20 @@ export default function HomeScreen() {
     </ScrollView>
   )
 
-  // ── PROFILE TAB ──
-  const renderProfile = () => {
+  // Show loading/blank while navigating to profile
+  if (activeTab === 'profile') {
     // Navigate to profile screen when tab is selected
     setTimeout(() => {
       router.push('/screens/CustomerProfileScreen')
       setActiveTab('home') // Reset to home since we're navigating away
     }, 50)
-    return null
-  }
-
-  // Show loading/blank while navigating to profile
-  if (activeTab === 'profile') {
     return <View style={{ flex: 1, backgroundColor: '#f5f5f5' }} />
   }
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-      {activeTab === 'home' ? renderHome() : renderOrders()}
+      {activeTab === 'home' && renderHome()}
+      {activeTab === 'orders' && renderOrders()}
 
       {/* BOTTOM TAB BAR */}
       <View style={s.tabBar}>

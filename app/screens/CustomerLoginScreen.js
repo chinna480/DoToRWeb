@@ -63,6 +63,7 @@ export default function CustomerLoginScreen() {
     return
   }
 
+  await AsyncStorage.clear()
   await AsyncStorage.setItem('custName', name)
   await AsyncStorage.setItem('custEmail', email)
   await AsyncStorage.setItem('custPhone', phone)

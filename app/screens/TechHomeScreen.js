@@ -476,17 +476,13 @@ export default function TechHomeScreen() {
     </ScrollView>
   )
 
-  // ── PROFILE TAB ──
-  const renderProfileTab = () => {
+  // Show loading while navigating to profile
+  if (activeTab === 'profile') {
+    // Navigate to profile screen when tab is selected
     setTimeout(() => {
       router.push('/screens/TechProfileScreen')
       setActiveTab('home')
     }, 50)
-    return <View style={{ flex: 1, backgroundColor: '#f5f5f5' }} />
-  }
-
-  // Show loading while navigating to profile
-  if (activeTab === 'profile') {
     return <View style={{ flex: 1, backgroundColor: '#f5f5f5' }} />
   }
 
