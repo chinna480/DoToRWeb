@@ -123,8 +123,7 @@ export default function TechProfileScreen() {
     { icon: '⭐', label: 'My Rating',      sub: `${rating} stars`,         onPress: () => Alert.alert('Rating', `Your rating: ${rating} ⭐`) },
     { icon: '🎁', label: 'Refer and Earn', sub: 'Get ₹100 per referral',  onPress: () => Alert.alert('Refer', 'Share DoToR and earn ₹100!') },
     { icon: '🏆', label: 'My Rewards',     sub: null,                      onPress: () => Alert.alert('Rewards', 'Coming Soon!') },
-    { icon: '💳', label: 'Payment Info',   sub: 'Bank & UPI details',      onPress: () => Alert.alert('Payment', 'Add your UPI ID to receive payments directly!
-
+    { icon: '💳', label: 'Payment Info', sub: 'Bank & UPI details', onPress: () => Alert.alert('Payment', 'Add your UPI ID to receive payments directly!') },
 UPI ID: yourname@upi') },
     { icon: '📊', label: 'Performance',    sub: 'View your stats',         onPress: () => Alert.alert('Stats', `Jobs: ${totalJobs}\nRating: ${rating}`) },
     { icon: '🔔', label: 'Notifications',  sub: null,                      toggle: true, value: notifications, onToggle: setNotifications },
