@@ -1,71 +1,20 @@
-export default {
-  expo: {
-    name: "DoToR",
-    slug: "dotor",
-    version: "1.0.0",
-    orientation: "portrait",
-    icon: "./assets/images/logo.png",
-    scheme: "dotor",
-    userInterfaceStyle: "light",
-    splash: {
-      image: "./assets/images/logo.png",
-      resizeMode: "contain",
-      backgroundColor: "#ffffff"
-    },
-    android: {
-      adaptiveIcon: {
-        foregroundImage: "./assets/images/logo.png",
-        backgroundColor: "#ffffff"
-      },
-      package: "com.dotor.app",
-      googleServicesFile: "./google-services.json",
-      config: {
-        googleMaps: {
-          apiKey: process.env.GOOGLE_MAPS_API_KEY
-        }
-      },
-      permissions: [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "VIBRATE",
-        "RECEIVE_BOOT_COMPLETED"
-      ]
-    },
-    ios: {
-      supportsTablet: true,
-      bundleIdentifier: "com.dotor.app",
-      config: {
-        googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY
-      },
-      infoPlist: {
-        NSLocationWhenInUseUsageDescription: "DoToR needs your location to show technician tracking",
-        NSCameraUsageDescription: "DoToR needs camera to upload photos",
-        NSPhotoLibraryUsageDescription: "DoToR needs gallery access to upload photos"
-      }
-    },
-    plugins: [
-      "expo-router",
-      "expo-location",
-      "expo-image-picker",
-      [
-        "expo-notifications",
-        {
-          color: "#FF6B00",
-          sounds: []
-        }
-      ],
-      [
-        "react-native-maps",
-        {
-          googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY
-        }
-      ]
-    ],
-    experiments: {
-      typedRoutes: true
-    }
-  }
+import { initializeApp } from 'firebase/app'
+import { getDatabase } from 'firebase/database'
+import { getAuth } from 'firebase/auth'
+
+const firebaseConfig = {
+  apiKey: 'AIzaSyDGzlU-qp5Q_ht8xxIrpyeGNPLgbbKexKs',
+  authDomain: 'dotor-2e4d8.firebaseapp.com',
+  databaseURL: 'https://dotor-2e4d8-default-rtdb.firebaseio.com',
+  projectId: 'dotor-2e4d8',
+  storageBucket: 'dotor-2e4d8.firebasestorage.app',
+  messagingSenderId: '984437487718',
+  appId: '1:984437487718:android:c323dd93e33ea0889915a7',
 }
+
+const app = initializeApp(firebaseConfig)
+const db = getDatabase(app)
+const auth = getAuth(app)
+
+export { db, auth }
+export default app
