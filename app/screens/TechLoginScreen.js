@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as ImagePicker from 'expo-image-picker'
 import { useRouter } from 'expo-router'
 import { ref, update } from 'firebase/database'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import {
   Alert, Image, KeyboardAvoidingView, Platform,
   ScrollView, StyleSheet, Text, TextInput,
@@ -23,6 +23,15 @@ const EXP = ['0 - 1 Year', '1 - 2 Years', '2 - 5 Years', '5+ Years']
 
 export default function TechLoginScreen() {
   const router = useRouter()
+  const scrollRef = useRef(null)
+  const fieldPositions = useRef({})
+
+  const scrollToField = (name) => {
+    const y = fieldPositions.current[name]
+    if (y !== undefined && scrollRef.current) {
+      scrollRef.current.scrollTo({ y: y - 20, animated: true })
+    }
+  }
 
   const [name, setName]               = useState('')
   const [phone, setPhone]             = useState('')
@@ -98,8 +107,8 @@ export default function TechLoginScreen() {
   )
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled" style={s.container} showsVerticalScrollIndicator={false}>
 
         {/* HEADER */}
         <View style={s.header}>
@@ -116,36 +125,36 @@ export default function TechLoginScreen() {
         <View style={s.content}>
 
           {/* NAME */}
-          <View style={s.group}>
+          <View style={s.group} onLayout={(e) => { fieldPositions.current['name'] = e.nativeEvent.layout.y }}>
             <Text style={s.label}>Full Name</Text>
             <View style={s.field}>
               <Text style={s.fIcon}>👤</Text>
-              <TextInput style={s.input} placeholder="Enter your full name" placeholderTextColor="#aaa" value={name} onChangeText={setName} />
+              <TextInput style={s.input} placeholder="Enter your full name" placeholderTextColor="#aaa" value={name} onChangeText={setName} onFocus={() => scrollToField('name')} />
             </View>
           </View>
 
           {/* PHONE */}
-          <View style={s.group}>
+          <View style={s.group} onLayout={(e) => { fieldPositions.current['phone'] = e.nativeEvent.layout.y }}>
             <Text style={s.label}>Phone Number</Text>
             <View style={s.field}>
               <Text style={s.fIcon}>🇮🇳 +91</Text>
-              <TextInput style={s.input} placeholder="Enter 10 digit number" placeholderTextColor="#aaa" value={phone} onChangeText={setPhone} keyboardType="numeric" maxLength={10} />
+              <TextInput style={s.input} placeholder="Enter 10 digit number" placeholderTextColor="#aaa" value={phone} onChangeText={setPhone} keyboardType="numeric" maxLength={10} onFocus={() => scrollToField('phone')} />
             </View>
           </View>
 
           {/* LOCATION */}
-          <View style={s.group}>
+          <View style={s.group} onLayout={(e) => { fieldPositions.current['location'] = e.nativeEvent.layout.y }}>
             <Text style={s.label}>Location</Text>
             <View style={s.field}>
               <Text style={s.fIcon}>📍</Text>
-              <TextInput style={s.input} placeholder="Enter your area" placeholderTextColor="#aaa" value={location} onChangeText={setLocation} />
+              <TextInput style={s.input} placeholder="Enter your area" placeholderTextColor="#aaa" value={location} onChangeText={setLocation} onFocus={() => scrollToField('location')} />
             </View>
           </View>
 
           {/* EXPERIENCE */}
-          <View style={s.group}>
+          <View style={s.group} onLayout={(e) => { fieldPositions.current['experience'] = e.nativeEvent.layout.y }}>
             <Text style={s.label}>Experience</Text>
-            <TouchableOpacity style={s.field} onPress={() => setShowExp(!showExp)}>
+            <TouchableOpacity style={s.field} onPress={() => setShowExp(!showExp)} onFocus={() => scrollToField('experience')}>
               <Text style={s.fIcon}>⭐</Text>
               <Text style={[s.input, { color: exp ? '#1A3A6B' : '#aaa' }]}>
                 {exp || 'Select Experience'}

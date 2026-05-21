@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useRouter } from 'expo-router'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { ref, update } from 'firebase/database'
 import {
@@ -19,6 +19,15 @@ import { registerForNotifications } from '../utils/notifications'
 
 export default function CustomerLoginScreen() {
   const router = useRouter()
+  const scrollRef = useRef(null)
+  const fieldPositions = useRef({})
+
+  const scrollToField = (label) => {
+    const y = fieldPositions.current[label]
+    if (y !== undefined && scrollRef.current) {
+      scrollRef.current.scrollTo({ y: y - 20, animated: true })
+    }
+  }
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -87,9 +96,9 @@ export default function CustomerLoginScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView style={s.container}>
+      <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled" style={s.container}>
 
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={s.back}>←</Text>
@@ -108,6 +117,8 @@ export default function CustomerLoginScreen() {
           value={name}
           onChange={setName}
           type="default"
+          onFocus={() => scrollToField('Full Name')}
+          onLayout={(e) => { fieldPositions.current['Full Name'] = e.nativeEvent.layout.y }}
         />
 
         <Field
@@ -117,6 +128,8 @@ export default function CustomerLoginScreen() {
           value={email}
           onChange={setEmail}
           type="email-address"
+          onFocus={() => scrollToField('Email ID')}
+          onLayout={(e) => { fieldPositions.current['Email ID'] = e.nativeEvent.layout.y }}
         />
 
         <Field
@@ -127,6 +140,8 @@ export default function CustomerLoginScreen() {
           onChange={setPhone}
           type="numeric"
           max={10}
+          onFocus={() => scrollToField('Phone Number')}
+          onLayout={(e) => { fieldPositions.current['Phone Number'] = e.nativeEvent.layout.y }}
         />
 
         <Field
@@ -136,6 +151,8 @@ export default function CustomerLoginScreen() {
           value={location}
           onChange={setLocation}
           type="default"
+          onFocus={() => scrollToField('Your Location')}
+          onLayout={(e) => { fieldPositions.current['Your Location'] = e.nativeEvent.layout.y }}
         />
 
         {!showOtpBox ? (
@@ -152,6 +169,8 @@ export default function CustomerLoginScreen() {
               onChange={setOtp}
               type="numeric"
               max={6}
+              onFocus={() => scrollToField('OTP')}
+              onLayout={(e) => { fieldPositions.current['OTP'] = e.nativeEvent.layout.y }}
             />
 
             <TouchableOpacity style={s.btn} onPress={verifyOtp}>
@@ -183,10 +202,12 @@ function Field({
   value,
   onChange,
   type,
-  max
+  max,
+  onFocus,
+  onLayout
 }) {
   return (
-    <View style={s.group}>
+    <View style={s.group} onLayout={onLayout}>
       <Text style={s.label}>{label}</Text>
 
       <View style={s.field}>
@@ -200,6 +221,7 @@ function Field({
           onChangeText={onChange}
           keyboardType={type}
           maxLength={max}
+          onFocus={onFocus}
         />
       </View>
     </View>
