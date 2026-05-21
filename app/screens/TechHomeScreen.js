@@ -51,13 +51,15 @@ export default function TechHomeScreen() {
   const [distance, setDistance]          = useState('--')
   const [eta, setEta]                    = useState('--')
   const [currentCustPhone, setCustPhone] = useState('')
-  const watchRef       = useRef(null)
-  const mapRef         = useRef(null)
-  const techPushToken  = useRef(null)
-  const techLocRef     = useRef('')
-  const sentNearby     = useRef(false)
-  const sentArrived    = useRef(false)
-  const prevPendingIds = useRef(new Set())
+  const watchRef          = useRef(null)
+  const mapRef            = useRef(null)
+  const techPushToken     = useRef(null)
+  const techLocRef        = useRef('')
+  const techPhoneRef      = useRef('')
+  const sentNearby        = useRef(false)
+  const sentArrived       = useRef(false)
+  const prevPendingIds    = useRef(new Set())
+  const areaAssignments   = useRef({})
 
   useEffect(() => {
     loadTech()
@@ -97,9 +99,11 @@ export default function TechHomeScreen() {
     const n = await AsyncStorage.getItem('techName')
     const l = await AsyncStorage.getItem('techLocation')
     const t = await AsyncStorage.getItem('pushToken')
+    const p = await AsyncStorage.getItem('techPhone')
     setTechName(n || 'Technician')
     setTechLoc(l || 'Your Location')
     techLocRef.current = (l || '').toLowerCase().trim()
+    techPhoneRef.current = p || ''
     if (t) techPushToken.current = t
   }
 
@@ -130,6 +134,15 @@ export default function TechHomeScreen() {
   }
 
   const listenOrders = () => {
+    // Listen for area-to-technician assignments
+    const unsubArea = onValue(ref(db, 'areaAssignments'), snap => {
+      if (snap.exists()) {
+        areaAssignments.current = snap.val()
+      } else {
+        areaAssignments.current = {}
+      }
+    })
+
     const unsub = onValue(ref(db, 'orders'), snapshot => {
       if (!snapshot.exists()) {
         setPending([]); setOngoing(null); setCompleted([]); setTotal(0); setDailyCompleted(0)
@@ -149,11 +162,24 @@ export default function TechHomeScreen() {
         }
       })
 
-      // Filter pending jobs by technician's location area
+      // Filter pending jobs by technician's location area AND area assignments
       const filterLoc = techLocRef.current
-      const pending = filterLoc
+      const myPhone   = techPhoneRef.current
+      const assignments = areaAssignments.current
+
+      let pending = filterLoc
         ? allPending.filter(o => (o.location || '').toLowerCase().trim() === filterLoc)
         : allPending
+
+      // If an area is already assigned to a different technician, exclude those jobs
+      // so only the assigned technician sees them
+      pending = pending.filter(o => {
+        const area = (o.location || '').toLowerCase().trim()
+        const assignedTech = assignments[area]
+        if (!area || !assignedTech) return true // No assignment → anyone can take it
+        // If assigned to this tech → show it
+        return assignedTech.phone === myPhone
+      })
 
       pending.forEach(order => {
         if (!prevPendingIds.current.has(order.id)) {
@@ -176,7 +202,7 @@ export default function TechHomeScreen() {
       setCustLng(snap.val().lng)
     })
 
-    return unsub
+    return () => { unsub(); unsubArea() }
   }
 
   const acceptJob = async (orderId, order) => {
@@ -187,6 +213,11 @@ export default function TechHomeScreen() {
     set(ref(db, 'techInfo'), { name, location: loc, phone })
     update(ref(db, 'orders/' + orderId), { status: 'accepted', techPhone: phone, techName: name })
       .then(async () => {
+        // Claim this area for this technician so future jobs here come to them
+        const area = (order.location || '').toLowerCase().trim()
+        if (area) {
+          set(ref(db, 'areaAssignments/' + area), { name, phone, location: loc })
+        }
         Alert.alert('✅ Job Accepted!', 'Customer can now track you!')
         if (order.customerPushToken) {
           await notifyCustomerTechAccepted(order.customerPushToken, name)

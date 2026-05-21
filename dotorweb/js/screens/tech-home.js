@@ -112,9 +112,16 @@ Router.register('tech-home', {
         let map = null, custMarker = null, myMarker = null, polyline = null;
         let techPushToken = Store.get('pushToken', '');
         let dailyCompletedCount = 0;
+        let areaAssignments = {};
+        let pendingOrdersMap = {};
+        const myPhone = Store.get('techPhone', '');
         const SPEED = 0.3; // km/min (~18 km/h — realistic city speed)
 
         function renderPendingJobs(pending) {
+          // Store orders in map so acceptJob can look up order data without HTML escaping issues
+          pendingOrdersMap = {};
+          pending.forEach(o => { pendingOrdersMap[o.id] = o; });
+
           const el = document.getElementById('pendingJobsList');
           const title = document.getElementById('techPendingTitle');
           const count = document.getElementById('pendingCount');
@@ -262,6 +269,16 @@ Router.register('tech-home', {
           document.getElementById('techCompletedContent').style.display = tab === 'completed' ? 'block' : 'none';
         };
 
+        // Listen for area assignments
+        const areaAssignmentsRef = firebase.database().ref('areaAssignments');
+        areaAssignmentsRef.on('value', (snap) => {
+          if (snap.exists()) {
+            areaAssignments = snap.val();
+          } else {
+            areaAssignments = {};
+          }
+        });
+
         // Listen for orders
         const ordersRef = firebase.database().ref('orders');
         const onOrders = (snap) => {
@@ -278,13 +295,20 @@ Router.register('tech-home', {
 
           // Filter pending jobs by technician's location area
           const techLoc = Store.get('techLocation', '').toLowerCase().trim();
-          const filteredPending = techLoc
+          let filteredPending = techLoc
             ? pending.filter(o => (o.location || '').toLowerCase().trim() === techLoc)
             : pending;
 
-          filteredPending.forEach(o => {
-            if (!prevPendingIds.has(o.id)) {}
+          // If an area is already assigned to a different technician, exclude those jobs
+          // so only the assigned technician sees them
+          filteredPending = filteredPending.filter(o => {
+            const area = (o.location || '').toLowerCase().trim();
+            const assignedTech = areaAssignments[area];
+            if (!area || !assignedTech) return true; // No assignment → anyone can take it
+            // If assigned to this tech → show it
+            return assignedTech.phone === myPhone;
           });
+
           prevPendingIds = new Set(filteredPending.map(o => o.id));
 
           pending.length = 0;
@@ -363,10 +387,18 @@ Router.register('tech-home', {
           const name = Store.get('techName', 'Technician');
           const loc = Store.get('techLocation', '');
           const phone = Store.get('techPhone', '');
+          const order = pendingOrdersMap[orderId] || {};
           Store.set('currentOrderId', orderId);
           firebase.database().ref('techInfo').set({ name, location: loc, phone });
           firebase.database().ref('orders/' + orderId).update({ status: 'accepted', techPhone: phone, techName: name })
-            .then(() => showAlert('✅ Job Accepted!', 'Customer can now track you!'))
+            .then(() => {
+              // Claim this area for this technician so future jobs here come to them
+              const area = (order.location || '').toLowerCase().trim();
+              if (area) {
+                firebase.database().ref('areaAssignments/' + area).set({ name, phone, location: loc });
+              }
+              showAlert('✅ Job Accepted!', 'Customer can now track you!');
+            })
             .catch(() => showAlert('Error', 'Failed to accept. Try again!'));
         };
 
@@ -435,23 +467,22 @@ Router.register('tech-home', {
             { text: 'Cancel' },
             { text: 'Logout', style: 'destructive', onPress: () => { Store.clear(); Router.navigate('role'); } }
           ]);
-        };
-
-        return () => {
-          ordersRef.off('value', onOrders);
-          custLocRef.off('value', onCustLoc);
-          stopGPS();
-          if (map) { map.remove(); window._currentMap = null; }
-          delete window.switchTechTab;
-          delete window.acceptJob;
-          delete window.rejectJob;
-          delete window.completeJob;
-          delete window.navigateToCustomer;
-          delete window.callCustomer;
-          delete window.goToTechChat;
-          delete window.toggleOnline;
-          delete window.techWebLogout;
-        };
+        };          return () => {
+            ordersRef.off('value', onOrders);
+            areaAssignmentsRef.off('value');
+            custLocRef.off('value', onCustLoc);
+            stopGPS();
+            if (map) { map.remove(); window._currentMap = null; }
+            delete window.switchTechTab;
+            delete window.acceptJob;
+            delete window.rejectJob;
+            delete window.completeJob;
+            delete window.navigateToCustomer;
+            delete window.callCustomer;
+            delete window.goToTechChat;
+            delete window.toggleOnline;
+            delete window.techWebLogout;
+          };
       }
     };
   }
