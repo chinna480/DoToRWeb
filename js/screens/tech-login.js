@@ -175,6 +175,7 @@ Router.register('tech-login', {
           if (!aadharFile) { showAlert('Error', 'Upload your Aadhar Card!'); return; }
 
           Store.clear();
+          Store.set('userRole', 'tech');
           Store.set('techName', name);
           Store.set('techPhone', phone);
           Store.set('techLocation', location);

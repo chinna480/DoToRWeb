@@ -96,6 +96,9 @@ const Router = {
     if (result.init) {
       try { this.currentCleanup = result.init(params); } catch (e) { console.warn('Init error:', e); }
     }
+
+    // Show/hide bottom nav based on screen
+    NavBar.show(screen);
   }
 };
 
@@ -171,6 +174,101 @@ function getCurrentPositionOnce() {
     );
   });
 }
+
+// ─── Navigation Bar ───────────────────────────────────────────
+const NavBar = {
+  _customerTabs: [
+    { id: 'home', label: 'Home', icon: '🏠', screen: 'home' },
+    { id: 'schedule', label: 'Schedule', icon: '📅', screen: 'schedule' },
+    { id: 'track', label: 'Track', icon: '🛵', screen: 'tracking' },
+    { id: 'chat', label: 'Chat', icon: '💬', screen: 'chat' },
+    { id: 'profile', label: 'Profile', icon: '👤', screen: 'customer-profile' },
+  ],
+  _techTabs: [
+    { id: 'home', label: 'Home', icon: '🏠', screen: 'tech-home' },
+    { id: 'jobs', label: 'Jobs', icon: '📋', screen: 'tech-home' },
+    { id: 'track', label: 'Track', icon: '🛵', screen: 'tracking' },
+    { id: 'chat', label: 'Chat', icon: '💬', screen: 'chat' },
+    { id: 'profile', label: 'Profile', icon: '👤', screen: 'tech-profile' },
+  ],
+  _screensWithNav: ['home', 'schedule', 'tracking', 'customer-profile', 'tech-home', 'tech-profile', 'chat'],
+  visible: false,
+
+  get role() {
+    return Store.get('userRole', 'customer');
+  },
+
+  get tabs() {
+    return this.role === 'tech' ? this._techTabs : this._customerTabs;
+  },
+
+  show(screen) {
+    const nav = document.getElementById('bottomNav');
+    if (!nav) return;
+
+    if (this._screensWithNav.includes(screen)) {
+      this.render(screen);
+      nav.style.display = 'block';
+      this.visible = true;
+      document.documentElement.style.setProperty('--nav-h', '65px');
+      document.getElementById('app').classList.add('nav-visible');
+      // Also update chat container if present
+      const chatContainer = document.querySelector('.chat-container');
+      if (chatContainer) chatContainer.classList.add('nav-visible');
+    } else {
+      // Reset nav properties when hiding
+      nav.style.display = 'none';
+      this.visible = false;
+      document.documentElement.style.setProperty('--nav-h', '0px');
+      document.getElementById('app').classList.remove('nav-visible');
+      const chatContainer = document.querySelector('.chat-container');
+      if (chatContainer) chatContainer.classList.remove('nav-visible');
+    }
+  },
+
+  render(activeScreen) {
+    const container = document.getElementById('navItems');
+    if (!container) return;
+
+    container.innerHTML = this.tabs.map(tab => {
+      const isActive = this._isActive(tab, activeScreen);
+      return `<button class="nav-item ${isActive ? 'active' : ''}" data-tab="${tab.id}" onclick="NavBar.onTabClick('${tab.id}')">
+        <span class="nav-icon">${tab.icon}</span>
+        <span class="nav-label">${tab.label}</span>
+      </button>`;
+    }).join('');
+  },
+
+  _isActive(tab, currentScreen) {
+    if (tab.screen === currentScreen) return true;
+    // Both Home and Jobs tabs point to tech-home
+    if (tab.screen === 'tech-home' && currentScreen === 'tech-home') return true;
+    return false;
+  },
+
+  onTabClick(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab) return;
+
+    if (tab.id === 'chat') {
+      const isTech = this.role === 'tech';
+      const orderId = isTech ? Store.get('currentOrderId', Store.get('lastOrderId', '')) : Store.get('lastOrderId', '');
+      const myName = Store.get(isTech ? 'techName' : 'custName', 'User');
+      Router.navigate('chat', {
+        orderId,
+        role: isTech ? 'tech' : 'cust',
+        [isTech ? 'techName' : 'customerName']: myName,
+        [isTech ? 'customerName' : 'techName']: 'Technician'
+      }).catch(function(e) {
+        console.warn('Nav chat error:', e);
+      });
+    } else if (tab.screen) {
+      Router.navigate(tab.screen).catch(function(e) {
+        console.warn('Nav navigate error:', e);
+      });
+    }
+  }
+};
 
 // ─── Hash-based Routing ───────────────────────────────────────
 window.addEventListener('hashchange', () => {

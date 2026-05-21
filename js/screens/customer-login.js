@@ -79,6 +79,7 @@ Router.register('customer-login', {
           const phone = document.getElementById('custPhone').value.trim();
           const location = document.getElementById('custLocation').value.trim();
           if (otp !== '123456') { showAlert('Error', 'Invalid OTP'); return; }
+          Store.set('userRole', 'customer');
           Store.set('custName', name);
           Store.set('custEmail', email);
           Store.set('custPhone', phone);

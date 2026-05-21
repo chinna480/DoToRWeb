@@ -1451,10 +1451,98 @@ html, body {
 /* ─── Responsive ─── */
 @media (max-width: 480px) {
   #app { max-width: 100%; }
+  .bottom-nav { max-width: 100%; }
 }
 @media (min-width: 481px) {
   body { background: #e0e0e0; }
   #app { box-shadow: 0 0 30px rgba(0,0,0,0.1); }
+}
+
+/* ─── Bottom Navigation Bar ─── */
+:root {
+  --nav-h: 0px;
+}
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  background: var(--white);
+  border-top: 1px solid #e8e8e8;
+  z-index: 1000;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
+  padding: 6px 0;
+  padding-bottom: max(6px, env(safe-area-inset-bottom, 6px));
+}
+
+.nav-items {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  background: none;
+  min-width: 56px;
+  position: relative;
+}
+
+.nav-item:active { transform: scale(0.92); }
+
+.nav-icon {
+  font-size: 22px;
+  line-height: 1;
+  transition: transform 0.2s;
+}
+
+.nav-item.active .nav-icon {
+  transform: scale(1.1);
+}
+
+.nav-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--gray);
+  letter-spacing: 0.3px;
+  transition: color 0.2s;
+}
+
+.nav-item.active .nav-label {
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 3px;
+  background: var(--primary);
+  border-radius: 0 0 3px 3px;
+}
+
+/* ─── Nav-visible Adjustments ─── */
+#app.nav-visible {
+  padding-bottom: var(--nav-h);
+}
+
+/* ─── Adjust Chat for Bottom Nav ─── */
+.chat-container.nav-visible {
+  height: calc(100vh - var(--nav-h));
 }
 
 /* ─── Toast ─── */
