@@ -4,6 +4,7 @@ Router.register('tech-profile', {
     const name = Store.get('techName', 'Technician');
     const phone = Store.get('techPhone', '');
     const location = Store.get('techLocation', '');
+    const pincode = Store.get('techPincode', '');
     const exp = Store.get('techExp', '');
     const photo = Store.get('techPhoto', null);
     const rating = 4.8;
@@ -63,6 +64,7 @@ Router.register('tech-profile', {
             <div class="tech-profile-name">${name}</div>
             <div class="tech-profile-detail">📱 +91 ${phone || 'Add phone'}</div>
             <div class="tech-profile-detail">📍 ${location || 'Add location'}</div>
+            ${pincode ? `<div class="tech-profile-detail">📮 Pincode: ${pincode}</div>` : ''}
             <div class="tech-profile-detail">⭐ ${exp || 'Experience not set'}</div>
             <div class="tech-online-row">
               <span class="tech-online-label">Status:</span>

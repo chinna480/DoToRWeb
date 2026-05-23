@@ -2,12 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as ImagePicker from 'expo-image-picker'
 import { useRouter } from 'expo-router'
 import { ref, update } from 'firebase/database'
-import { useState, useRef } from 'react'
+import { useRef, useState } from 'react'
 import {
   Alert, Image, KeyboardAvoidingView, Platform,
   ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View
 } from 'react-native'
+import LocationAutocomplete from '../../components/LocationAutocomplete'
 import { db } from '../firebase/config'
 
 const SKILLS = [
@@ -36,6 +37,7 @@ export default function TechLoginScreen() {
   const [name, setName]               = useState('')
   const [phone, setPhone]             = useState('')
   const [location, setLocation]       = useState('')
+  const [pincode, setPincode]         = useState('')
   const [exp, setExp]                 = useState('')
   const [selSkills, setSelSkills]     = useState([])
   const [showExp, setShowExp]         = useState(false)
@@ -66,6 +68,7 @@ export default function TechLoginScreen() {
     if (!name)                  { Alert.alert('Error', 'Enter your name!');             return }
     if (phone.length !== 10)    { Alert.alert('Error', 'Enter valid 10 digit number!'); return }
     if (!location)              { Alert.alert('Error', 'Enter your location!');         return }
+    if (!/^\d{6}$/.test(pincode)) { Alert.alert('Error', 'Enter a valid 6-digit pincode!'); return }
     if (!exp)                   { Alert.alert('Error', 'Select your experience!');      return }
     if (selSkills.length === 0) { Alert.alert('Error', 'Select at least one skill!');  return }
     if (!certificate)           { Alert.alert('Error', 'Upload your Certificate!');    return }
@@ -75,11 +78,12 @@ export default function TechLoginScreen() {
     await AsyncStorage.setItem('techName',     name)
     await AsyncStorage.setItem('techPhone',    phone)
     await AsyncStorage.setItem('techLocation', location)
+    await AsyncStorage.setItem('techPincode',  pincode)
     await AsyncStorage.setItem('techExp',      exp)
     await AsyncStorage.setItem('techSkills',   JSON.stringify(selSkills))
 
     try {
-      await update(ref(db, 'techs/' + phone), { name, phone, location })
+      await update(ref(db, 'techs/' + phone), { name, phone, location, pincode })
     } catch (e) {}
 
     router.replace('/screens/TechHomeScreen')
@@ -145,9 +149,21 @@ export default function TechLoginScreen() {
           {/* LOCATION */}
           <View style={s.group} onLayout={(e) => { fieldPositions.current['location'] = e.nativeEvent.layout.y }}>
             <Text style={s.label}>Location</Text>
+            <LocationAutocomplete
+              value={location}
+              onChangeText={setLocation}
+              placeholder="Search your area..."
+              icon="📍"
+              onFocus={() => scrollToField('location')}
+            />
+          </View>
+
+          {/* PINCODE */}
+          <View style={s.group} onLayout={(e) => { fieldPositions.current['pincode'] = e.nativeEvent.layout.y }}>
+            <Text style={s.label}>Pincode</Text>
             <View style={s.field}>
-              <Text style={s.fIcon}>📍</Text>
-              <TextInput style={s.input} placeholder="Enter your area" placeholderTextColor="#aaa" value={location} onChangeText={setLocation} onFocus={() => scrollToField('location')} />
+              <Text style={s.fIcon}>📮</Text>
+              <TextInput style={s.input} placeholder="Enter 6-digit pincode" placeholderTextColor="#aaa" value={pincode} onChangeText={setPincode} keyboardType="numeric" maxLength={6} onFocus={() => scrollToField('pincode')} />
             </View>
           </View>
 

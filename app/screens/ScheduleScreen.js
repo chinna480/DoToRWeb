@@ -97,9 +97,10 @@ export default function ScheduleScreen() {
         customerName,
         customerPhone,
         location: await AsyncStorage.getItem('custLocation') || '',
+        pincode: await AsyncStorage.getItem('custPincode') || '',
         brand: 'Scheduled',
         repair: `Appointment: ${selectedSlot}`,
-        status: 'scheduled',
+        status: 'pending',
         time: selectedSlot,
         isAppointment: true,
       }

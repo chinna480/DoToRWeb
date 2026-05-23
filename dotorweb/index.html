@@ -15,6 +15,17 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+  <!-- Google Maps JS API for Places Autocomplete -->
+  <script>
+    window.GOOGLE_MAPS_LOADED = new Promise((resolve) => {
+      window.initGoogleMaps = () => {
+        window.googleMapsReady = true;
+        resolve();
+      };
+    });
+  </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDGzlU-qp5Q_ht8xxIrpyeGNPLgbbKexKs&libraries=places&callback=initGoogleMaps" async defer></script>
+
   <!-- App Styles -->
   <link rel="stylesheet" href="css/style.css" />
 

@@ -21,6 +21,7 @@ export default function TechProfileScreen() {
   const [name, setName]           = useState('Technician')
   const [phone, setPhone]         = useState('')
   const [location, setLocation]   = useState('')
+  const [pincode, setPincode]     = useState('')
   const [exp, setExp]             = useState('')
   const [photo, setPhoto]         = useState(null)
   const [rating]                  = useState(4.8)
@@ -38,11 +39,13 @@ export default function TechProfileScreen() {
     const n  = await AsyncStorage.getItem('techName')
     const p  = await AsyncStorage.getItem('techPhone')
     const l  = await AsyncStorage.getItem('techLocation')
+    const pi = await AsyncStorage.getItem('techPincode')
     const e  = await AsyncStorage.getItem('techExp')
     const ph = await AsyncStorage.getItem('techPhoto')
     if (n)  setName(n)
     if (p)  setPhone(p)
     if (l)  setLocation(l)
+    if (pi) setPincode(pi)
     if (e)  setExp(e)
     if (ph) setPhoto(ph)
 
@@ -157,6 +160,7 @@ export default function TechProfileScreen() {
         <Text style={s.profileName}>{name}</Text>
         <Text style={s.profilePhone}>📱 +91 {phone || 'Add phone'}</Text>
         <Text style={s.profileLoc}>📍 {location || 'Add location'}</Text>
+        {pincode ? <Text style={s.profileLoc}>📮 Pincode: {pincode}</Text> : null}
         <Text style={s.profileExp}>⭐ {exp || 'Experience not set'}</Text>
 
         <View style={s.onlineRow}>

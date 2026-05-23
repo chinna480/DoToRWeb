@@ -11,3 +11,7 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+
+// Google Places API key for location autocomplete
+// Set this to your dedicated Google Places API key (or leave empty to use Firebase API key)
+const GOOGLE_PLACES_API_KEY = '' || firebaseConfig.apiKey;

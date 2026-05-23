@@ -12,6 +12,14 @@ const firebaseConfig = {
   appId: '1:984437487718:android:c323dd93e33ea0889915a7',
 }
 
+// Google Places API key (set this to use location autocomplete)
+// Get a key at https://console.cloud.google.com/apis/credentials
+const googleApiKey = '' // ← Add your Google Places API key here
+
+const GOOGLE_PLACES_API_KEY = googleApiKey || firebaseConfig.apiKey
+
+export { GOOGLE_PLACES_API_KEY }
+
 const app = initializeApp(firebaseConfig)
 const db = getDatabase(app)
 const auth = getAuth(app)

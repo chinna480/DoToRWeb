@@ -55,6 +55,7 @@ export default function TechHomeScreen() {
   const mapRef            = useRef(null)
   const techPushToken     = useRef(null)
   const techLocRef        = useRef('')
+  const techPincodeRef    = useRef('')
   const techPhoneRef      = useRef('')
   const sentNearby        = useRef(false)
   const sentArrived       = useRef(false)
@@ -98,11 +99,13 @@ export default function TechHomeScreen() {
   const loadTech = async () => {
     const n = await AsyncStorage.getItem('techName')
     const l = await AsyncStorage.getItem('techLocation')
+    const pi = await AsyncStorage.getItem('techPincode')
     const t = await AsyncStorage.getItem('pushToken')
     const p = await AsyncStorage.getItem('techPhone')
     setTechName(n || 'Technician')
     setTechLoc(l || 'Your Location')
     techLocRef.current = (l || '').toLowerCase().trim()
+    techPincodeRef.current = (pi || '').toLowerCase().trim()
     techPhoneRef.current = p || ''
     if (t) techPushToken.current = t
   }
@@ -162,14 +165,19 @@ export default function TechHomeScreen() {
         }
       })
 
-      // Filter pending jobs by technician's location area AND area assignments
-      const filterLoc = techLocRef.current
-      const myPhone   = techPhoneRef.current
-      const assignments = areaAssignments.current
+      // Filter pending jobs by technician's location area, pincode, AND area assignments
+      const filterLoc     = techLocRef.current
+      const filterPincode = techPincodeRef.current
+      const myPhone       = techPhoneRef.current
+      const assignments   = areaAssignments.current
 
-      let pending = filterLoc
-        ? allPending.filter(o => (o.location || '').toLowerCase().trim() === filterLoc)
-        : allPending
+      let pending = allPending
+      if (filterLoc) {
+        pending = pending.filter(o => (o.location || '').toLowerCase().trim() === filterLoc)
+      }
+      if (filterPincode) {
+        pending = pending.filter(o => (o.pincode || '').toLowerCase().trim() === filterPincode)
+      }
 
       // If an area is already assigned to a different technician, exclude those jobs
       // so only the assigned technician sees them
@@ -332,6 +340,7 @@ export default function TechHomeScreen() {
           <Text style={s.jobCust}>👤 {ongoingJob.customerName}</Text>
           <Text style={s.jobType}>📱 {ongoingJob.brand} — {ongoingJob.repair}</Text>
           <Text style={s.jobLoc}>📍 {ongoingJob.location}</Text>
+          {ongoingJob.pincode ? <Text style={s.jobLoc}>📮 {ongoingJob.pincode}</Text> : null}
           <Text style={s.inProgressTxt}>⚡ In Progress...</Text>
 
           <View style={s.distBanner}>
@@ -446,6 +455,7 @@ export default function TechHomeScreen() {
             <Text style={s.jobCust}>👤 {order.customerName}</Text>
             <Text style={s.jobType}>📱 {order.brand} — {order.repair}</Text>
             <Text style={s.jobLoc}>📍 {order.location}</Text>
+            {order.pincode ? <Text style={s.jobLoc}>📮 {order.pincode}</Text> : null}
             <Text style={s.jobTime}>🕐 {order.time}</Text>
             <View style={s.jobActions}>
               {ongoingJob ? (
@@ -494,6 +504,7 @@ export default function TechHomeScreen() {
               <Text style={s.compCust}>👤 {order.customerName}</Text>
               <Text style={s.compType}>📱 {order.brand} — {order.repair}</Text>
               <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📍 {order.location}</Text>
+              {order.pincode ? <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📮 {order.pincode}</Text> : null}
             </View>
             <View style={s.compRight}>
               <Text style={s.compPrice}>✅ Done</Text>

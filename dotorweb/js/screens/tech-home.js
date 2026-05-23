@@ -140,6 +140,7 @@ Router.register('tech-home', {
               <div class="job-customer">👤 ${o.customerName}</div>
               <div class="job-type">📱 ${o.brand} — ${o.repair}</div>
               <div class="job-location">📍 ${o.location}</div>
+              ${o.pincode ? `<div class="job-location">📮 ${o.pincode}</div>` : ''}
               <div class="job-time">🕐 ${o.time}</div>
               <div class="job-actions">
                 ${ongoingOrder
@@ -176,6 +177,7 @@ Router.register('tech-home', {
                 <div class="comp-customer">👤 ${o.customerName}</div>
                 <div class="comp-type">📱 ${o.brand} — ${o.repair}</div>
                 <div class="comp-time-small">📍 ${o.location}</div>
+                ${o.pincode ? `<div class="comp-time-small">📮 ${o.pincode}</div>` : ''}
               </div>
               <div class="comp-right">
                 <div class="comp-done">✅ Done</div>
@@ -202,6 +204,7 @@ Router.register('tech-home', {
               <div class="job-customer">👤 ${order.customerName}</div>
               <div class="job-type">📱 ${order.brand} — ${order.repair}</div>
               <div class="job-location">📍 ${order.location}</div>
+              ${order.pincode ? `<div class="job-location">📮 ${order.pincode}</div>` : ''}
               <div class="ongoing-progress">⚡ In Progress...</div>
               <div class="dist-banner" style="background:var(--light-gray);margin:10px 0">
                 <div>
@@ -293,11 +296,16 @@ Router.register('tech-home', {
             if (order.status === 'completed') { completed.push(order); count++; dailyCompletedCount++; }
           });
 
-          // Filter pending jobs by technician's location area
-          const techLoc = Store.get('techLocation', '').toLowerCase().trim();
-          let filteredPending = techLoc
-            ? pending.filter(o => (o.location || '').toLowerCase().trim() === techLoc)
-            : pending;
+          // Filter pending jobs by technician's location area AND pincode
+          const techLoc     = Store.get('techLocation', '').toLowerCase().trim();
+          const techPincode = Store.get('techPincode', '').toLowerCase().trim();
+          let filteredPending = pending;
+          if (techLoc) {
+            filteredPending = filteredPending.filter(o => (o.location || '').toLowerCase().trim() === techLoc);
+          }
+          if (techPincode) {
+            filteredPending = filteredPending.filter(o => (o.pincode || '').toLowerCase().trim() === techPincode);
+          }
 
           // If an area is already assigned to a different technician, exclude those jobs
           // so only the assigned technician sees them

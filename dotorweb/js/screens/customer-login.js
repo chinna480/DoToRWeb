@@ -35,9 +35,16 @@ Router.register('customer-login', {
               </div>
               <div class="form-group">
                 <label class="form-label">Your Location</label>
-                <div class="form-field">
+                <div class="form-field" style="position:relative">
                   <span class="form-icon">📍</span>
-                  <input class="form-input" id="custLocation" placeholder="Enter your area" type="text" />
+                  <input class="form-input" id="custLocation" placeholder="Search your area..." type="text" autocomplete="off" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Pincode</label>
+                <div class="form-field">
+                  <span class="form-icon">📮</span>
+                  <input class="form-input" id="custPincode" placeholder="Enter 6-digit pincode" type="tel" maxlength="6" />
                 </div>
               </div>
               <div id="otpSection" style="display:none">
@@ -59,15 +66,37 @@ Router.register('customer-login', {
         </div>
       `,
       init() {
+        // Initialize Google Places Autocomplete for location
+        const initPlacesAutocomplete = (inputId) => {
+          const input = document.getElementById(inputId);
+          if (!input || typeof google === 'undefined' || !google.maps?.places) return;
+          const autocomplete = new google.maps.places.Autocomplete(input, {
+            types: ['geocode', 'establishment'],
+            componentRestrictions: { country: 'in' },
+            fields: ['formatted_address', 'name', 'address_components'],
+          });
+          autocomplete.addListener('place_changed', () => {
+            const place = autocomplete.getPlace();
+            if (place && place.formatted_address) {
+              input.value = place.formatted_address;
+            }
+          });
+        };
+        window.GOOGLE_MAPS_LOADED.then(() => {
+          initPlacesAutocomplete('custLocation');
+        }).catch(() => {});
+
         window.sendCustOtp = () => {
           const name = document.getElementById('custName').value.trim();
           const email = document.getElementById('custEmail').value.trim();
           const phone = document.getElementById('custPhone').value.trim();
           const location = document.getElementById('custLocation').value.trim();
+          const pincode = document.getElementById('custPincode').value.trim();
           if (!name) { showAlert('Error', 'Enter your name!'); return; }
           if (!email) { showAlert('Error', 'Enter your email!'); return; }
           if (phone.length !== 10) { showAlert('Error', 'Enter valid 10 digit number!'); return; }
           if (!location) { showAlert('Error', 'Enter your location!'); return; }
+          if (!/^\d{6}$/.test(pincode)) { showAlert('Error', 'Enter a valid 6-digit pincode!'); return; }
           document.getElementById('otpSection').style.display = 'block';
           document.getElementById('sendOtpBtn').style.display = 'none';
           showAlert('OTP Sent', 'Demo OTP is: 123456');
@@ -78,16 +107,18 @@ Router.register('customer-login', {
           const email = document.getElementById('custEmail').value.trim();
           const phone = document.getElementById('custPhone').value.trim();
           const location = document.getElementById('custLocation').value.trim();
+          const pincode = document.getElementById('custPincode').value.trim();
           if (otp !== '123456') { showAlert('Error', 'Invalid OTP'); return; }
           Store.clear();
           Store.set('custName', name);
           Store.set('custEmail', email);
           Store.set('custPhone', phone);
           Store.set('custLocation', location);
+          Store.set('custPincode', pincode);
           // Save push token placeholder
           Store.set('pushToken', 'web-user-' + Date.now());
           // Save to Firebase
-          firebase.database().ref('users/' + phone).update({ name, phone, location, pushToken: Store.get('pushToken') });
+          firebase.database().ref('users/' + phone).update({ name, phone, location, pincode, pushToken: Store.get('pushToken') });
           Router.navigate('home');
         };
         return () => { delete window.sendCustOtp; delete window.verifyCustOtp; };

@@ -40,9 +40,16 @@ Router.register('tech-login', {
             </div>
             <div class="form-group">
               <label class="form-label">Location</label>
-              <div class="form-field">
+              <div class="form-field" style="position:relative">
                 <span class="form-icon">📍</span>
-                <input class="form-input" id="techLocation" placeholder="Enter your area" />
+                <input class="form-input" id="techLocation" placeholder="Search your area..." type="text" autocomplete="off" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pincode</label>
+              <div class="form-field">
+                <span class="form-icon">📮</span>
+                <input class="form-input" id="techPincode" placeholder="Enter 6-digit pincode" type="tel" maxlength="6" />
               </div>
             </div>
             <div class="form-group">
@@ -161,14 +168,34 @@ Router.register('tech-login', {
           }
         });
 
+        // Initialize Google Places Autocomplete for location
+        window.GOOGLE_MAPS_LOADED.then(() => {
+          const input = document.getElementById('techLocation');
+          if (input && typeof google !== 'undefined' && google.maps?.places) {
+            const autocomplete = new google.maps.places.Autocomplete(input, {
+              types: ['geocode', 'establishment'],
+              componentRestrictions: { country: 'in' },
+              fields: ['formatted_address', 'name', 'address_components'],
+            });
+            autocomplete.addListener('place_changed', () => {
+              const place = autocomplete.getPlace();
+              if (place && place.formatted_address) {
+                input.value = place.formatted_address;
+              }
+            });
+          }
+        }).catch(() => {});
+
         window.registerTech = () => {
           const name = document.getElementById('techName').value.trim();
           const phone = document.getElementById('techPhone').value.trim();
           const location = document.getElementById('techLocation').value.trim();
+          const pincode = document.getElementById('techPincode').value.trim();
 
           if (!name) { showAlert('Error', 'Enter your name!'); return; }
           if (phone.length !== 10) { showAlert('Error', 'Enter valid 10 digit number!'); return; }
           if (!location) { showAlert('Error', 'Enter your location!'); return; }
+          if (!/^\d{6}$/.test(pincode)) { showAlert('Error', 'Enter a valid 6-digit pincode!'); return; }
           if (!selectedExp) { showAlert('Error', 'Select your experience!'); return; }
           if (selectedSkills.size === 0) { showAlert('Error', 'Select at least one skill!'); return; }
           if (!certFile) { showAlert('Error', 'Upload your Certificate!'); return; }
@@ -178,10 +205,11 @@ Router.register('tech-login', {
           Store.set('techName', name);
           Store.set('techPhone', phone);
           Store.set('techLocation', location);
+          Store.set('techPincode', pincode);
           Store.set('techExp', selectedExp);
           Store.set('techSkills', Array.from(selectedSkills));
 
-          firebase.database().ref('techs/' + phone).update({ name, phone, location }).catch(() => {});
+          firebase.database().ref('techs/' + phone).update({ name, phone, location, pincode }).catch(() => {});
           Router.navigate('tech-home');
         };
 

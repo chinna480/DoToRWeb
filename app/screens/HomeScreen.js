@@ -85,6 +85,7 @@ export default function HomeScreen() {
   const bookRepair = async (repair) => {
     const name              = await AsyncStorage.getItem('custName')     || 'Customer'
     const loc               = await AsyncStorage.getItem('custLocation') || 'Your Location'
+    const pincode           = await AsyncStorage.getItem('custPincode')  || ''
     const phone             = await AsyncStorage.getItem('custPhone')    || ''
     const customerPushToken = await AsyncStorage.getItem('pushToken')    || ''
 
@@ -104,6 +105,7 @@ export default function HomeScreen() {
       customerPhone:      phone,
       customerPushToken,
       location:           loc,
+      pincode,
       brand:              selectedBrand,
       repair,
       status:             'pending',
@@ -254,6 +256,7 @@ export default function HomeScreen() {
                 <Text style={s.orderDevice}>📱 {order.brand}</Text>
                 <Text style={s.orderRepair}>🔧 {order.repair}</Text>
                 <Text style={s.orderLoc}>📍 {order.location}</Text>
+                {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
                 <Text style={s.orderTime}>🕐 {order.time}</Text>
               </View>
               <View style={s.orderRight}>

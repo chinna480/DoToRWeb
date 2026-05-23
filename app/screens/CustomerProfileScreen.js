@@ -22,6 +22,7 @@ export default function CustomerProfileScreen() {
   const [phone, setPhone]       = useState('')
   const [email, setEmail]       = useState('')
   const [location, setLocation] = useState('')
+  const [pincode, setPincode]   = useState('')
   const [photo, setPhoto]       = useState(null)
   const [rating]                = useState(4.8)
   const [totalOrders, setTotalOrders]   = useState(0)
@@ -35,11 +36,13 @@ export default function CustomerProfileScreen() {
     const p  = await AsyncStorage.getItem('custPhone')
     const e  = await AsyncStorage.getItem('custEmail')
     const l  = await AsyncStorage.getItem('custLocation')
+    const pi = await AsyncStorage.getItem('custPincode')
     const ph = await AsyncStorage.getItem('custPhoto')
     if (n)  setName(n)
     if (p)  setPhone(p)
     if (e)  setEmail(e)
     if (l)  setLocation(l)
+    if (pi) setPincode(pi)
     if (ph) setPhoto(ph)
 
     // ── Pass phone directly so we don't rely on state being updated yet ──────
@@ -151,6 +154,7 @@ export default function CustomerProfileScreen() {
             <Text style={s.profilePhone}>{phone ? `+91 ${phone}` : 'Add phone number'}</Text>
             {email    ? <Text style={s.profileSub}>{email}</Text>        : null}
             {location ? <Text style={s.profileSub}>📍 {location}</Text> : null}
+            {pincode  ? <Text style={s.profileSub}>📮 Pincode: {pincode}</Text> : null}
           </View>
         </TouchableOpacity>
 

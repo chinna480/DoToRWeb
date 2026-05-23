@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native'
+import LocationAutocomplete from '../../components/LocationAutocomplete'
 import { db } from '../firebase/config'
 import { registerForNotifications } from '../utils/notifications'
 
@@ -33,6 +34,7 @@ export default function CustomerLoginScreen() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [location, setLocation] = useState('')
+  const [pincode, setPincode] = useState('')
 
   const [otp, setOtp] = useState('')
   const [showOtpBox, setShowOtpBox] = useState(false)
@@ -58,6 +60,11 @@ export default function CustomerLoginScreen() {
       return
     }
 
+    if (!/^\d{6}$/.test(pincode)) {
+      Alert.alert('Error', 'Enter a valid 6-digit pincode!')
+      return
+    }
+
     setShowOtpBox(true)
 
     Alert.alert(
@@ -77,6 +84,7 @@ export default function CustomerLoginScreen() {
   await AsyncStorage.setItem('custEmail', email)
   await AsyncStorage.setItem('custPhone', phone)
   await AsyncStorage.setItem('custLocation', location)
+  await AsyncStorage.setItem('custPincode', pincode)
 
   const token = await registerForNotifications()
   if (token) {
@@ -86,7 +94,8 @@ export default function CustomerLoginScreen() {
       pushToken: token, 
       name, 
       phone, 
-      location 
+      location,
+      pincode 
     })
   }
 
@@ -144,15 +153,27 @@ export default function CustomerLoginScreen() {
           onLayout={(e) => { fieldPositions.current['Phone Number'] = e.nativeEvent.layout.y }}
         />
 
+        <View style={s.group} onLayout={(e) => { fieldPositions.current['Your Location'] = e.nativeEvent.layout.y }}>
+          <Text style={s.label}>Your Location</Text>
+          <LocationAutocomplete
+            value={location}
+            onChangeText={setLocation}
+            placeholder="Search your area..."
+            icon="📍"
+            onFocus={() => scrollToField('Your Location')}
+          />
+        </View>
+
         <Field
-          label="Your Location"
-          icon="📍"
-          placeholder="Enter your area"
-          value={location}
-          onChange={setLocation}
-          type="default"
-          onFocus={() => scrollToField('Your Location')}
-          onLayout={(e) => { fieldPositions.current['Your Location'] = e.nativeEvent.layout.y }}
+          label="Pincode"
+          icon="📮"
+          placeholder="Enter 6-digit pincode"
+          value={pincode}
+          onChange={setPincode}
+          type="numeric"
+          max={6}
+          onFocus={() => scrollToField('Pincode')}
+          onLayout={(e) => { fieldPositions.current['Pincode'] = e.nativeEvent.layout.y }}
         />
 
         {!showOtpBox ? (

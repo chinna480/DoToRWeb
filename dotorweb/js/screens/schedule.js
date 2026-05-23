@@ -101,13 +101,15 @@ Router.register('schedule', {
           firebase.database().ref('appointments').push(appointment).then(ref => {
             Store.set('lastAppointmentId', ref.key);
             // Also create an order
+            const custPincode = Store.get('custPincode', '');
             firebase.database().ref('orders').push({
               customerName: custName,
               customerPhone: custPhone,
               location: custLocation,
+              pincode: custPincode,
               brand: 'Scheduled',
               repair: 'Appointment: ' + selectedSlot,
-              status: 'scheduled',
+              status: 'pending',
               time: selectedSlot,
               isAppointment: true,
             });

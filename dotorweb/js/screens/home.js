@@ -161,6 +161,7 @@ Router.register('home', {
                       <div class="order-device">📱 ${o.brand}</div>
                       <div class="order-repair">🔧 ${o.repair}</div>
                       <div class="order-location">📍 ${o.location}</div>
+                      ${o.pincode ? `<div class="order-location">📮 ${o.pincode}</div>` : ''}
                       <div class="order-time">🕐 ${o.time}</div>
                     </div>
                     <div class="order-right">
@@ -233,11 +234,13 @@ Router.register('home', {
           const pos = await getCurrentPositionOnce();
           try { firebase.database().ref('custLocation').set({ lat: pos.lat, lng: pos.lng }); } catch (e) {}
 
+          const pincode = Store.get('custPincode', '');
           const order = {
             customerName: name,
             customerPhone: phone,
             customerPushToken: pushToken,
             location: loc,
+            pincode,
             brand: selectedBrand,
             repair: repair,
             status: 'pending',
