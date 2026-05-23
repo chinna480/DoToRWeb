@@ -126,7 +126,7 @@ export default function HomeScreen() {
         `Brand: ${selectedBrand}\nRepair: ${repair}\n\nTrack your technician?`,
         [
           { text: 'Track Now', onPress: () => router.push('/screens/TrackingScreen') },
-          { text: '💬 Chat', onPress: () => router.push(`/screens/ChatScreen?orderId=${orderId}&role=cust&customerName=${encodeURIComponent(name)}`) },
+          { text: '💬 Chat', onPress: () => router.push(`/screens/ChatScreen?orderId=${orderId}&role=cust&customerName=${encodeURIComponent(name)}&techName=`) },
           { text: 'Later' }
         ]
       )

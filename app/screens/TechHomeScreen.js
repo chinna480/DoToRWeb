@@ -158,7 +158,10 @@ export default function TechHomeScreen() {
       snapshot.forEach(child => {
         const order = { id: child.key, ...child.val() }
         if (order.status === 'pending')   allPending.push(order)
-        if (order.status === 'accepted')  ongoing = order
+        if (order.status === 'accepted') {
+          // Only mark as ongoing if THIS tech accepted the job
+          if (order.techPhone === techPhoneRef.current) ongoing = order
+        }
         if (order.status === 'completed') {
           completed.push(order); count++
           dailyCount++
@@ -473,6 +476,14 @@ export default function TechHomeScreen() {
                 </>
               )}
             </View>
+            {order.id && (
+              <TouchableOpacity
+                style={s.pendingChatBtn}
+                onPress={() => router.push(`/screens/ChatScreen?orderId=${order.id}&role=tech&customerName=${encodeURIComponent(order.customerName || 'Customer')}&techName=${encodeURIComponent(techName)}`)}
+              >
+                <Text style={s.pendingChatTxt}>💬 Chat with Customer</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ))
       )}
@@ -610,6 +621,8 @@ const s = StyleSheet.create({
   chatTxt:       { color: '#fff', fontSize: 13, fontWeight: '800' },
   completeBtn:   { backgroundColor: '#1A3A6B', padding: 13, borderRadius: 12, alignItems: 'center' },
   completeTxt:   { color: '#fff', fontSize: 14, fontWeight: '800' },
+  pendingChatBtn: { backgroundColor: '#FF6B00', padding: 10, borderRadius: 12, alignItems: 'center', marginTop: 8 },
+  pendingChatTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
   completedCard: { backgroundColor: '#fff', borderRadius: 14, padding: 15, marginHorizontal: 15, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 2 },
   compCust:      { fontSize: 13, fontWeight: '800', color: '#1A3A6B' },
   compType:      { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 3 },

@@ -252,7 +252,7 @@ Router.register('home', {
             Store.set('lastOrderId', orderId);
             showAlert('✅ Booking Confirmed!', `Brand: ${selectedBrand}\nRepair: ${repair}\n\nTrack your technician?`, [
               { text: 'Track Now', onPress: () => Router.navigate('tracking') },
-              { text: '💬 Chat', onPress: () => Router.navigate('chat', { orderId, role: 'cust', customerName: name }) },
+              { text: '💬 Chat', onPress: () => Router.navigate('chat', { orderId, role: 'cust', customerName: name, techName: '' }) },
               { text: 'Later' }
             ]);
           } catch (e) { showAlert('Error', 'Booking failed! Try again.'); }

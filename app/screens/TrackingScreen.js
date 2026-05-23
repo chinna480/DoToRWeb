@@ -52,6 +52,7 @@ export default function TrackingScreen() {
   const mounted     = useRef(true)
   const custPosRef  = useRef({ lat: 17.3850, lng: 78.4867 })
   const techPosRef  = useRef(null)
+  const orderIdRef  = useRef('')
 
   useEffect(() => {
     mounted.current = true
@@ -74,7 +75,7 @@ export default function TrackingScreen() {
       const r  = await AsyncStorage.getItem('lastRepair')
       const l  = await AsyncStorage.getItem('custLocation')
       const n  = await AsyncStorage.getItem('lastCustName') || await AsyncStorage.getItem('custName') || 'Customer'
-      if (o)  setOrderId(o)
+      if (o) { setOrderId(o); orderIdRef.current = o }
       if (b)  setBrand(b)
       if (r)  setRepair(r)
       if (l)  setLocation(l)
@@ -119,24 +120,24 @@ export default function TrackingScreen() {
     })
     unsubsRef.current.push(u1)
 
-    const u2 = onValue(ref(db, 'techInfo'), snap => {
-      if (!mounted.current || !snap.exists()) return
-      const info = snap.val()
-      setTechName(info.name  || 'Technician')
-      setTechPhone(info.phone || '')
-    })
-    unsubsRef.current.push(u2)
-
-    const u3 = onValue(ref(db, 'orders'), snap => {
+    const u2 = onValue(ref(db, 'orders'), snap => {
       if (!mounted.current || !snap.exists()) return
       snap.forEach(child => {
-        if (child.val().status === 'completed') {
-          setJobDone(true)
-          setStatusMsg('✅ Repair Completed!')
+        const o = child.val()
+        // Read tech name/phone from this customer's specific order (not from shared techInfo)
+        if (child.key === orderIdRef.current) {
+          if (o.techName) {
+            setTechName(o.techName)
+            if (o.techPhone) setTechPhone(o.techPhone)
+          }
+          if (o.status === 'completed') {
+            setJobDone(true)
+            setStatusMsg('✅ Repair Completed!')
+          }
         }
       })
     })
-    unsubsRef.current.push(u3)
+    unsubsRef.current.push(u2)
   }
 
   const recalcDistance = (custPos, techPos) => {

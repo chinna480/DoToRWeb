@@ -151,6 +151,7 @@ Router.register('tech-home', {
                   `
                 }
               </div>
+              ${o.id ? `<button class="btn btn-primary btn-sm btn-block" onclick="window.goToChatFromPending('${o.id}','${o.customerName || 'Customer'}')" style="margin-top:8px">💬 Chat with Customer</button>` : ''}
             </div>
           `).join('');
         }
@@ -292,7 +293,10 @@ Router.register('tech-home', {
           snap.forEach(child => {
             const order = { id: child.key, ...child.val() };
             if (order.status === 'pending') pending.push(order);
-            if (order.status === 'accepted') ongoing = order;
+            if (order.status === 'accepted') {
+              // Only mark as ongoing if THIS tech accepted the job
+              if (order.techPhone === myPhone) ongoing = order;
+            }
             if (order.status === 'completed') { completed.push(order); count++; dailyCompletedCount++; }
           });
 
@@ -458,6 +462,15 @@ Router.register('tech-home', {
           }
         };
 
+        window.goToChatFromPending = (orderId, customerName) => {
+          Router.navigate('chat', {
+            orderId,
+            role: 'tech',
+            customerName,
+            techName: Store.get('techName', 'Technician')
+          });
+        };
+
         window.toggleOnline = () => {
           isOnline = !isOnline;
           const btn = document.getElementById('onlineBtn');
@@ -488,6 +501,7 @@ Router.register('tech-home', {
             delete window.navigateToCustomer;
             delete window.callCustomer;
             delete window.goToTechChat;
+            delete window.goToChatFromPending;
             delete window.toggleOnline;
             delete window.techWebLogout;
           };

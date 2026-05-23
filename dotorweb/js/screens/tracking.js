@@ -139,33 +139,31 @@ Router.register('tracking', {
         };
         techLocRef.on('value', onTechLoc);
 
-        // Listen for technician info
-        const techInfoRef = firebase.database().ref('techInfo');
-        const onTechInfo = (snap) => {
-          if (!snap.exists()) return;
-          const info = snap.val();
-          techNameVal = info.name || 'Technician';
-          techPhone = info.phone || '';
-          document.getElementById('techName').textContent = techNameVal;
-          document.getElementById('callTechBtn').textContent = '📞 Call ' + techNameVal;
-        };
-        techInfoRef.on('value', onTechInfo);
-
-        // Listen for completed orders
+        // Listen for orders — get tech info directly from this customer's order (not from shared techInfo)
         const ordersRef = firebase.database().ref('orders');
         const onOrders = (snap) => {
           if (!snap.exists()) return;
           snap.forEach(child => {
-            if (child.val().status === 'completed') {
-              jobDone = true;
-              document.getElementById('trackStatus').textContent = '✅ Repair Completed!';
-              document.getElementById('trackPill').style.background = '#2e7d32';
-              document.getElementById('trackPillText').textContent = '✅ Done';
-              document.getElementById('stepInProgress').className = 'dot dot-done';
-              document.getElementById('stepDone').className = 'dot dot-done';
-              document.getElementById('reviewBtn').style.display = 'flex';
-              if (techMarker) { map.removeLayer(techMarker); techMarker = null; }
-              if (polyline) { map.removeLayer(polyline); polyline = null; }
+            const o = child.val();
+            // Read tech name/phone from this customer's order (not from shared techInfo which gets overwritten)
+            if (child.key === orderId) {
+              if (o.techName) {
+                techNameVal = o.techName;
+                techPhone = o.techPhone || '';
+                document.getElementById('techName').textContent = techNameVal;
+                document.getElementById('callTechBtn').textContent = '📞 Call ' + techNameVal;
+              }
+              if (o.status === 'completed') {
+                jobDone = true;
+                document.getElementById('trackStatus').textContent = '✅ Repair Completed!';
+                document.getElementById('trackPill').style.background = '#2e7d32';
+                document.getElementById('trackPillText').textContent = '✅ Done';
+                document.getElementById('stepInProgress').className = 'dot dot-done';
+                document.getElementById('stepDone').className = 'dot dot-done';
+                document.getElementById('reviewBtn').style.display = 'flex';
+                if (techMarker) { map.removeLayer(techMarker); techMarker = null; }
+                if (polyline) { map.removeLayer(polyline); polyline = null; }
+              }
             }
           });
         };
@@ -200,7 +198,7 @@ Router.register('tracking', {
         return () => {
           stopGPS();
           techLocRef.off('value', onTechLoc);
-          techInfoRef.off('value', onTechInfo);
+
           ordersRef.off('value', onOrders);
           delete window.callTech;
           delete window.goToChat;

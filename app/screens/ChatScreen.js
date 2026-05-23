@@ -22,12 +22,30 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState([])
   const [inputText, setInputText] = useState('')
   const [myName, setMyName] = useState('')
+  const [otherPersonName, setOtherPersonName] = useState(role === 'cust' ? (techName || 'Technician') : (customerName || 'Customer'))
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('chat')
   const scrollRef = useRef(null)
+  const mounted = useRef(true)
 
   useEffect(() => {
+    mounted.current = true
     loadUser()
+    // Listen for order updates to get the correct tech name dynamically
+    let orderUnsub
+    if (role === 'cust' && orderId) {
+      orderUnsub = onValue(ref(db, 'orders/' + orderId), snap => {
+        if (!mounted.current || !snap.exists()) return
+        const order = snap.val()
+        if (order.techName) {
+          setOtherPersonName(order.techName)
+        }
+      })
+    }
+    return () => {
+      mounted.current = false
+      if (orderUnsub) orderUnsub()
+    }
   }, [])
 
   useEffect(() => {
@@ -116,7 +134,7 @@ export default function ChatScreen() {
     groupedMessages.push({ type: 'msg', ...msg })
   })
 
-  const otherName = role === 'cust' ? (techName || 'Technician') : (customerName || 'Customer')
+  const otherName = otherPersonName
   const otherRole = role === 'cust' ? 'tech' : 'cust'
 
   // Tab navigation

@@ -35,6 +35,23 @@ Router.register('chat', {
         const orderId = p.orderId || Store.get('lastOrderId', 'current');
         const myName = Store.get(role + 'Name', role === 'cust' ? 'Customer' : 'Technician');
 
+        // Listen for order updates to dynamically show the correct tech name
+        let orderListenerRef = null;
+        if (role === 'cust' && orderId) {
+          const orderRef = firebase.database().ref('orders/' + orderId);
+          const onOrderUpdate = (snap) => {
+            if (snap.exists()) {
+              const order = snap.val();
+              if (order.techName) {
+                const headerNameEl = document.querySelector('.chat-header-name');
+                if (headerNameEl) headerNameEl.textContent = order.techName;
+              }
+            }
+          };
+          orderRef.on('value', onOrderUpdate);
+          orderListenerRef = { ref: orderRef, handler: onOrderUpdate };
+        }
+
         // Listen for messages
         const msgsRef = firebase.database().ref('chats/' + orderId + '/messages');
         const onMsgs = (snap) => {
@@ -113,6 +130,9 @@ Router.register('chat', {
 
         return () => {
           msgsRef.off('value', onMsgs);
+          if (orderListenerRef) {
+            orderListenerRef.ref.off('value', orderListenerRef.handler);
+          }
           delete window.sendChatMsg;
           delete window.chatBack;
         };
