@@ -119,7 +119,7 @@ export default function LocationAutocomplete({
                   </Text>
                 </View>
               </TouchableOpacity>
-            }
+            )}
           />
         </View>
       )}
