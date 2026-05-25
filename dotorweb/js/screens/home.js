@@ -119,6 +119,114 @@ Router.register('home', {
         let selectedDevice = null;
         let selectedBrand = null;
         let ordersUnsub = null;
+        let prevOrderStatuses = {}; // track order status changes for notifications
+        let hasAcceptedOrder = false; // whether customer has an accepted order
+        let notifTechNearby = false; // prevent duplicate 'technician nearby' notifications
+        let techLocUnsub = null;
+        let custLocUnsub = null;
+        let custLat = null, custLng = null;
+
+        // ── Request browser notification permission ──────────────────────────────
+        if ('Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission().catch(() => {});
+        }
+
+        function playNotifSound(type) {
+          try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (type === 'tech-assigned') {
+              // Two ascending beeps — someone is coming!
+              const osc1 = ctx.createOscillator(); const g1 = ctx.createGain();
+              osc1.connect(g1); g1.connect(ctx.destination);
+              osc1.frequency.value = 660;
+              g1.gain.setValueAtTime(0.12, ctx.currentTime);
+              g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+              osc1.start(ctx.currentTime); osc1.stop(ctx.currentTime + 0.15);
+
+              const osc2 = ctx.createOscillator(); const g2 = ctx.createGain();
+              osc2.connect(g2); g2.connect(ctx.destination);
+              osc2.frequency.value = 880;
+              g2.gain.setValueAtTime(0.12, ctx.currentTime + 0.2);
+              g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+              osc2.start(ctx.currentTime + 0.2); osc2.stop(ctx.currentTime + 0.35);
+            } else if (type === 'tech-nearby') {
+              // Three rapid beeps — alert!
+              for (let i = 0; i < 3; i++) {
+                const osc = ctx.createOscillator(); const g = ctx.createGain();
+                osc.connect(g); g.connect(ctx.destination);
+                osc.frequency.value = 520;
+                const t = ctx.currentTime + i * 0.18;
+                g.gain.setValueAtTime(0.12, t);
+                g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+                osc.start(t); osc.stop(t + 0.1);
+              }
+            } else if (type === 'job-complete') {
+              // Two descending beeps — satisfying done sound
+              const osc1 = ctx.createOscillator(); const g1 = ctx.createGain();
+              osc1.connect(g1); g1.connect(ctx.destination);
+              osc1.frequency.value = 880;
+              g1.gain.setValueAtTime(0.12, ctx.currentTime);
+              g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+              osc1.start(ctx.currentTime); osc1.stop(ctx.currentTime + 0.2);
+
+              const osc2 = ctx.createOscillator(); const g2 = ctx.createGain();
+              osc2.connect(g2); g2.connect(ctx.destination);
+              osc2.frequency.value = 660;
+              g2.gain.setValueAtTime(0.12, ctx.currentTime + 0.25);
+              g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+              osc2.start(ctx.currentTime + 0.25); osc2.stop(ctx.currentTime + 0.45);
+            }
+          } catch (e) {}
+        }
+
+        function showCustBrowserNotification(title, body, orderId, soundType) {
+          if (!('Notification' in window) || Notification.permission !== 'granted') return;
+          try {
+            const notif = new Notification(title, {
+              body,
+              icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔧</text></svg>',
+              tag: 'cust-order-' + orderId,
+              requireInteraction: true,
+            });
+            notif.onclick = () => {
+              window.focus();
+              Router.navigate('tracking');
+              notif.close();
+            };
+            playNotifSound(soundType || 'default');
+          } catch (e) {}
+        }
+
+        // ── Listen for customer location in Firebase ──────────────────────────
+        const custLocRef = firebase.database().ref('custLocation');
+        const onCustLoc = (snap) => {
+          if (snap.exists()) {
+            custLat = snap.val().lat;
+            custLng = snap.val().lng;
+          }
+        };
+        custLocRef.on('value', onCustLoc);
+        custLocUnsub = () => custLocRef.off('value', onCustLoc);
+
+        // ── Listen for technician location (proximity detection) ──────────────
+        const techLocRef = firebase.database().ref('techLocation');
+        const onTechLoc = (snap) => {
+          if (!snap.exists() || !hasAcceptedOrder || notifTechNearby || !custLat || !custLng) return;
+          const { lat, lng } = snap.val();
+          if (!lat || !lng) return;
+          const d = parseFloat(calcDistance(custLat, custLng, lat, lng));
+          if (!isNaN(d) && d <= 1.0) {
+            notifTechNearby = true;
+            showCustBrowserNotification(
+              '🚗 Technician Nearby!',
+              'Your technician is less than 1 km away — almost at your door!',
+              'proximity',
+              'tech-nearby'
+            );
+          }
+        };
+        techLocRef.on('value', onTechLoc);
+        techLocUnsub = () => techLocRef.off('value', onTechLoc);
 
         // Load orders for this customer
         const myPhone = Store.get('custPhone', '');
@@ -137,10 +245,39 @@ Router.register('home', {
               return;
             }
             const orders = [];
+            const currentStatuses = {};
             snap.forEach(child => {
               const o = { id: child.key, ...child.val() };
+              currentStatuses[o.id] = o.status;
+              // Track whether customer has an accepted (ongoing) order
+              if (o.customerPhone === myPhone && o.status === 'accepted') {
+                hasAcceptedOrder = true;
+              } else if (o.customerPhone === myPhone && o.status === 'completed') {
+                hasAcceptedOrder = false;
+              }
+
+              // Detect status changes for notifications
+              const prevStatus = prevOrderStatuses[o.id];
+              if (o.customerPhone === myPhone && o.techName && prevStatus === 'pending' && o.status === 'accepted') {
+                showCustBrowserNotification(
+                  '🛵 Technician Assigned!',
+                  `${o.techName} is on the way to fix your ${o.brand} ${o.repair}!`,
+                  o.id,
+                  'tech-assigned'
+                );
+              }
+              // Detect status change: any → completed (job done)
+              if (o.customerPhone === myPhone && prevStatus && prevStatus !== 'completed' && o.status === 'completed') {
+                showCustBrowserNotification(
+                  '✅ Repair Completed!',
+                  `Your ${o.brand} ${o.repair} is done! Please rate your experience.`,
+                  o.id,
+                  'job-complete'
+                );
+              }
               if (o.customerPhone === myPhone) orders.push(o);
             });
+            prevOrderStatuses = currentStatuses;
             orders.reverse();
             document.getElementById('custOrdersCount').textContent = orders.length + ' orders total';
             if (orders.length === 0) {
@@ -260,6 +397,8 @@ Router.register('home', {
 
         return () => {
           if (ordersUnsub) ordersUnsub();
+          if (techLocUnsub) techLocUnsub();
+          if (custLocUnsub) custLocUnsub();
           delete window.switchCustTab;
           delete window.selectDevice;
           delete window.selectBrand;

@@ -109,6 +109,7 @@ Router.register('tech-home', {
         let custLat = null, custLng = null;
         let myLat = 17.3850, myLng = 78.4867;
         let prevPendingIds = new Set();
+        let isFirstLoad = true; // skip browser notifications on initial page load
         let map = null, custMarker = null, myMarker = null, polyline = null;
         let techPushToken = Store.get('pushToken', '');
         let dailyCompletedCount = 0;
@@ -116,6 +117,53 @@ Router.register('tech-home', {
         let pendingOrdersMap = {};
         const myPhone = Store.get('techPhone', '');
         const SPEED = 0.3; // km/min (~18 km/h — realistic city speed)
+
+        // ── Browser Notification Support ────────────────────────────────────────
+        // Request permission for desktop browser notifications
+        if ('Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission().catch(() => {});
+        }
+
+        function playNotifSound(type) {
+          try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (type === 'new-job') {
+              // Two quick urgent beeps — new job alert!
+              const osc1 = ctx.createOscillator(); const g1 = ctx.createGain();
+              osc1.connect(g1); g1.connect(ctx.destination);
+              osc1.frequency.value = 900;
+              g1.gain.setValueAtTime(0.12, ctx.currentTime);
+              g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+              osc1.start(ctx.currentTime); osc1.stop(ctx.currentTime + 0.12);
+
+              const osc2 = ctx.createOscillator(); const g2 = ctx.createGain();
+              osc2.connect(g2); g2.connect(ctx.destination);
+              osc2.frequency.value = 1200;
+              g2.gain.setValueAtTime(0.12, ctx.currentTime + 0.15);
+              g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.27);
+              osc2.start(ctx.currentTime + 0.15); osc2.stop(ctx.currentTime + 0.27);
+            }
+          } catch (e) {}
+        }
+
+        function showBrowserNotification(title, body, orderId) {
+          if (!('Notification' in window) || Notification.permission !== 'granted') return;
+          try {
+            const notif = new Notification(title, {
+              body,
+              icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔧</text></svg>',
+              tag: 'new-job-' + orderId,
+              requireInteraction: true,
+            });
+            notif.onclick = () => {
+              window.focus();
+              if (window.switchTechTab) window.switchTechTab('pending');
+              notif.close();
+            };
+            // Play a distinct "new job" sound effect
+            playNotifSound('new-job');
+          } catch (e) { /* notification failed silently */ }
+        }
 
         function renderPendingJobs(pending) {
           // Store orders in map so acceptJob can look up order data without HTML escaping issues
@@ -151,7 +199,7 @@ Router.register('tech-home', {
                   `
                 }
               </div>
-              ${o.id ? `<button class="btn btn-primary btn-sm btn-block" onclick="window.goToChatFromPending('${o.id}','${o.customerName || 'Customer'}')" style="margin-top:8px">💬 Chat with Customer</button>` : ''}
+              ${o.id ? `<button class="btn btn-primary btn-sm btn-block" onclick="window.goToChatFromPending('${o.id}','${o.customerName || 'Customer'}'}" style="margin-top:8px">💬 Chat with Customer</button>` : ''}
             </div>
           `).join('');
         }
@@ -327,6 +375,19 @@ Router.register('tech-home', {
             return assignedTech.phone === myPhone;
           });
 
+          // Show browser notifications for NEW pending orders (skip on first load to avoid spamming)
+          if (!isFirstLoad) {
+            filteredPending.forEach(o => {
+              if (!prevPendingIds.has(o.id)) {
+                showBrowserNotification(
+                  '🔔 New Job Request!',
+                  `${o.customerName} needs ${o.brand} ${o.repair} in ${o.location}`,
+                  o.id
+                );
+              }
+            });
+          }
+          isFirstLoad = false;
           prevPendingIds = new Set(filteredPending.map(o => o.id));
 
           pending.length = 0;
