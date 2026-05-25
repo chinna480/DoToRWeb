@@ -304,8 +304,14 @@ Router.register('tech-home', {
           const techLoc     = Store.get('techLocation', '').toLowerCase().trim();
           const techPincode = Store.get('techPincode', '').toLowerCase().trim();
           let filteredPending = pending;
+
+          // Use flexible location matching: check if one contains the other
+          // This handles Google Places formatting differences (e.g. "Kukatpally" vs "Kukatpally, Hyderabad")
           if (techLoc) {
-            filteredPending = filteredPending.filter(o => (o.location || '').toLowerCase().trim() === techLoc);
+            filteredPending = filteredPending.filter(o => {
+              const orderLoc = (o.location || '').toLowerCase().trim();
+              return orderLoc.includes(techLoc) || techLoc.includes(orderLoc);
+            });
           }
           if (techPincode) {
             filteredPending = filteredPending.filter(o => (o.pincode || '').toLowerCase().trim() === techPincode);

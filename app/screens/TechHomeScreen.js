@@ -175,8 +175,14 @@ export default function TechHomeScreen() {
       const assignments   = areaAssignments.current
 
       let pending = allPending
+
+      // Use flexible location matching: check if one contains the other
+      // This handles Google Places formatting differences (e.g. "Kukatpally" vs "Kukatpally, Hyderabad")
       if (filterLoc) {
-        pending = pending.filter(o => (o.location || '').toLowerCase().trim() === filterLoc)
+        pending = pending.filter(o => {
+          const orderLoc = (o.location || '').toLowerCase().trim()
+          return orderLoc.includes(filterLoc) || filterLoc.includes(orderLoc)
+        })
       }
       if (filterPincode) {
         pending = pending.filter(o => (o.pincode || '').toLowerCase().trim() === filterPincode)
@@ -192,9 +198,10 @@ export default function TechHomeScreen() {
         return assignedTech.phone === myPhone
       })
 
+      // Send notifications safely — catch errors so they don't block state updates
       pending.forEach(order => {
         if (!prevPendingIds.current.has(order.id)) {
-          notifyTechNewJob(techPushToken.current, order.customerName, order.brand, order.repair)
+          notifyTechNewJob(techPushToken.current, order.customerName, order.brand, order.repair).catch(() => {})
         }
       })
       prevPendingIds.current = new Set(pending.map(o => o.id))
