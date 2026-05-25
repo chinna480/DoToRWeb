@@ -35,6 +35,7 @@ export default function HomeScreen() {
   const [repairs, setRepairs]           = useState([])
   const [myOrders, setMyOrders]         = useState([])
   const [custPhone, setCustPhone]       = useState('')
+  const [ordersFilter, setOrdersFilter] = useState('all') // 'all', 'active', 'completed'
 
   // ── Load FRESH data every time screen is focused ──────────────────────────
   useEffect(() => {
@@ -230,52 +231,83 @@ export default function HomeScreen() {
   )
 
   // ── ORDERS TAB ──
-  const renderOrders = () => (
-    <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
-      <View style={s.header}>
-        <View>
-          <Text style={s.greeting}>📋</Text>
-          <Text style={s.userName}>My Orders</Text>
-          <Text style={s.userLoc}>{myOrders.length} orders total</Text>
-        </View>
-      </View>
+  const renderOrders = () => {
+    // Apply filter
+    let filtered = myOrders;
+    if (ordersFilter === 'active') {
+      filtered = myOrders.filter(o => o.status === 'pending' || o.status === 'accepted');
+    } else if (ordersFilter === 'completed') {
+      filtered = myOrders.filter(o => o.status === 'completed');
+    }
+    const activeCount = myOrders.filter(o => o.status === 'pending' || o.status === 'accepted').length;
+    const completedCount = myOrders.filter(o => o.status === 'completed').length;
 
-      {myOrders.length === 0 ? (
-        <View style={{ padding: 50, alignItems: 'center' }}>
-          <Text style={{ fontSize: 50, marginBottom: 15 }}>📦</Text>
-          <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3A6B' }}>No orders yet</Text>
-          <Text style={{ fontSize: 13, color: '#888', marginTop: 5 }}>Book your first repair and it will appear here!</Text>
+    const SUB_TABS = [
+      { key: 'all', label: `All (${myOrders.length})` },
+      { key: 'active', label: `Active (${activeCount})` },
+      { key: 'completed', label: `Completed (${completedCount})` },
+    ];
+
+    return (
+      <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
+        <View style={s.header}>
+          <View>
+            <Text style={s.greeting}>📋</Text>
+            <Text style={s.userName}>My Orders</Text>
+            <Text style={s.userLoc}>{myOrders.length} orders total</Text>
+          </View>
         </View>
-      ) : (
-        myOrders.map((order, i) => {
-          const statusColor = order.status === 'completed' ? '#2e7d32' : order.status === 'accepted' ? '#FF6B00' : '#888'
-          const statusIcon = order.status === 'completed' ? '✅' : order.status === 'accepted' ? '🔧' : '⏳'
-          return (
-            <TouchableOpacity key={i} style={s.orderCard}>
-              <View style={s.orderLeft}>
-                <Text style={s.orderDevice}>📱 {order.brand}</Text>
-                <Text style={s.orderRepair}>🔧 {order.repair}</Text>
-                <Text style={s.orderLoc}>📍 {order.location}</Text>
-                {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
-                <Text style={s.orderTime}>🕐 {order.time}</Text>
-              </View>
-              <View style={s.orderRight}>
-                <Text style={[s.orderStatus, { color: statusColor }]}>{statusIcon}</Text>
-                <Text style={[s.orderStatusLabel, { color: statusColor }]}>{order.status}</Text>
-                {order.id && (
-                  <TouchableOpacity style={s.orderChatBtn} onPress={() => router.push(`/screens/ChatScreen?orderId=${order.id}&role=cust&customerName=${encodeURIComponent(custName)}&techName=${encodeURIComponent(order.techName || '')}`)}>
-                    <Text style={s.orderChatTxt}>💬 Chat</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+
+        {/* Order Sub-Tabs */}
+        <View style={s.orderSubTabs}>
+          {SUB_TABS.map(tab => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[s.orderSubTab, ordersFilter === tab.key && s.orderSubTabActive]}
+              onPress={() => setOrdersFilter(tab.key)}
+            >
+              <Text style={[s.orderSubTabText, ordersFilter === tab.key && s.orderSubTabTextActive]}>{tab.label}</Text>
             </TouchableOpacity>
-          )
-        })
-      )}
+          ))}
+        </View>
 
-      <View style={{ height: 90 }} />
-    </ScrollView>
-  )
+        {filtered.length === 0 ? (
+          <View style={{ padding: 50, alignItems: 'center' }}>
+            <Text style={{ fontSize: 50, marginBottom: 15 }}>📦</Text>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3A6B' }}>No {ordersFilter === 'all' ? '' : ordersFilter} orders yet</Text>
+            <Text style={{ fontSize: 13, color: '#888', marginTop: 5 }}>Book your first repair and it will appear here!</Text>
+          </View>
+        ) : (
+          filtered.map((order, i) => {
+            const statusColor = order.status === 'completed' ? '#2e7d32' : order.status === 'accepted' ? '#FF6B00' : '#888'
+            const statusIcon = order.status === 'completed' ? '✅' : order.status === 'accepted' ? '🔧' : '⏳'
+            return (
+              <TouchableOpacity key={i} style={s.orderCard}>
+                <View style={s.orderLeft}>
+                  <Text style={s.orderDevice}>📱 {order.brand}</Text>
+                  <Text style={s.orderRepair}>🔧 {order.repair}</Text>
+                  <Text style={s.orderLoc}>📍 {order.location}</Text>
+                  {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
+                  <Text style={s.orderTime}>🕐 {order.time}</Text>
+                </View>
+                <View style={s.orderRight}>
+                  <Text style={[s.orderStatus, { color: statusColor }]}>{statusIcon}</Text>
+                  <Text style={[s.orderStatusLabel, { color: statusColor }]}>{order.status}</Text>
+                  {order.id && (
+                    <TouchableOpacity style={s.orderChatBtn} onPress={() => router.push(`/screens/ChatScreen?orderId=${order.id}&role=cust&customerName=${encodeURIComponent(custName)}&techName=${encodeURIComponent(order.techName || '')}`)}>
+                      <Text style={s.orderChatTxt}>💬 Chat</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </TouchableOpacity>
+            )
+          })
+        )}
+
+        <View style={{ height: 90 }} />
+      </ScrollView>
+    )
+  }
 
   // Show loading/blank while navigating to profile
   if (activeTab === 'profile') {
@@ -353,6 +385,13 @@ const s = StyleSheet.create({
   orderStatusLabel: { fontSize: 11, fontWeight: '800', textTransform: 'capitalize' },
   orderChatBtn:     { backgroundColor: '#FF6B00', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginTop: 4 },
   orderChatTxt:     { color: '#fff', fontSize: 10, fontWeight: '800' },
+
+  // ── Order Sub-Tabs ──
+  orderSubTabs:     { flexDirection: 'row', marginHorizontal: 15, marginBottom: 12, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', elevation: 2 },
+  orderSubTab:      { flex: 1, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  orderSubTabActive:{ borderBottomColor: '#FF6B00' },
+  orderSubTabText:  { fontSize: 11, fontWeight: '700', color: '#888' },
+  orderSubTabTextActive: { color: '#FF6B00', fontWeight: '800' },
 
   // ── Bottom Tab Bar ──
   tabBar:           { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },

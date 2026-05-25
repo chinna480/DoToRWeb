@@ -168,11 +168,10 @@ export default function TechHomeScreen() {
         }
       })
 
-      // Filter pending jobs by technician's location area, pincode, AND area assignments
+      // Filter pending jobs by technician's location area and pincode
       const filterLoc     = techLocRef.current
       const filterPincode = techPincodeRef.current
       const myPhone       = techPhoneRef.current
-      const assignments   = areaAssignments.current
 
       let pending = allPending
 
@@ -185,18 +184,17 @@ export default function TechHomeScreen() {
         })
       }
       if (filterPincode) {
-        pending = pending.filter(o => (o.pincode || '').toLowerCase().trim() === filterPincode)
+        pending = pending.filter(o => {
+          const orderPincode = (o.pincode || '').toLowerCase().trim()
+          // If the order has no pincode (older orders), still show it
+          if (!orderPincode) return true
+          return orderPincode === filterPincode
+        })
       }
 
-      // If an area is already assigned to a different technician, exclude those jobs
-      // so only the assigned technician sees them
-      pending = pending.filter(o => {
-        const area = (o.location || '').toLowerCase().trim()
-        const assignedTech = assignments[area]
-        if (!area || !assignedTech) return true // No assignment → anyone can take it
-        // If assigned to this tech → show it
-        return assignedTech.phone === myPhone
-      })
+      // Area assignment: do NOT block pending jobs from being visible to other techs.
+      // The area assignment is only used when a tech accepts a job (to track who's serving which area),
+      // but all pending jobs should be visible to all techs in that location/pincode.
 
       // Send notifications safely — catch errors so they don't block state updates
       pending.forEach(order => {

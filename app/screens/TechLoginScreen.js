@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { useRouter } from 'expo-router'
 import { ref, update } from 'firebase/database'
 import { useRef, useState } from 'react'
+import { registerForNotifications } from '../utils/notifications'
 import {
   Alert, Image, KeyboardAvoidingView, Platform,
   ScrollView, StyleSheet, Text, TextInput,
@@ -81,6 +82,16 @@ export default function TechLoginScreen() {
     await AsyncStorage.setItem('techPincode',  pincode)
     await AsyncStorage.setItem('techExp',      exp)
     await AsyncStorage.setItem('techSkills',   JSON.stringify(selSkills))
+
+    // Register for push notifications so tech gets alerts for new jobs
+    try {
+      const pushToken = await registerForNotifications()
+      if (pushToken) {
+        await AsyncStorage.setItem('pushToken', pushToken)
+      }
+    } catch (e) {
+      console.warn('Could not register for notifications:', e)
+    }
 
     try {
       await update(ref(db, 'techs/' + phone), { name, phone, location, pincode })

@@ -1596,6 +1596,35 @@ html, body {
 }
 .order-chat-btn:active { opacity: 0.8; }
 
+/* ─── Order Sub-Tabs ─── */
+.order-sub-tabs {
+  display: flex;
+  margin: 0 15px 12px;
+  background: var(--white);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.order-sub-tab {
+  flex: 1;
+  padding: 10px 6px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gray);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 3px solid transparent;
+}
+.order-sub-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 800;
+}
+.order-sub-tab:hover {
+  color: var(--dark);
+}
+
 /* ─── Orange Header (for sub-tabs) ─── */
 .header-orange {
   background: var(--primary) !important;

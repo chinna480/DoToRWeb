@@ -85,6 +85,12 @@ Router.register('home', {
                 <div class="home-loc" id="custOrdersCount">0 orders total</div>
               </div>
             </div>
+            <!-- Order sub-tabs: All / Active / Completed -->
+            <div class="order-sub-tabs">
+              <div class="order-sub-tab active" data-filter="all" onclick="window.switchCustOrderFilter('all')">All</div>
+              <div class="order-sub-tab" data-filter="active" onclick="window.switchCustOrderFilter('active')">Active</div>
+              <div class="order-sub-tab" data-filter="completed" onclick="window.switchCustOrderFilter('completed')">Completed</div>
+            </div>
             <div id="custOrdersList">
               <div style="padding:50px 20px;text-align:center">
                 <div style="font-size:50px;margin-bottom:15px">📦</div>
@@ -125,6 +131,8 @@ Router.register('home', {
         let techLocUnsub = null;
         let custLocUnsub = null;
         let custLat = null, custLng = null;
+        let cachedOrders = []; // cached orders from live listener for filter switching
+        let ordersFilter = 'all'; // 'all', 'active', 'completed' — sub-tab filter
 
         // ── Request browser notification permission ──────────────────────────────
         if ('Notification' in window && Notification.permission === 'default') {
@@ -279,41 +287,75 @@ Router.register('home', {
             });
             prevOrderStatuses = currentStatuses;
             orders.reverse();
-            document.getElementById('custOrdersCount').textContent = orders.length + ' orders total';
-            if (orders.length === 0) {
-              document.getElementById('custOrdersList').innerHTML = `
-                <div style="padding:50px 20px;text-align:center">
-                  <div style="font-size:50px;margin-bottom:15px">📦</div>
-                  <div style="font-size:16px;font-weight:800;color:var(--dark)">No orders yet</div>
-                  <div style="font-size:13px;color:var(--gray);margin-top:5px">Book your first repair and it will appear here!</div>
-                </div>
-              `;
-            } else {
-              document.getElementById('custOrdersList').innerHTML = orders.map(o => {
-                const statusColor = o.status === 'completed' ? '#2e7d32' : o.status === 'accepted' ? 'var(--primary)' : 'var(--gray)';
-                const statusIcon = o.status === 'completed' ? '✅' : o.status === 'accepted' ? '🔧' : '⏳';
-                return `
-                  <div class="order-card">
-                    <div class="order-left">
-                      <div class="order-device">📱 ${o.brand}</div>
-                      <div class="order-repair">🔧 ${o.repair}</div>
-                      <div class="order-location">📍 ${o.location}</div>
-                      ${o.pincode ? `<div class="order-location">📮 ${o.pincode}</div>` : ''}
-                      <div class="order-time">🕐 ${o.time}</div>
-                    </div>
-                    <div class="order-right">
-                      <div style="font-size:20px;text-align:center">${statusIcon}</div>
-                      <div style="font-size:11px;font-weight:800;color:${statusColor};text-transform:capitalize">${o.status}</div>
-                      ${o.id ? `<button class="order-chat-btn" onclick="Router.navigate('chat',{orderId:'${o.id}',role:'cust',customerName:'${o.customerName || 'Customer'}',techName:'${o.techName || ''}'})">💬 Chat</button>` : ''}
-                    </div>
-                  </div>
-                `;
-              }).join('');
-            }
+            cachedOrders = orders;
+            renderCustomerOrders(orders);
           };
           ordersRef.on('value', onOrders);
           ordersUnsub = () => ordersRef.off('value', onOrders);
         }
+
+        function renderCustomerOrders(orders) {
+          // Apply filter
+          let filtered = orders;
+          if (ordersFilter === 'active') {
+            filtered = orders.filter(o => o.status === 'pending' || o.status === 'accepted');
+          } else if (ordersFilter === 'completed') {
+            filtered = orders.filter(o => o.status === 'completed');
+          }
+          // Update sub-tab counts
+          const total = orders.length;
+          const activeCount = orders.filter(o => o.status === 'pending' || o.status === 'accepted').length;
+          const completedCount = orders.filter(o => o.status === 'completed').length;
+          document.querySelectorAll('.order-sub-tab').forEach(el => {
+            const filter = el.dataset.filter;
+            let label = filter.charAt(0).toUpperCase() + filter.slice(1);
+            if (filter === 'all') label = 'All (' + total + ')';
+            else if (filter === 'active') label = 'Active (' + activeCount + ')';
+            else if (filter === 'completed') label = 'Completed (' + completedCount + ')';
+            el.textContent = label;
+          });
+          document.getElementById('custOrdersCount').textContent = total + ' orders total';
+          if (filtered.length === 0) {
+            document.getElementById('custOrdersList').innerHTML = `
+              <div style="padding:50px 20px;text-align:center">
+                <div style="font-size:50px;margin-bottom:15px">📦</div>
+                <div style="font-size:16px;font-weight:800;color:var(--dark)">No ${ordersFilter === 'all' ? '' : ordersFilter} orders yet</div>
+                <div style="font-size:13px;color:var(--gray);margin-top:5px">Book your first repair and it will appear here!</div>
+              </div>
+            `;
+          } else {
+            document.getElementById('custOrdersList').innerHTML = filtered.map(o => {
+              const statusColor = o.status === 'completed' ? '#2e7d32' : o.status === 'accepted' ? 'var(--primary)' : 'var(--gray)';
+              const statusIcon = o.status === 'completed' ? '✅' : o.status === 'accepted' ? '🔧' : '⏳';
+              return `
+                <div class="order-card">
+                  <div class="order-left">
+                    <div class="order-device">📱 ${o.brand}</div>
+                    <div class="order-repair">🔧 ${o.repair}</div>
+                    <div class="order-location">📍 ${o.location}</div>
+                    ${o.pincode ? `<div class="order-location">📮 ${o.pincode}</div>` : ''}
+                    <div class="order-time">🕐 ${o.time}</div>
+                  </div>
+                  <div class="order-right">
+                    <div style="font-size:20px;text-align:center">${statusIcon}</div>
+                    <div style="font-size:11px;font-weight:800;color:${statusColor};text-transform:capitalize">${o.status}</div>
+                    ${o.id ? `<button class="order-chat-btn" onclick="Router.navigate('chat',{orderId:'${o.id}',role:'cust',customerName:'${o.customerName || 'Customer'}',techName:'${o.techName || ''}'})">💬 Chat</button>` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('');
+          }
+        }
+
+        window.switchCustOrderFilter = (filter) => {
+          ordersFilter = filter;
+          document.querySelectorAll('.order-sub-tab').forEach(el => {
+            el.classList.toggle('active', el.dataset.filter === filter);
+          });
+          if (cachedOrders.length > 0) {
+            renderCustomerOrders(cachedOrders);
+          }
+        };
 
         window.switchCustTab = (tab) => {
           if (tab === 'profile') {
@@ -387,6 +429,13 @@ Router.register('home', {
             const newRef = firebase.database().ref('orders').push(order);
             const orderId = newRef.key;
             Store.set('lastOrderId', orderId);
+            // Show a browser notification for booking confirmation
+            showCustBrowserNotification(
+              '✅ Booking Confirmed!',
+              `Your ${selectedBrand} ${repair} repair request has been submitted. We'll notify you when a technician accepts!`,
+              orderId,
+              'default'
+            );
             showAlert('✅ Booking Confirmed!', `Brand: ${selectedBrand}\nRepair: ${repair}\n\nTrack your technician?`, [
               { text: 'Track Now', onPress: () => Router.navigate('tracking') },
               { text: '💬 Chat', onPress: () => Router.navigate('chat', { orderId, role: 'cust', customerName: name, techName: '' }) },
