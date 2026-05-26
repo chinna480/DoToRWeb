@@ -78,7 +78,7 @@ jobs:
         with:
           name: DoToR-APK
           path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: errorname: Build DoToR APK
+          if-no-files-found: error
 
 on:
   push:
