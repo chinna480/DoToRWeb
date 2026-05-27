@@ -9,6 +9,7 @@ import {
   ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View
 } from 'react-native'
+import DigiLockerVerification from '../../components/DigiLockerVerification'
 import LocationAutocomplete from '../../components/LocationAutocomplete'
 import { db } from '../firebase/config'
 
@@ -73,7 +74,7 @@ export default function TechLoginScreen() {
     if (!exp)                   { Alert.alert('Error', 'Select your experience!');      return }
     if (selSkills.length === 0) { Alert.alert('Error', 'Select at least one skill!');  return }
     if (!certificate)           { Alert.alert('Error', 'Upload your Certificate!');    return }
-    if (!aadhar)                { Alert.alert('Error', 'Upload your Aadhar Card!');    return }
+    if (!aadhar)                { Alert.alert('Error', 'Verify your Aadhaar via DigiLocker or upload manually!'); return }
 
     await AsyncStorage.clear()
     await AsyncStorage.setItem('techName',     name)
@@ -220,10 +221,27 @@ export default function TechLoginScreen() {
             <UploadBox value={certificate} icon="📄" label="Certificate" onPress={() => pickImage(setCertificate)} />
           </View>
 
-          {/* AADHAR */}
+          {/* AADHAAR VERIFICATION via DigiLocker */}
           <View style={s.group}>
-            <Text style={s.label}>Upload Aadhar Card</Text>
-            <UploadBox value={aadhar} icon="🪪" label="Aadhar Card" onPress={() => pickImage(setAadhar)} />
+            <Text style={s.label}>Aadhaar Verification</Text>
+            <View style={s.securityBox}>
+              <DigiLockerVerification onVerified={(data) => {
+                setName(data.name)
+                setAadhar('digilocker_verified')
+              }} />
+              {aadhar === 'digilocker_verified' && (
+                <View style={s.digiVerifiedBadge}>
+                  <Text style={s.digiVerifiedIcon}>✅</Text>
+                  <Text style={s.digiVerifiedText}>Aadhaar Verified via DigiLocker</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* UPLOAD AADHAR (Manual alternative) */}
+          <View style={s.group}>
+            <Text style={s.label}>Upload Aadhar Card (Manual)</Text>
+            <UploadBox value={aadhar && aadhar !== 'digilocker_verified' ? aadhar : null} icon="🪪" label="Aadhar Card" onPress={() => pickImage(setAadhar)} />
           </View>
 
           {/* REGISTER */}
@@ -279,4 +297,8 @@ const s = StyleSheet.create({
   registerTxt:     { color: '#fff', fontSize: 16, fontWeight: '800' },
   switchTxt:       { textAlign: 'center', color: '#888', fontSize: 13, fontWeight: '600' },
   link:            { color: '#FF6B00', fontWeight: '800' },
+  securityBox:     { borderWidth: 2, borderColor: '#e8eaf6', borderRadius: 12, padding: 12, backgroundColor: '#f8f9ff' },
+  digiVerifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#e8f5e9', padding: 10, borderRadius: 10, marginTop: 10 },
+  digiVerifiedIcon:   { fontSize: 14 },
+  digiVerifiedText:   { fontSize: 12, fontWeight: '700', color: '#2e7d32', flex: 1 },
 })

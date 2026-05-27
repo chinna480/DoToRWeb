@@ -1633,6 +1633,390 @@ html, body {
 /* ─── Profile upload hidden input ─── */
 .hidden-input { display: none; }
 
+/* ═══════ DIGILOCKER ═══════ */
+
+/* Security Section */
+.security-section {
+  margin-top: 4px;
+  margin-bottom: 12px;
+  padding: 14px;
+  background: #f8f9ff;
+  border-radius: 14px;
+  border: 1.5px solid #e8eaf6;
+}
+.security-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.security-header-icon { font-size: 16px; }
+.security-header-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #1A237E;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+/* DigiLocker Button */
+.digilocker-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 16px;
+  background: #1A237E;
+  color: #fff;
+  border: 1.5px solid #3F51B5;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.3px;
+}
+.digilocker-btn:hover { opacity: 0.92; transform: translateY(-1px); }
+.digilocker-btn:active { transform: scale(0.97); }
+.digilocker-btn-icon { font-size: 18px; }
+
+/* DigiLocker Modal */
+.digilocker-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.2s ease;
+  padding: 20px;
+}
+.digilocker-modal {
+  width: 100%;
+  max-width: 420px;
+  max-height: 80vh;
+  background: #fff;
+  border-radius: 20px;
+  padding: 28px 24px;
+  position: relative;
+  animation: slideUp 0.3s ease;
+  overflow-y: auto;
+}
+.digilocker-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  background: #f0f0f0;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  color: #666;
+  font-weight: 700;
+  transition: background 0.2s;
+  z-index: 10;
+}
+.digilocker-close:hover { background: #e0e0e0; }
+
+/* DigiLocker Steps */
+.digilocker-step { text-align: center; }
+
+/* Gov Badge */
+.gov-badge {
+  display: inline-block;
+  background: #FF9933;
+  padding: 4px 14px;
+  border-radius: 4px;
+  margin-bottom: 14px;
+}
+.gov-badge-text {
+  font-size: 10px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 1px;
+}
+
+/* Icon Circle */
+.digilocker-icon-circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 30px;
+  background: #1A237E;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 8px;
+}
+.digilocker-icon-circle .digi-emoji { font-size: 28px; }
+
+.digilocker-step-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1A237E;
+}
+.digilocker-step-sub {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.digilocker-divider {
+  width: 80%;
+  height: 1px;
+  background: #eee;
+  margin: 16px auto;
+}
+
+/* Permissions */
+.digilocker-permissions { text-align: left; margin-bottom: 12px; }
+.digilocker-permission-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 10px;
+}
+.digilocker-permission-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8f9ff;
+  padding: 12px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.digilocker-permission-check { font-size: 14px; }
+.digilocker-permission-text {
+  font-size: 13px;
+  color: #444;
+  font-weight: 600;
+}
+
+/* Note */
+.digilocker-note {
+  font-size: 11px;
+  color: #999;
+  text-align: center;
+  margin-bottom: 14px;
+  line-height: 16px;
+}
+
+/* Consent buttons */
+.digilocker-btn-group { display: flex; flex-direction: column; gap: 10px; }
+.digilocker-btn-primary {
+  background: #1A237E;
+  color: #fff;
+  border: none;
+  padding: 14px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.digilocker-btn-primary:hover { background: #283593; }
+.digilocker-btn-primary:disabled { background: #aaa; cursor: default; }
+.digilocker-btn-cancel {
+  background: transparent;
+  color: #888;
+  border: none;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.digilocker-btn-cancel:hover { color: #666; }
+
+/* Aadhaar Input */
+.digilocker-aadhaar-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 2px solid #3F51B5;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #f8f9ff;
+  width: 100%;
+  margin-top: 10px;
+}
+.digilocker-aadhaar-box .digi-icon { font-size: 20px; }
+.digilocker-aadhaar-input {
+  flex: 1;
+  font-size: 18px;
+  color: #1A237E;
+  font-weight: 700;
+  letter-spacing: 3px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+}
+.digilocker-aadhaar-input::placeholder { color: #999; letter-spacing: 1px; font-size: 16px; }
+.digilocker-aadhaar-hint {
+  font-size: 11px;
+  color: #999;
+  margin-top: 8px;
+  text-align: center;
+}
+.digilocker-back-btn {
+  background: transparent;
+  color: #888;
+  border: none;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.digilocker-back-btn:hover { color: #666; }
+
+/* Verifying State */
+.digilocker-loading {
+  width: 72px;
+  height: 72px;
+  border-radius: 36px;
+  background: #f0f0ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+  border: 3px solid #3F51B5;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.digilocker-loading-emoji { font-size: 32px; }
+.digilocker-verifying-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: #1A237E;
+  margin-bottom: 4px;
+}
+.digilocker-verifying-sub {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 16px;
+}
+.digilocker-verifying-steps { text-align: left; width: 100%; }
+.digilocker-verifying-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8f9ff;
+  padding: 12px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.digilocker-verifying-step-icon {
+  font-size: 14px;
+  color: #3F51B5;
+}
+.digilocker-verifying-step-text {
+  font-size: 13px;
+  color: #555;
+  font-weight: 600;
+}
+
+/* Verified Success State */
+.digilocker-success {
+  width: 64px;
+  height: 64px;
+  border-radius: 32px;
+  background: #e8f5e9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 10px;
+}
+.digilocker-success-emoji { font-size: 32px; }
+.digilocker-verified-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #2e7d32;
+}
+.digilocker-verified-sub {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
+/* Data Rows */
+.digilocker-data-rows { width: 100%; margin-bottom: 12px; }
+.digilocker-data-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fafafa;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+.digilocker-data-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.digilocker-data-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1A237E;
+  text-align: right;
+  margin-left: 10px;
+}
+
+/* Verified Badge */
+.digilocker-verified-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #e8f5e9;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-top: 10px;
+}
+.digilocker-verified-badge-icon { font-size: 14px; }
+.digilocker-verified-badge-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2e7d32;
+}
+
+/* Loading Spinner Small */
+.digilocker-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #1A237E;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 12px auto 0;
+}
+
+/* Success Footer Note */
+.digilocker-success-note {
+  display: inline-block;
+  font-size: 11px;
+  color: #2e7d32;
+  font-weight: 700;
+  background: #e8f5e9;
+  padding: 6px 12px;
+  border-radius: 8px;
+  margin-top: 4px;
+}
+
+/* Tech Aadhaar Security Box */
+.security-box {
+  border: 2px solid #e8eaf6;
+  border-radius: 12px;
+  padding: 12px;
+  background: #f8f9ff;
+}
+
 /* ─── Tech Profile Earnings Row ─── */
 .tech-earnings-row { display: flex; gap: 10px; margin: 0 15px 5px; }
 .tech-stats-row { display: flex; gap: 10px; margin: 0 15px 5px; }

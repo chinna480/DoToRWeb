@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native'
+import DigiLockerVerification from '../../components/DigiLockerVerification'
 import LocationAutocomplete from '../../components/LocationAutocomplete'
 import { db } from '../firebase/config'
 import { registerForNotifications } from '../utils/notifications'
@@ -198,16 +199,25 @@ export default function CustomerLoginScreen() {
               <Text style={s.btnText}>Verify OTP →</Text>
             </TouchableOpacity>
           </>
-        )}
+        )}          <View style={s.securitySection}>
+            <View style={s.securityHeader}>
+              <Text style={s.securityIcon}>🛡️</Text>
+              <Text style={s.securityTitle}>Security Verification</Text>
+            </View>
+            <DigiLockerVerification onVerified={(data) => {
+              setName(data.name)
+              if (data.phone) setPhone(data.phone)
+            }} />
+          </View>
 
-        <TouchableOpacity
-          onPress={() => router.push('/screens/TechLoginScreen')}
-        >
-          <Text style={s.switchText}>
-            Are you a Technician?
-            <Text style={s.link}> Login here</Text>
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/screens/TechLoginScreen')}
+          >
+            <Text style={s.switchText}>
+              Are you a Technician?
+              <Text style={s.link}> Login here</Text>
+            </Text>
+          </TouchableOpacity>
            
 
         <View style={{ height: 40 }} />
@@ -346,5 +356,31 @@ const s = StyleSheet.create({
   link: {
     color: '#FF6B00',
     fontWeight: '800'
+  },
+
+  securitySection: {
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 14,
+    backgroundColor: '#f8f9ff',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#e8eaf6',
+  },
+  securityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  securityIcon: {
+    fontSize: 16,
+  },
+  securityTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1A237E',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   }
 })
