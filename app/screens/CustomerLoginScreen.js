@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useRouter } from 'expo-router'
-import { useRef, useState } from 'react'
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useEffect, useState } from 'react'
 
 import { ref, update } from 'firebase/database'
 import {
@@ -14,31 +14,30 @@ import {
   TouchableOpacity,
   View
 } from 'react-native'
-import DigiLockerVerification from '../../components/DigiLockerVerification'
-import LocationAutocomplete from '../../components/LocationAutocomplete'
 import { db } from '../firebase/config'
 import { registerForNotifications } from '../utils/notifications'
 
 export default function CustomerLoginScreen() {
   const router = useRouter()
-  const scrollRef = useRef(null)
-  const fieldPositions = useRef({})
-
-  const scrollToField = (label) => {
-    const y = fieldPositions.current[label]
-    if (y !== undefined && scrollRef.current) {
-      scrollRef.current.scrollTo({ y: y - 20, animated: true })
-    }
-  }
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [location, setLocation] = useState('')
-  const [pincode, setPincode] = useState('')
+  const [aadharVerified, setAadharVerified] = useState(false)
+  const [aadharName, setAadharName] = useState('')
 
   const [otp, setOtp] = useState('')
   const [showOtpBox, setShowOtpBox] = useState(false)
+
+  const params = useLocalSearchParams()
+
+  useEffect(() => {
+    if (params.aadharVerified === 'true') {
+      setAadharVerified(true)
+      setAadharName(params.aadharName || 'Verified')
+    }
+  }, [params.aadharVerified])
 
   const sendOtp = () => {
     if (!name) {
@@ -61,8 +60,8 @@ export default function CustomerLoginScreen() {
       return
     }
 
-    if (!/^\d{6}$/.test(pincode)) {
-      Alert.alert('Error', 'Enter a valid 6-digit pincode!')
+    if (!aadharVerified) {
+      Alert.alert('Error', 'Please verify your Aadhar via DigiLocker first!')
       return
     }
 
@@ -80,12 +79,10 @@ export default function CustomerLoginScreen() {
     return
   }
 
-  await AsyncStorage.clear()
   await AsyncStorage.setItem('custName', name)
   await AsyncStorage.setItem('custEmail', email)
   await AsyncStorage.setItem('custPhone', phone)
   await AsyncStorage.setItem('custLocation', location)
-  await AsyncStorage.setItem('custPincode', pincode)
 
   const token = await registerForNotifications()
   if (token) {
@@ -95,8 +92,7 @@ export default function CustomerLoginScreen() {
       pushToken: token, 
       name, 
       phone, 
-      location,
-      pincode 
+      location 
     })
   }
 
@@ -106,9 +102,9 @@ export default function CustomerLoginScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled" style={s.container}>
+      <ScrollView style={s.container}>
 
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={s.back}>←</Text>
@@ -127,8 +123,6 @@ export default function CustomerLoginScreen() {
           value={name}
           onChange={setName}
           type="default"
-          onFocus={() => scrollToField('Full Name')}
-          onLayout={(e) => { fieldPositions.current['Full Name'] = e.nativeEvent.layout.y }}
         />
 
         <Field
@@ -138,8 +132,6 @@ export default function CustomerLoginScreen() {
           value={email}
           onChange={setEmail}
           type="email-address"
-          onFocus={() => scrollToField('Email ID')}
-          onLayout={(e) => { fieldPositions.current['Email ID'] = e.nativeEvent.layout.y }}
         />
 
         <Field
@@ -150,32 +142,47 @@ export default function CustomerLoginScreen() {
           onChange={setPhone}
           type="numeric"
           max={10}
-          onFocus={() => scrollToField('Phone Number')}
-          onLayout={(e) => { fieldPositions.current['Phone Number'] = e.nativeEvent.layout.y }}
         />
-
-        <View style={s.group} onLayout={(e) => { fieldPositions.current['Your Location'] = e.nativeEvent.layout.y }}>
-          <Text style={s.label}>Your Location</Text>
-          <LocationAutocomplete
-            value={location}
-            onChangeText={setLocation}
-            placeholder="Search your area..."
-            icon="📍"
-            onFocus={() => scrollToField('Your Location')}
-          />
-        </View>
 
         <Field
-          label="Pincode"
-          icon="📮"
-          placeholder="Enter 6-digit pincode"
-          value={pincode}
-          onChange={setPincode}
-          type="numeric"
-          max={6}
-          onFocus={() => scrollToField('Pincode')}
-          onLayout={(e) => { fieldPositions.current['Pincode'] = e.nativeEvent.layout.y }}
+          label="Your Location"
+          icon="📍"
+          placeholder="Enter your area"
+          value={location}
+          onChange={setLocation}
+          type="default"
         />
+
+        {/* DIGILOCKER AADHAR VERIFICATION */}
+        <View style={s.group}>
+          <Text style={s.label}>Aadhar Verification</Text>
+          <TouchableOpacity
+            style={[s.digiBtn, aadharVerified && s.digiBtnDone]}
+            onPress={() => {
+              if (!aadharVerified) {
+                router.push({
+                  pathname: '/screens/DigiLockerScreen',
+                  params: { onVerified: 'customer' }
+                })
+              }
+            }}
+          >
+            <Text style={s.digiIcon}>🏛️</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.digiTxt, aadharVerified && s.digiTxtDone]}>
+                {aadharVerified
+                  ? `✅ Aadhar Verified — ${aadharName}`
+                  : 'Verify Aadhar via DigiLocker'}
+              </Text>
+              <Text style={s.digiSub}>
+                {aadharVerified
+                  ? 'Identity confirmed by Government'
+                  : 'Secure government verification'}
+              </Text>
+            </View>
+            {!aadharVerified && <Text style={s.digiArrow}>→</Text>}
+          </TouchableOpacity>
+        </View>
 
         {!showOtpBox ? (
           <TouchableOpacity style={s.btn} onPress={sendOtp}>
@@ -191,33 +198,22 @@ export default function CustomerLoginScreen() {
               onChange={setOtp}
               type="numeric"
               max={6}
-              onFocus={() => scrollToField('OTP')}
-              onLayout={(e) => { fieldPositions.current['OTP'] = e.nativeEvent.layout.y }}
             />
 
             <TouchableOpacity style={s.btn} onPress={verifyOtp}>
               <Text style={s.btnText}>Verify OTP →</Text>
             </TouchableOpacity>
           </>
-        )}          <View style={s.securitySection}>
-            <View style={s.securityHeader}>
-              <Text style={s.securityIcon}>🛡️</Text>
-              <Text style={s.securityTitle}>Security Verification</Text>
-            </View>
-            <DigiLockerVerification onVerified={(data) => {
-              setName(data.name)
-              if (data.phone) setPhone(data.phone)
-            }} />
-          </View>
+        )}
 
-          <TouchableOpacity
-            onPress={() => router.push('/screens/TechLoginScreen')}
-          >
-            <Text style={s.switchText}>
-              Are you a Technician?
-              <Text style={s.link}> Login here</Text>
-            </Text>
-          </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => router.push('/screens/TechLoginScreen')}
+        >
+          <Text style={s.switchText}>
+            Are you a Technician?
+            <Text style={s.link}> Login here</Text>
+          </Text>
+        </TouchableOpacity>
            
 
         <View style={{ height: 40 }} />
@@ -233,12 +229,10 @@ function Field({
   value,
   onChange,
   type,
-  max,
-  onFocus,
-  onLayout
+  max
 }) {
   return (
-    <View style={s.group} onLayout={onLayout}>
+    <View style={s.group}>
       <Text style={s.label}>{label}</Text>
 
       <View style={s.field}>
@@ -252,7 +246,6 @@ function Field({
           onChangeText={onChange}
           keyboardType={type}
           maxLength={max}
-          onFocus={onFocus}
         />
       </View>
     </View>
@@ -357,30 +350,11 @@ const s = StyleSheet.create({
     color: '#FF6B00',
     fontWeight: '800'
   },
-
-  securitySection: {
-    marginTop: 8,
-    marginBottom: 4,
-    padding: 14,
-    backgroundColor: '#f8f9ff',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#e8eaf6',
-  },
-  securityHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  securityIcon: {
-    fontSize: 16,
-  },
-  securityTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#1A237E',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  }
+  digiBtn:     { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: '#1A3A6B', borderRadius: 12, padding: 14, gap: 12, backgroundColor: '#f0f4ff' },
+  digiBtnDone: { borderColor: '#2e7d32', backgroundColor: '#f1f8f1' },
+  digiIcon:    { fontSize: 28 },
+  digiTxt:     { fontSize: 14, fontWeight: '800', color: '#1A3A6B' },
+  digiTxtDone: { color: '#2e7d32' },
+  digiSub:     { fontSize: 11, color: '#888', marginTop: 2 },
+  digiArrow:   { fontSize: 18, color: '#1A3A6B', fontWeight: '800' },
 })
