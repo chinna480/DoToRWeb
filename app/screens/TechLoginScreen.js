@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as ImagePicker from 'expo-image-picker'
+import { useFocusEffect } from '@react-navigation/native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ref, update } from 'firebase/database'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Alert,
   Image,
@@ -43,12 +44,26 @@ export default function TechLoginScreen() {
   const [aadharVerified, setAadharVerified] = useState(false)
   const [aadharName, setAadharName]         = useState('')
 
-  useEffect(() => {
-    if (params.aadharVerified === 'true') {
-      setAadharVerified(true)
-      setAadharName(params.aadharName || 'Verified')
-    }
-  }, [params.aadharVerified])
+  useFocusEffect(
+    useCallback(() => {
+      const syncVerification = async () => {
+        if (params.aadharVerified === 'true') {
+          setAadharVerified(true)
+          setAadharName(params.aadharName || 'Verified')
+          return
+        }
+
+        // Fallback: check AsyncStorage (used when coming back from DigiLockerScreen)
+        const storedVerified = await AsyncStorage.getItem('digilockerVerified')
+        if (storedVerified === 'true') {
+          setAadharVerified(true)
+          const storedName = await AsyncStorage.getItem('digilockerName')
+          if (storedName) setAadharName(storedName)
+        }
+      }
+      syncVerification()
+    }, [params.aadharVerified])
+  )
 
   const toggleSkill = (skill) => {
     setSelSkills(prev =>

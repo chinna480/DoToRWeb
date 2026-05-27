@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useFocusEffect } from '@react-navigation/native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { ref, update } from 'firebase/database'
 import {
@@ -32,12 +33,26 @@ export default function CustomerLoginScreen() {
 
   const params = useLocalSearchParams()
 
-  useEffect(() => {
-    if (params.aadharVerified === 'true') {
-      setAadharVerified(true)
-      setAadharName(params.aadharName || 'Verified')
-    }
-  }, [params.aadharVerified])
+  useFocusEffect(
+    useCallback(() => {
+      const syncVerification = async () => {
+        if (params.aadharVerified === 'true') {
+          setAadharVerified(true)
+          setAadharName(params.aadharName || 'Verified')
+          return
+        }
+
+        // Fallback: check AsyncStorage (used when coming back from DigiLockerScreen)
+        const storedVerified = await AsyncStorage.getItem('digilockerVerified')
+        if (storedVerified === 'true') {
+          setAadharVerified(true)
+          const storedName = await AsyncStorage.getItem('digilockerName')
+          if (storedName) setAadharName(storedName)
+        }
+      }
+      syncVerification()
+    }, [params.aadharVerified])
+  )
 
   const sendOtp = () => {
     if (!name) {

@@ -1,6 +1,7 @@
 // screens/DigiLockerScreen.js
 // Opens DigiLocker in WebView → user fetches Aadhar → AI verifies it
 
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useRouter } from 'expo-router'
 import { useRef, useState } from 'react'
 import {
@@ -13,6 +14,12 @@ import {
 import { WebView } from 'react-native-webview'
 
 const DIGILOCKER_URL = 'https://www.digilocker.gov.in'
+
+// ── Backend Proxy Configuration ────────────────────────────────
+// After deploying the web app to Vercel, update this to your
+// actual deployment URL (e.g. https://dotor.vercel.app)
+// Leave as empty string to use local-only keyword matching.
+const BACKEND_API_URL = '' // e.g. 'https://dotor.vercel.app/api/verify-aadhar'
 
 export default function DigiLockerScreen() {
   const router = useRouter()
@@ -72,18 +79,23 @@ export default function DigiLockerScreen() {
           return
         }
 
-        // Send page text to Claude AI for verification
-        const valid = await verifyAadharWithAI(pageText)
+        // Send page text to backend proxy / AI for verification
+        const valid = await verifyAadharWithAI(pageText, pageUrl, pageTitle)
         setVerifying(false)
 
         if (valid.isValid) {
-          // Pass verified data back to previous screen
-          router.back()
+          // Save to AsyncStorage as reliable data bridge
+          await AsyncStorage.setItem('digilockerVerified', 'true')
+          await AsyncStorage.setItem('digilockerName', valid.name || 'Verified')
+
+          // Set params BEFORE navigating back (params may not propagate, AsyncStorage is the backup)
           router.setParams({
             aadharVerified: 'true',
             aadharName: valid.name || '',
             aadharNumber: valid.number || '',
           })
+          router.back()
+
           Alert.alert(
             '✅ Aadhar Verified!',
             `Name: ${valid.name || 'Verified'}\n\nYour Aadhar has been verified via DigiLocker!`
@@ -102,53 +114,69 @@ export default function DigiLockerScreen() {
     }
   }
 
-  // ── Ask Claude AI to verify the page content ───────────────────────────────
-  const verifyAadharWithAI = async (pageText) => {
+  // ── Verify Aadhar via backend proxy or local fallback ────────
+  const verifyAadharWithAI = async (pageText, pageUrl, pageTitle) => {
+    // 1) Try backend proxy first (API key stays server-side, much more reliable)
+    if (BACKEND_API_URL) {
+      try {
+        const response = await fetch(BACKEND_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageText, pageUrl, pageTitle }),
+          // 10 second timeout so the user isn't stuck waiting
+          signal: AbortSignal.timeout(10000),
+        })
+        if (response.ok) {
+          const result = await response.json()
+          if (result && typeof result.isValid === 'boolean') {
+            return result
+          }
+        }
+      } catch (e) {
+        console.warn('Backend proxy unreachable, using local fallback:', e?.message || e)
+      }
+    }
+
+    // 2) Local fallback — enhanced keyword matching
     try {
-      // ⚠️ Replace with your actual Anthropic API key or use a backend proxy
-      const ANTHROPIC_API_KEY = '' // Set your API key here
-      if (!ANTHROPIC_API_KEY) {
-        // No API key configured — simulate verification for demo
-        const hasAadharKeywords =
-          /aadhaar|aadhar|uid|unique\s*identification|government\s*of\s*india/i.test(pageText)
-        return {
-          isValid: hasAadharKeywords,
-          name: hasAadharKeywords ? (pageText.match(/[A-Z][a-z]+\s[A-Z][a-z]+/) || [''])[0] : '',
-          number: hasAadharKeywords ? (pageText.match(/\d{4}/) || [''])[0] : '',
+      const hasAadharKeywords =
+        /aadhaar|aadhar|uid|unique\s*identification|government\s*of\s*india|enrolment|eid\s*\d{4}/i.test(pageText)
+
+      let name = ''
+      let number = ''
+
+      if (hasAadharKeywords) {
+        // Try to extract name near "Name" label
+        const nameMatch = pageText.match(
+          /(?:name|नाम)[:\s]+([A-Z][a-z]+(?:\s[A-Z][a-z]+){1,3})/i
+        )
+        name = nameMatch ? nameMatch[1].trim() : ''
+
+        // Try to extract last 4 digits of Aadhar number
+        const numMatch = pageText.match(
+          /(?:aadhaar|aadhar|आधार)[:\s]*\d{4}\s*\d{4}\s*(\d{4})/i
+        )
+        if (numMatch) {
+          number = numMatch[1]
+        } else {
+          // Fallback: any 4-digit sequence near masked portion
+          const fbNum = pageText.match(/(?:x{4}|•{4}|\*{4})\s*(\d{4})/i)
+          if (fbNum) number = fbNum[1]
+        }
+
+        if (!name) {
+          // Last-resort name guess from page title or generic pattern
+          name = 'Verified'
         }
       }
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 200,
-          messages: [{
-            role: 'user',
-            content: `Look at this text from a DigiLocker page. 
-Does it contain an Indian Aadhar card? 
-If yes, extract the name and last 4 digits of Aadhar number.
-
-Page text:
-${pageText}
-
-Reply in this exact JSON format only:
-{"isValid": true/false, "name": "person name or empty", "number": "last 4 digits or empty"}`
-          }]
-        })
-      })
-
-      const data = await response.json()
-      const text = data?.content?.[0]?.text?.trim()
-      const clean = text.replace(/```json|```/g, '').trim()
-      return JSON.parse(clean)
-
+      return {
+        isValid: hasAadharKeywords,
+        name,
+        number,
+      }
     } catch (e) {
-      console.error('AI verify error:', e)
+      console.error('Local verify error:', e)
       return { isValid: false, name: '', number: '' }
     }
   }
