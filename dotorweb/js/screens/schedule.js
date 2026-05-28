@@ -6,6 +6,15 @@ const TIME_SLOTS = [
 
 Router.register('schedule', {
   render() {
+    // ── Helper: parse appointment time from date + slot to Unix timestamp ──
+    const getAppointmentTime = (date, slot) => {
+      const startHour = parseInt(slot.split(' - ')[0].split(':')[0], 10);
+      const startMin = parseInt(slot.split(' - ')[0].split(':')[1], 10);
+      const t = new Date(date);
+      t.setHours(startHour, startMin, 0, 0);
+      return t.getTime();
+    };
+
     // Generate next 14 days
     const today = new Date();
     const dates = [];
@@ -65,6 +74,9 @@ Router.register('schedule', {
         let selectedSlot = null;
         const custName = Store.get('custName', 'Customer');
         const custPhone = Store.get('custPhone', '');
+        const custPushToken = Store.get('pushToken', '');
+        // ⏰ Load any pending browser reminder timeout IDs from sessionStorage
+        let reminderTimeoutId = null;
 
         window.selectDate = (dateStr) => {
           selectedDate = new Date(dateStr);
@@ -86,8 +98,69 @@ Router.register('schedule', {
           document.getElementById('summarySection').style.display = 'block';
         };
 
+        // ── Play appointment reminder sound effect ──
+        function playReminderSound() {
+          try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            // Pleasant ascending tone
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = 660;
+            osc.frequency.linearRampToValueAtTime(1100, ctx.currentTime + 0.8);
+            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 1);
+          } catch (e) {}
+        }
+
+        // ── Schedule a browser notification reminder ──
+        function scheduleWebReminder(appointmentTime, slotLabel) {
+          const remindAt = appointmentTime - 15 * 60 * 1000; // 15 mins before
+          const now = Date.now();
+
+          // Reminder 15 mins before
+          if (remindAt > now) {
+            const delay = remindAt - now;
+            reminderTimeoutId = setTimeout(() => {
+              if ('Notification' in window && Notification.permission === 'granted') {
+                const notif = new Notification('⏰ Appointment Reminder', {
+                  body: `Your appointment at ${slotLabel} is in 15 minutes!`,
+                  icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>',
+                  tag: 'appt-reminder-15',
+                  requireInteraction: true,
+                });
+                notif.onclick = () => { window.focus(); notif.close(); };
+              }
+              playReminderSound();
+              // Store in sessionStorage so we don't re-schedule on page refresh
+              sessionStorage.setItem('apptReminded15', appointmentTime.toString());
+            }, delay);
+          }
+
+          // Reminder at appointment time
+          if (appointmentTime > now) {
+            const delay2 = appointmentTime - now;
+            setTimeout(() => {
+              if ('Notification' in window && Notification.permission === 'granted') {
+                const notif = new Notification('🔔 Appointment Time!', {
+                  body: `Your appointment at ${slotLabel} is starting now!`,
+                  icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>',
+                  tag: 'appt-reminder-now',
+                  requireInteraction: true,
+                });
+                notif.onclick = () => { window.focus(); notif.close(); };
+              }
+              playReminderSound();
+            }, delay2);
+          }
+        }
+
         window.bookAppointment = () => {
           if (!selectedDate || !selectedSlot) return;
+          const appointmentTime = getAppointmentTime(selectedDate, selectedSlot);
           const custLocation = Store.get('custLocation', '');
           const appointment = {
             customerName: custName,
@@ -95,6 +168,8 @@ Router.register('schedule', {
             date: selectedDate.toISOString().split('T')[0],
             dateLabel: `${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}`,
             timeSlot: selectedSlot,
+            appointmentTime, // Unix timestamp — enables Cloud Function reminders
+            reminderSent: false,
             status: 'scheduled',
             createdAt: Date.now(),
           };
@@ -105,22 +180,35 @@ Router.register('schedule', {
             firebase.database().ref('orders').push({
               customerName: custName,
               customerPhone: custPhone,
+              customerPushToken: custPushToken,
               location: custLocation,
               pincode: custPincode,
               brand: 'Scheduled',
               repair: 'Appointment: ' + selectedSlot,
               status: 'pending',
               time: selectedSlot,
+              appointmentTime,
+              reminderSent: false,
               isAppointment: true,
             });
+
+            // ── Schedule browser notification reminder ──
+            if ('Notification' in window && Notification.permission !== 'granted') {
+              Notification.requestPermission().catch(() => {});
+            }
+            scheduleWebReminder(appointmentTime, selectedSlot);
+
             showAlert('✅ Appointment Booked!',
-              `Date: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}\n\nWe'll notify you when a technician is assigned.`,
+              `Date: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}\n\n✅ You will get a reminder alert 15 minutes before!`,
               [{ text: 'OK', onPress: () => Router.navigate('home') }]
             );
           }).catch(() => showAlert('Error', 'Failed to book appointment. Try again.'));
         };
 
-        return () => { delete window.selectDate; delete window.selectSlot; delete window.bookAppointment; };
+        return () => {
+          if (reminderTimeoutId) clearTimeout(reminderTimeoutId);
+          delete window.selectDate; delete window.selectSlot; delete window.bookAppointment;
+        };
       }
     };
   }

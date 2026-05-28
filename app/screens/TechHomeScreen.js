@@ -5,7 +5,7 @@ import { get, onValue, ref, remove, set, update } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert, Image, Linking,
-  Modal,
+  Modal, Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,6 +23,8 @@ const RADIUS_KM = 10          // Show jobs within 10km
 const AUTO_ASSIGN_RADIUS = 5  // Auto-assign jobs within 5km
 // ─────────────────────────────────────────────────────────────────────────
 
+import * as Notifications from 'expo-notifications'
+
 import {
   notifyCustomerJobDone,
   notifyCustomerTechAccepted,
@@ -35,14 +37,17 @@ import {
 } from '../utils/notifications';
 
 // ✅ Safe import — won't crash if react-native-maps is not installed
-let MapView, Marker, Polyline
-try {
-  const Maps = require('react-native-maps')
-  MapView  = Maps.default
-  Marker   = Maps.Marker
-  Polyline = Maps.Polyline
-} catch (e) {
-  MapView = null
+// Platform guard prevents Metro from resolving native-only module on web bundles
+let MapView = null, Marker = null, Polyline = null
+if (Platform.OS !== 'web') {
+  try {
+    const Maps = require('react-native-maps')
+    MapView  = Maps.default
+    Marker   = Maps.Marker
+    Polyline = Maps.Polyline
+  } catch (e) {
+    MapView = null
+  }
 }
 
 export default function TechHomeScreen() {
@@ -399,6 +404,10 @@ export default function TechHomeScreen() {
         set(ref(db, 'areaAssignments/' + area), { name, phone, location: loc })
       }
 
+      // ── If appointment, schedule local notification reminder ──
+      if (order.isAppointment && order.appointmentTime) {
+        scheduleTechAppointmentReminder(order)
+      }
       Alert.alert('✅ Auto-Assigned!', `${order.customerName}'s job (${order.brand} ${order.repair}) was auto-assigned to you as the nearest technician!`)
       if (order.customerPushToken) {
         await notifyCustomerTechAccepted(order.customerPushToken, name)
@@ -423,7 +432,11 @@ export default function TechHomeScreen() {
         if (area) {
           set(ref(db, 'areaAssignments/' + area), { name, phone, location: loc })
         }
-        Alert.alert('✅ Job Accepted!', 'Customer can now track you!')
+        // ── If appointment, schedule local notification reminder ──
+      if (order.isAppointment && order.appointmentTime) {
+        scheduleTechAppointmentReminder(order)
+      }
+      Alert.alert('✅ Job Accepted!', 'Customer can now track you!')
         if (order.customerPushToken) {
           await notifyCustomerTechAccepted(order.customerPushToken, name)
         }
@@ -461,6 +474,40 @@ export default function TechHomeScreen() {
         }
       }
     ])
+  }
+
+  // ── Schedule local notification for technician appointment reminder ──
+  const scheduleTechAppointmentReminder = (order) => {
+    try {
+      const slotLabel = order.timeSlot || order.time || ''
+      const remindAt = new Date(order.appointmentTime - 15 * 60 * 1000)
+      if (remindAt > new Date()) {
+        Notifications.scheduleNotificationAsync({
+          content: {
+            title: '⏰ Appointment Reminder',
+            body: `Appointment with ${order.customerName} at ${slotLabel} is in 15 minutes!`,
+            sound: true,
+            data: { screen: 'TechHomeScreen', orderId: order.id },
+          },
+          trigger: { date: remindAt, channelId: 'dotor-channel' },
+        }).catch(() => {})
+      }
+      // Also schedule one at appointment time
+      const apptTime = new Date(order.appointmentTime)
+      if (apptTime > new Date()) {
+        Notifications.scheduleNotificationAsync({
+          content: {
+            title: '🔔 Appointment Time!',
+            body: `Time for ${order.customerName}'s appointment at ${slotLabel}! Head to ${order.location || 'the customer'}.`,
+            sound: true,
+            data: { screen: 'TechHomeScreen', orderId: order.id },
+          },
+          trigger: { date: apptTime, channelId: 'dotor-channel' },
+        }).catch(() => {})
+      }
+    } catch (e) {
+      console.log('Failed to schedule tech reminder:', e.message)
+    }
   }
 
   const navigate = () => {

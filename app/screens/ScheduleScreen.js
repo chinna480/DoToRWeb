@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as Notifications from 'expo-notifications'
 import { useRouter } from 'expo-router'
 import { push, ref } from 'firebase/database'
 import { useEffect, useState } from 'react'
@@ -68,6 +69,15 @@ export default function ScheduleScreen() {
     return d.toDateString() === today.toDateString()
   }
 
+  // ── Parse appointment time from date + slot to a Unix timestamp ──
+  const getAppointmentTime = (date, slot) => {
+    const startHour = parseInt(slot.split(' - ')[0].split(':')[0], 10)
+    const startMin = parseInt(slot.split(' - ')[0].split(':')[1], 10)
+    const t = new Date(date)
+    t.setHours(startHour, startMin, 0, 0)
+    return t.getTime()
+  }
+
   const bookAppointment = async () => {
     if (!selectedDate) {
       Alert.alert('Select Date', 'Please select a date for your appointment')
@@ -78,12 +88,17 @@ export default function ScheduleScreen() {
       return
     }
 
+    const appointmentTime = getAppointmentTime(selectedDate, selectedSlot)
+    const pushToken = await AsyncStorage.getItem('pushToken') || ''
+
     const appointment = {
       customerName,
       customerPhone,
       date: formatDate(selectedDate),
       dateLabel: `${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}`,
       timeSlot: selectedSlot,
+      appointmentTime, // Unix timestamp — enables Cloud Function reminders
+      reminderSent: false,
       status: 'scheduled',
       createdAt: Date.now(),
     }
@@ -96,19 +111,50 @@ export default function ScheduleScreen() {
       const order = {
         customerName,
         customerPhone,
+        customerPushToken: pushToken,
         location: await AsyncStorage.getItem('custLocation') || '',
         pincode: await AsyncStorage.getItem('custPincode') || '',
         brand: 'Scheduled',
         repair: `Appointment: ${selectedSlot}`,
         status: 'pending',
         time: selectedSlot,
+        appointmentTime,
+        reminderSent: false,
         isAppointment: true,
       }
       await push(ref(db, 'orders'), order)
 
+      // ── Schedule local notification for 15 minutes before appointment ──────
+      try {
+        const remindAt = new Date(appointmentTime - 15 * 60 * 1000)
+        if (remindAt > new Date()) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: '⏰ Appointment Reminder',
+              body: `Your appointment at ${selectedSlot} is in 15 minutes!`,
+              sound: true,
+              data: { screen: 'HomeScreen' },
+            },
+            trigger: { date: remindAt, channelId: 'dotor-channel' },
+          })
+          // Also schedule one at appointment time
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: '🔔 Appointment Time!',
+              body: `Your appointment at ${selectedSlot} is starting now!`,
+              sound: true,
+              data: { screen: 'HomeScreen' },
+            },
+            trigger: { date: new Date(appointmentTime), channelId: 'dotor-channel' },
+          })
+        }
+      } catch (notifErr) {
+        console.log('Scheduling local notif failed:', notifErr.message)
+      }
+
       Alert.alert(
         '✅ Appointment Booked!',
-        `Date: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}\n\nWe'll notify you when a technician is assigned.`,
+        `Date: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}\n\n✅ You will receive a reminder alert 15 minutes before!\nWe'll notify you when a technician is assigned.`,
         [{ text: 'OK', onPress: () => router.back() }]
       )
     } catch (e) {

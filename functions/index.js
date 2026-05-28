@@ -25,6 +25,136 @@ admin.initializeApp();
 
 const RADIUS_KM = 10; // Only notify techs within 10km
 
+// ─────────────────────────────────────────────────────────────────────────────
+// APPOINTMENT REMINDER — Scheduled Cloud Function
+// Runs every 5 minutes, checks for upcoming appointments, and sends push
+// notifications with sound to both customers and assigned technicians.
+// ─────────────────────────────────────────────────────────────────────────────
+const { onSchedule } = require('firebase-functions/v2/scheduler');
+
+exports.appointmentReminder = onSchedule(
+  { schedule: 'every 5 minutes', timeZone: 'Asia/Kolkata' },
+  async (event) => {
+    console.log('⏰ Checking for upcoming appointment reminders...');
+
+    try {
+      const now = Date.now();
+      const thirtyMinFromNow = now + 30 * 60 * 1000; // next 30 minutes
+      const reminderWindow = now + 25 * 60 * 1000;  // remind between now and 25 mins from now
+
+      // Query orders that are appointment-based, not yet reminded, with appointmentTime upcoming
+      const ordersSnap = await admin.database()
+        .ref('orders')
+        .orderByChild('appointmentTime')
+        .startAt(now)
+        .endAt(thirtyMinFromNow)
+        .once('value');
+
+      if (!ordersSnap.exists()) {
+        console.log('⏭️ No upcoming appointments found');
+        return;
+      }
+
+      let remindedCount = 0;
+
+      const promises = [];
+      ordersSnap.forEach(child => {
+        const order = child.val();
+        const orderId = child.key;
+
+        // Only process appointment-based orders that haven't been reminded
+        if (!order.isAppointment || order.reminderSent) return;
+        if (!order.appointmentTime) return;
+
+        // Mark as reminded so we don't spam
+        promises.push(
+          admin.database().ref(`orders/${orderId}/reminderSent`).set(true)
+        );
+
+        const apptLabel = `${order.dateLabel || order.date || ''} at ${order.timeSlot || order.time || ''}`;
+        const custToken = order.customerPushToken;
+
+        // ── Send reminder to customer ────────────────────────────────────
+        if (custToken) {
+          console.log(`  📲 Reminding customer ${order.customerName} about ${apptLabel}`);
+          promises.push(
+            sendExpoPush(
+              custToken,
+              '⏰ Appointment Reminder',
+              `Your appointment at ${order.timeSlot || order.time} is in about 30 minutes! A technician will be there soon.`,
+              { screen: 'HomeScreen', orderId }
+            )
+          );
+          // Also send a second notification at the exact appointment time
+          const apptTime = order.appointmentTime;
+          const delayMs = apptTime - now;
+          if (delayMs > 0 && delayMs <= 1800000) {
+            // Schedule a second push via setTimeout within the function runtime
+            // Note: function max runtime is 9 mins for pubsub, so only for appointments within 9 mins
+            if (delayMs <= 540000) { // 9 minutes
+              setTimeout(async () => {
+                await sendExpoPush(
+                  custToken,
+                  '🔔 Appointment Time!',
+                  `Your appointment at ${order.timeSlot || order.time} is starting now! Your technician is on the way.`,
+                  { screen: 'TrackingScreen', orderId }
+                );
+              }, delayMs);
+            }
+          }
+        } else {
+          console.log(`  ⚠️ No push token for customer ${order.customerName}`);
+        }
+
+        // ── Send reminder to assigned technician ─────────────────────────
+        if (order.techName && order.techPhone) {
+          // Look up tech's push token
+          promises.push(
+            (async () => {
+              try {
+                const userSnap = await admin.database()
+                  .ref(`techUsers/${order.techPhone}`)
+                  .once('value');
+                let techToken = null;
+                if (userSnap.exists()) {
+                  techToken = userSnap.val().pushToken;
+                }
+                if (!techToken) {
+                  const tokenSnap = await admin.database()
+                    .ref(`pushTokens/${order.techPhone}`)
+                    .once('value');
+                  if (tokenSnap.exists()) techToken = tokenSnap.val();
+                }
+                if (techToken) {
+                  console.log(`  📲 Reminding tech ${order.techName} about appointment at ${apptLabel}`);
+                  await sendExpoPush(
+                    techToken,
+                    '⏰ Appointment Reminder',
+                    `Scheduled repair for ${order.customerName} at ${order.timeSlot || order.time} is in about 30 minutes! Head to ${order.location || 'the customer'}.`,
+                    { screen: 'TechHomeScreen', orderId }
+                  );
+                }
+              } catch (err) {
+                console.error(`  ❌ Failed to remind tech ${order.techName}:`, err.message);
+              }
+            })()
+          );
+        }
+
+        remindedCount++;
+      });
+
+      await Promise.all(promises);
+      console.log(`✅ ${remindedCount} appointment reminder(s) sent`);
+
+    } catch (err) {
+      console.error('❌ Error in appointmentReminder function:', err);
+    }
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Calculate Haversine distance between two GPS points
  */

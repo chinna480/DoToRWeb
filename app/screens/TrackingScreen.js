@@ -17,14 +17,17 @@ import { db } from '../firebase/config'
 import { calcDistance } from '../utils/distance'
 
 // MapView is optional — only load if available
-let MapView, Marker, Polyline
-try {
-  const Maps = require('react-native-maps')
-  MapView  = Maps.default
-  Marker   = Maps.Marker
-  Polyline = Maps.Polyline
-} catch (e) {
-  MapView = null
+// Platform guard prevents Metro from resolving native-only module on web bundles
+let MapView = null, Marker = null, Polyline = null
+if (Platform.OS !== 'web') {
+  try {
+    const Maps = require('react-native-maps')
+    MapView  = Maps.default
+    Marker   = Maps.Marker
+    Polyline = Maps.Polyline
+  } catch (e) {
+    MapView = null
+  }
 }
 
 export default function TrackingScreen() {
