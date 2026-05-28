@@ -108,12 +108,16 @@ export default function TechLoginScreen() {
     const token = await registerForNotifications()
     if (token) {
       await AsyncStorage.setItem('pushToken', token)
+      // Save to multiple paths so Cloud Functions can find the token
       await update(ref(db, 'techs/' + phone), {
         pushToken: token,
         name,
         phone,
         location,
       })
+      // These paths are used by the newOrderNotification Cloud Function
+      await update(ref(db, 'techUsers/' + phone), { pushToken, name, phone, location })
+      await update(ref(db, 'pushTokens/' + phone), token)
     }
 
     router.replace('/screens/TechHomeScreen')

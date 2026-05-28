@@ -213,7 +213,6 @@ exports.newOrderNotification = functions.database
   .onCreate(async (snapshot, context) => {
     const order = snapshot.val();
 
-    // Only process pending orders with GPS coordinates
     if (!order || order.status !== 'pending') {
       console.log('⏭️ Skipping non-pending order');
       return null;
@@ -222,129 +221,152 @@ exports.newOrderNotification = functions.database
     const orderLat = order.custLat;
     const orderLng = order.custLng;
 
-    // If no GPS coords, fall back to notifying ALL techs (pincode/area based)
-    if (!orderLat || !orderLng) {
-      console.log('⚠️ Order has no GPS coords, notifying all techs');
-      await notifyAllTechs(order);
-      return null;
-    }
+    console.log(`🔍 New order: ${order.customerName} — ${order.brand} ${order.repair}`);
 
-    console.log(`🔍 New order: ${order.customerName} — ${order.brand} ${order.repair} [${orderLat}, ${orderLng}]`);
+    let notifiedTechs = 0;
 
     try {
-      // Read all online technicians
+      // ── STEP 1: Try to find nearby techs via GPS (techsOnline) ──
       const techsSnapshot = await admin.database().ref('techsOnline').once('value');
 
-      if (!techsSnapshot.exists()) {
-        console.log('⏭️ No online technicians found');
-        return null;
-      }
+      if (techsSnapshot.exists() && orderLat && orderLng) {
+        const nearbyTechs = [];
 
-      const nearbyTechs = [];
+        techsSnapshot.forEach(child => {
+          const techPhone = child.key;
+          const tech = child.val();
+          const techLat = tech.lat;
+          const techLng = tech.lng;
 
-      techsSnapshot.forEach(child => {
-        const techPhone = child.key;
-        const tech = child.val();
-        const techLat = tech.lat;
-        const techLng = tech.lng;
-
-        if (techLat && techLng) {
-          const dist = calcDistance(orderLat, orderLng, techLat, techLng);
-          console.log(`  📍 Tech ${techPhone}: ${dist.toFixed(1)} km away`);
-          if (dist <= RADIUS_KM) {
-            nearbyTechs.push({ phone: techPhone, distance: dist, name: tech.name || 'Technician' });
-          }
-        }
-      });
-
-      if (nearbyTechs.length === 0) {
-        console.log('⏭️ No nearby technicians found within ' + RADIUS_KM + 'km');
-        return null;
-      }
-
-      console.log(`✅ Found ${nearbyTechs.length} nearby technician(s)`);
-
-      // Send push notification to each nearby tech
-      const notifications = nearbyTechs.map(async (tech) => {
-        // Look up the tech's push token from their profile or techUsers
-        try {
-          // Try fetching from techUsers/{phone}
-          const userSnap = await admin.database().ref(`techUsers/${tech.phone}`).once('value');
-          let pushToken = null;
-
-          if (userSnap.exists()) {
-            pushToken = userSnap.val().pushToken;
-          }
-
-          // Fallback: try reading from pushTokens/{phone}
-          if (!pushToken) {
-            const tokenSnap = await admin.database().ref(`pushTokens/${tech.phone}`).once('value');
-            if (tokenSnap.exists()) {
-              pushToken = tokenSnap.val();
+          if (techLat && techLng) {
+            const dist = calcDistance(orderLat, orderLng, techLat, techLng);
+            console.log(`  📍 Tech ${techPhone}: ${dist.toFixed(1)} km away`);
+            if (dist <= RADIUS_KM) {
+              nearbyTechs.push({ phone: techPhone, distance: dist, name: tech.name || 'Technician' });
             }
           }
+        });
 
-          if (pushToken) {
-            await sendExpoPush(
-              pushToken,
-              '🔔 New Job Nearby!',
-              `${order.customerName} needs ${order.brand} ${order.repair} (${tech.distance.toFixed(1)} km away). Accept now!`,
-              { screen: 'TechHomeScreen', orderId: context.params.orderId }
-            );
-            console.log(`  📲 Sent push to ${tech.phone} (${tech.distance.toFixed(1)} km)`);
-          } else {
-            console.log(`  ⚠️ No push token for ${tech.phone}`);
-          }
-        } catch (err) {
-          console.error(`  ❌ Failed to notify ${tech.phone}:`, err.message);
+        if (nearbyTechs.length > 0) {
+          console.log(`✅ Found ${nearbyTechs.length} nearby technician(s)`);
+          notifiedTechs += await notifyTechsList(nearbyTechs, order, context.params.orderId);
+        } else {
+          console.log('⏭️ No nearby techs within ' + RADIUS_KM + 'km');
         }
-      });
+      }
 
-      await Promise.all(notifications);
-      console.log('🎉 All nearby technicians notified!');
+      // ── STEP 2: If no GPS coords or no nearby techs found, fall back to ALL registered techs ──
+      // This is the key fix — handles the case when the app is closed (tech not in techsOnline)
+      if (notifiedTechs === 0) {
+        console.log('📡 No online/nearby techs — falling back to ALL registered techs');
+        notifiedTechs += await notifyAllRegisteredTechs(order, context.params.orderId);
+      }
+
+      if (notifiedTechs === 0) {
+        console.log('⏭️ No technicians could be notified (no push tokens found)');
+      } else {
+        console.log(`🎉 ${notifiedTechs} tech(s) notified!`);
+      }
     } catch (err) {
-      console.error('❌ Error processing new order:', err);
+      console.error('❌ Error in newOrderNotification:', err);
     }
 
     return null;
   });
 
 /**
- * Fallback: notify ALL online techs when order has no GPS coords
+ * Send push notifications to a list of technicians
  */
-async function notifyAllTechs(order) {
+async function notifyTechsList(techsList, order, orderId) {
+  let count = 0;
+  const notifications = techsList.map(async (tech) => {
+    try {
+      const pushToken = await getTechPushToken(tech.phone);
+      if (pushToken) {
+        const distanceText = tech.distance != null ? ` (${tech.distance.toFixed(1)} km away)` : '';
+        await sendExpoPush(
+          pushToken,
+          '🔔 New Job Nearby!',
+          `${order.customerName} needs ${order.brand} ${order.repair}${distanceText}. Accept now!`,
+          { screen: 'TechHomeScreen', orderId }
+        );
+        count++;
+        console.log(`  📲 Sent push to ${tech.phone}`);
+      } else {
+        console.log(`  ⚠️ No push token for ${tech.phone}`);
+      }
+    } catch (err) {
+      console.error(`  ❌ Failed to notify ${tech.phone}:`, err.message);
+    }
+  });
+  await Promise.all(notifications);
+  return count;
+}
+
+/**
+ * Look up a tech's Expo push token from multiple storage paths
+ */
+async function getTechPushToken(techPhone) {
+  // Path 1: techUsers/{phone}/pushToken
+  const userSnap = await admin.database().ref(`techUsers/${techPhone}`).once('value');
+  if (userSnap.exists() && userSnap.val().pushToken) {
+    return userSnap.val().pushToken;
+  }
+
+  // Path 2: pushTokens/{phone}
+  const tokenSnap = await admin.database().ref(`pushTokens/${techPhone}`).once('value');
+  if (tokenSnap.exists()) {
+    const val = tokenSnap.val();
+    // Could be a string (direct) or an object with pushToken
+    return typeof val === 'string' ? val : val.pushToken || null;
+  }
+
+  // Path 3: techs/{phone}/pushToken (legacy path)
+  const legacySnap = await admin.database().ref(`techs/${techPhone}/pushToken`).once('value');
+  if (legacySnap.exists()) {
+    return legacySnap.val();
+  }
+
+  return null;
+}
+
+/**
+ * Fallback: notify ALL registered technicians (handles app-closed scenario)
+ * Reads from techs/ collection and sends push to every tech with a token
+ */
+async function notifyAllRegisteredTechs(order, orderId) {
   try {
-    const techsSnapshot = await admin.database().ref('techsOnline').once('value');
-    if (!techsSnapshot.exists()) return;
+    // Try techUsers first (primary path)
+    const usersSnap = await admin.database().ref('techUsers').once('value');
+    let techs = [];
 
-    const notifications = [];
+    if (usersSnap.exists()) {
+      usersSnap.forEach(child => {
+        techs.push({ phone: child.key, name: child.val().name || 'Technician' });
+      });
+    }
 
-    techsSnapshot.forEach(child => {
-      const techPhone = child.key;
-      const tech = child.val();
-
-      const notify = (async () => {
-        const userSnap = await admin.database().ref(`techUsers/${techPhone}`).once('value');
-        let pushToken = userSnap.exists() ? userSnap.val().pushToken : null;
-        if (!pushToken) {
-          const tokenSnap = await admin.database().ref(`pushTokens/${techPhone}`).once('value');
-          if (tokenSnap.exists()) pushToken = tokenSnap.val();
+    // Also try legacy techs/ path
+    const legacySnap = await admin.database().ref('techs').once('value');
+    if (legacySnap.exists()) {
+      const existingPhones = new Set(techs.map(t => t.phone));
+      legacySnap.forEach(child => {
+        if (!existingPhones.has(child.key)) {
+          techs.push({ phone: child.key, name: child.val().name || 'Technician' });
         }
-        if (pushToken) {
-          await sendExpoPush(
-            pushToken,
-            '🔔 New Repair Request!',
-            `${order.customerName} needs ${order.brand} ${order.repair}. Accept now!`,
-            { screen: 'TechHomeScreen' }
-          );
-        }
-      })();
+      });
+    }
 
-      notifications.push(notify);
-    });
+    if (techs.length === 0) {
+      console.log('⚠️ No registered techs found');
+      return 0;
+    }
 
-    await Promise.all(notifications);
+    console.log(`📡 Notifying ${techs.length} registered tech(s) (app-closed fallback)`);
+    return await notifyTechsList(techs, order, orderId);
   } catch (err) {
-    console.error('❌ Error notifying all techs:', err);
+    console.error('❌ Error in notifyAllRegisteredTechs:', err);
+    return 0;
   }
 }
+
