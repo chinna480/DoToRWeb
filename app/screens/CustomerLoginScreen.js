@@ -117,9 +117,9 @@ export default function CustomerLoginScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView style={s.container}>
+      <ScrollView style={s.container} keyboardShouldPersistTaps="handled">
 
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={s.back}>←</Text>

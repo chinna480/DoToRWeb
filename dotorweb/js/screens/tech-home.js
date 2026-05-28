@@ -32,19 +32,6 @@ Router.register('tech-home', {
             <div id="ongoingJob">
               <div class="empty-card"><span class="empty-text">No ongoing job right now</span></div>
             </div>
-            <div class="section-title">⚡ Quick Actions</div>
-            <div class="quick-row">
-              <div class="quick-card" onclick="window.switchTechTab('pending')">
-                <div class="quick-icon-wrap">📋</div>
-                <div class="quick-label">Pending Jobs</div>
-                <div class="quick-count" id="quickPendingCount">0</div>
-              </div>
-              <div class="quick-card" onclick="window.switchTechTab('completed')">
-                <div class="quick-icon-wrap">✅</div>
-                <div class="quick-label">Completed</div>
-                <div class="quick-sub-label" id="quickCompletedLabel">0 today</div>
-              </div>
-            </div>
             <div style="height:80px"></div>
           </div>
 
@@ -518,8 +505,6 @@ Router.register('tech-home', {
           document.getElementById('totalJobs').textContent = dailyCompletedCount;
           document.getElementById('pendingCount').textContent = pending.length;
           document.getElementById('totalCompleted').textContent = count;
-          document.getElementById('quickPendingCount').textContent = pending.length;
-          document.getElementById('quickCompletedLabel').textContent = dailyCompletedCount + ' today';
 
           // Update pending badge on tab
           const badge = document.getElementById('pendingBadge');

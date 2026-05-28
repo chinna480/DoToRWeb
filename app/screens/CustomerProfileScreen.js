@@ -113,10 +113,8 @@ export default function CustomerProfileScreen() {
 
   const MENU = [
     { icon: '❓', label: 'Help & Support',   sub: null,                   onPress: () => Alert.alert('Help', 'Email: support@dotor.in') },
-    { icon: '📅', label: 'Schedule',         sub: 'Book appointment',       onPress: () => router.push('/screens/ScheduleScreen') },
     { icon: '📋', label: 'My Orders',        sub: `${totalOrders} total`, onPress: () => Alert.alert('Orders', `Total: ${totalOrders}\nCompleted: ${completedOrders}\nPending: ${totalOrders - completedOrders}`) },
     { icon: '🛡️', label: 'Safety',           sub: null,                   onPress: () => Alert.alert('Safety', 'Your safety is our priority!') },
-    { icon: '🎁', label: 'Refer and Earn',   sub: 'Get ₹50',             onPress: () => Alert.alert('Refer', 'Share DoToR and earn ₹50!') },
     { icon: '🔔', label: 'Notifications',    sub: null,                   toggle: true, value: notifications, onToggle: setNotifications },
     { icon: '⚙️', label: 'Settings',         sub: null,                   onPress: () => Alert.alert('Settings', 'Coming Soon!') },
     { icon: '📄', label: 'Privacy Policy',   sub: null,                   onPress: () => Alert.alert('Privacy', 'Your data is secure!') },

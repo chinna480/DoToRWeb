@@ -80,7 +80,6 @@ Router.register('tech-profile', {
             <div class="stat-card"><div class="stat-number">${rating}</div><div class="stat-label-small">Rating</div></div>
             <div class="stat-card"><div class="stat-number">100%</div><div class="stat-label-small">Acceptance</div></div>
           </div>
-          <div id="techRecentJobs"></div>
           <div class="section-title">⚙️ More Options</div>
           <div class="menu-card">${menuHtml}</div>
           <div class="version-footer">
@@ -99,39 +98,17 @@ Router.register('tech-profile', {
           const ordersRef = firebase.database().ref('orders');
           const onOrders = (snap) => {
             if (!snap.exists()) return;
-            let total = 0, jobs = [];
+            let total = 0;
             snap.forEach(child => {
               const o = child.val();
               if (o.techPhone === myPhone && o.status === 'completed') {
                 total++;
-                jobs.push({ id: child.key, ...o });
               }
             });
             totalJobsNum = total;
             document.getElementById('techStatsJobs').textContent = total;
 
-            if (jobs.length > 0) {
-              const recentJobs = jobs.reverse().slice(0, 10);
-              document.getElementById('techRecentJobs').innerHTML = `
-                <div class="section-title">✅ Recent Jobs</div>
-                ${recentJobs.map(j => `
-                  <div class="completed-card">
-                    <div class="comp-left">
-                      <div class="comp-customer">👤 ${j.customerName}</div>
-                      <div class="comp-type">📱 ${j.brand} — ${j.repair}</div>
-                      <div class="comp-time-small">📍 ${j.location}</div>
-                      <div class="comp-time-small">🕐 ${j.time}</div>
-                    </div>
-                    <div class="comp-right">
-                      <div class="comp-done">₹299</div>
-                      <div style="background:#e8f5e9;padding:3px 8px;border-radius:10px;margin-top:4px">
-                        <span style="font-size:11px;font-weight:800;color:var(--success)">✅ Done</span>
-                      </div>
-                    </div>
-                  </div>
-                `).join('')}
-              `;
-            }
+
           };
           ordersRef.on('value', onOrders);
           window._techProfCleanup = () => ordersRef.off('value', onOrders);

@@ -26,7 +26,6 @@ export default function TechProfileScreen() {
   const [photo, setPhoto]         = useState(null)
   const [rating]                  = useState(4.8)
   const [totalJobs, setTotal]     = useState(0)
-  const [completedJobs, setCompleted] = useState([])
   const [notifications, setNotifications] = useState(true)
   const [isOnline, setIsOnline]   = useState(true)
 
@@ -54,22 +53,20 @@ export default function TechProfileScreen() {
   const loadJobs = (myPhone) => {
     onValue(ref(db, 'orders'), snap => {
       if (!snap.exists()) {
-        setTotal(0); setCompleted([])
+        setTotal(0)
         return
       }
-      let total = 0, jobs = []
+      let total = 0
 
       snap.forEach(child => {
         const o = child.val()
         // Only count jobs that were accepted/completed by this tech
         if (o.techPhone === myPhone && o.status === 'completed') {
           total++
-          jobs.push({ id: child.key, ...o })
         }
       })
 
       setTotal(total)
-      setCompleted(jobs.reverse().slice(0, 10))
     })
   }
 
@@ -191,28 +188,7 @@ export default function TechProfileScreen() {
         </View>
       </View>
 
-      {/* RECENT JOBS — only this tech's jobs */}
-      {completedJobs.length > 0 && (
-        <>
-          <Text style={s.sectionTitle}>✅ Recent Jobs</Text>
-          {completedJobs.map((job, i) => (
-            <View key={i} style={s.jobCard}>
-              <View style={s.jobLeft}>
-                <Text style={s.jobCust}>👤 {job.customerName}</Text>
-                <Text style={s.jobType}>📱 {job.brand} — {job.repair}</Text>
-                <Text style={s.jobLoc}>📍 {job.location}</Text>
-                <Text style={s.jobTime}>🕐 {job.time}</Text>
-              </View>
-              <View style={s.jobRight}>
-                <Text style={s.jobAmount}>₹299</Text>
-                <View style={s.jobStatus}>
-                  <Text style={s.jobStatusTxt}>✅ Done</Text>
-                </View>
-              </View>
-            </View>
-          ))}
-        </>
-      )}
+
 
       {/* MENU */}
       <Text style={s.sectionTitle}>⚙️ More Options</Text>
@@ -277,16 +253,6 @@ const s = StyleSheet.create({
   statCard:         { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', elevation: 2 },
   statNum:          { fontSize: 20, fontWeight: '800', color: '#1A3A6B' },
   statLabel:        { fontSize: 11, color: '#888', fontWeight: '600', marginTop: 3 },
-  jobCard:          { backgroundColor: '#fff', borderRadius: 14, padding: 15, marginHorizontal: 15, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', elevation: 2, borderLeftWidth: 4, borderLeftColor: '#FF6B00' },
-  jobLeft:          { flex: 1 },
-  jobCust:          { fontSize: 13, fontWeight: '800', color: '#111' },
-  jobType:          { fontSize: 12, color: '#FF6B00', fontWeight: '700', marginTop: 3 },
-  jobLoc:           { fontSize: 11, color: '#888', marginTop: 2 },
-  jobTime:          { fontSize: 11, color: '#888', marginTop: 2 },
-  jobRight:         { alignItems: 'flex-end', gap: 6 },
-  jobAmount:        { fontSize: 16, fontWeight: '800', color: '#2e7d32' },
-  jobStatus:        { backgroundColor: '#e8f5e9', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
-  jobStatusTxt:     { fontSize: 11, fontWeight: '800', color: '#2e7d32' },
   menuCard:         { backgroundColor: '#fff', borderRadius: 18, marginHorizontal: 15, marginBottom: 12, overflow: 'hidden', elevation: 3 },
   menuItem:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
   menuLeft:         { flexDirection: 'row', alignItems: 'center', gap: 14 },

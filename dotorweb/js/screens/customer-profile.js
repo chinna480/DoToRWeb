@@ -17,10 +17,8 @@ Router.register('customer-profile', {
 
     const MENU = [
       { icon: '❓', label: 'Help & Support', sub: null },
-      { icon: '📅', label: 'Schedule', sub: 'Book appointment' },
       { icon: '📋', label: 'My Orders', sub: `${totalOrders} total` },
       { icon: '🛡️', label: 'Safety', sub: null },
-      { icon: '🎁', label: 'Refer and Earn', sub: 'Get ₹50' },
       { icon: '🔔', label: 'Notifications', sub: null, toggle: true },
       { icon: '⚙️', label: 'Settings', sub: null },
       { icon: '📄', label: 'Privacy Policy', sub: null },
@@ -128,10 +126,8 @@ Router.register('customer-profile', {
         window.custMenuAction = (label) => {
           const actions = {
             'Help & Support': () => showAlert('Help', 'Email: support@dotor.in'),
-            'Schedule': () => Router.navigate('schedule'),
             'My Orders': () => showAlert('Orders', `Check your orders on the home screen.`),
             'Safety': () => showAlert('Safety', 'Your safety is our priority!'),
-            'Refer and Earn': () => showAlert('Refer', 'Share DoToR and earn ₹50!'),
             'Settings': () => showAlert('Settings', 'Coming Soon!'),
             'Privacy Policy': () => showAlert('Privacy', 'Your data is secure!'),
             'Terms of Service': () => showAlert('Terms', 'Use DoToR responsibly!'),

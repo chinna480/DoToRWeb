@@ -673,20 +673,7 @@ export default function TechHomeScreen() {
         </View>
       )}
 
-      {/* QUICK ACTIONS */}
-      <Text style={s.sectionTitle}>⚡ Quick Actions</Text>
-      <View style={s.quickRow}>
-        <TouchableOpacity style={s.quickCard} onPress={() => setActiveTab('pending')}>
-          <Text style={s.quickIcon}>📋</Text>
-          <Text style={s.quickLabel}>Pending Jobs</Text>
-          <View style={s.quickBadge}><Text style={s.quickBadgeTxt}>{pendingJobs.length}</Text></View>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.quickCard} onPress={() => setActiveTab('completed')}>
-          <Text style={s.quickIcon}>✅</Text>
-          <Text style={s.quickLabel}>Completed</Text>
-          <Text style={s.quickSub}>{dailyCompleted} today</Text>
-        </TouchableOpacity>
-      </View>          <View style={{ height: 90 }} />
+      <View style={{ height: 90 }} />
     </ScrollView>
   )
 
@@ -968,15 +955,6 @@ const s = StyleSheet.create({
   compRight:     { alignItems: 'flex-end' },
   compPrice:     { fontSize: 14, fontWeight: '800', color: '#FF6B00' },
   compTime:      { fontSize: 11, color: '#888', marginTop: 3 },
-
-  // ── Quick Actions ──
-  quickRow:      { flexDirection: 'row', gap: 10, marginHorizontal: 15, marginBottom: 20 },
-  quickCard:     { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 16, alignItems: 'center', elevation: 3, position: 'relative' },
-  quickIcon:     { fontSize: 28 },
-  quickLabel:    { fontSize: 11, fontWeight: '700', color: '#1A3A6B', marginTop: 6 },
-  quickSub:      { fontSize: 10, color: '#888', marginTop: 2 },
-  quickBadge:    { position: 'absolute', top: 6, right: 6, backgroundColor: '#FF6B00', width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  quickBadgeTxt: { fontSize: 10, fontWeight: '800', color: '#fff' },
 
   // ── Bottom Tab Bar ──
   tabBar:        { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },
