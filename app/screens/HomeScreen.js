@@ -267,9 +267,14 @@ export default function HomeScreen() {
           <Text style={s.userName}>{custName}</Text>
           <Text style={s.userLoc}>📍 {custLocation}</Text>
         </View>
-        <TouchableOpacity style={s.avatar} onPress={() => router.push('/screens/CustomerProfileScreen')}>
-          <Text style={{ fontSize: 24 }}>👤</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={s.versionBadge}>
+            <Text style={s.versionBadgeText}>OTA v1.0.0</Text>
+          </View>
+          <TouchableOpacity style={s.avatar} onPress={() => router.push('/screens/CustomerProfileScreen')}>
+            <Text style={{ fontSize: 24 }}>👤</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <TouchableOpacity style={s.banner} onPress={() => router.push('/screens/ScheduleScreen')}>
@@ -541,6 +546,8 @@ const s = StyleSheet.create({
   userName:         { fontSize: 20, color: '#fff', fontWeight: '800' },
   userLoc:          { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
   avatar:           { width: 50, height: 50, backgroundColor: '#fff', borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
+  versionBadge:     { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
+  versionBadgeText: { fontSize: 10, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
   banner:           { backgroundColor: '#1A3A6B', padding: 18, borderRadius: 14, marginHorizontal: 15, marginBottom: 5, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   bannerText:       { color: '#fff', fontSize: 15, fontWeight: '800' },
   bannerSub:        { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 3 },
