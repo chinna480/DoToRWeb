@@ -2,8 +2,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Full notification system for DoToR app
 // Handles: push token registration + all Rapido/Swiggy-style smart notifications
+//          + in-app sound alerts for new jobs
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { Audio } from 'expo-av'
 import * as Device from 'expo-device'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
@@ -16,6 +18,142 @@ Notifications.setNotificationHandler({
     shouldSetBadge:  true,
   }),
 })
+
+// ── Sound Alert System ────────────────────────────────────────────────────────
+// Plays a distinct sound when a new job arrives for a technician.
+// Uses expo-av to generate tones — no audio files needed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let soundObject = null
+
+/**
+ * Play a new-job alert sound (two ascending beeps).
+ * Call this in TechHomeScreen when a NEW pending order appears.
+ */
+export async function playNewJobSound() {
+  try {
+    if (soundObject) {
+      await soundObject.unloadAsync()
+      soundObject = null
+    }
+    // Generate a simple sine-wave beep using expo-av
+    // We create a short audio file programmatically via a base64 WAV
+    const sampleRate = 8000
+    const duration = 0.15 // seconds per beep
+    const numSamples = Math.floor(sampleRate * duration)
+    
+    // Generate two beeps: 660Hz then 880Hz
+    const buffer1 = new ArrayBuffer(numSamples * 2)
+    const view1 = new Int16Array(buffer1)
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate
+      view1[i] = Math.sin(2 * Math.PI * 660 * t) * 8000
+    }
+    
+    const buffer2 = new ArrayBuffer(numSamples * 2)
+    const view2 = new Int16Array(buffer2)
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate
+      view2[i] = Math.sin(2 * Math.PI * 880 * t) * 8000
+    }
+    
+    // Create WAV blob from the two buffers combined (with small gap)
+    const gap = new Int16Array(Math.floor(sampleRate * 0.1)) // 100ms gap
+    const combined = new Int16Array(numSamples + gap.length + numSamples)
+    combined.set(view1)
+    combined.set(gap, numSamples)
+    combined.set(view2, numSamples + gap.length)
+    
+    const wav = createWav(combined, sampleRate)
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(wav)))
+    
+    const { sound } = await Audio.Sound.createAsync(
+      { uri: `data:audio/wav;base64,${base64}` },
+      { shouldPlay: true }
+    )
+    soundObject = sound
+    sound.setOnPlaybackStatusUpdate(status => {
+      if (status.didJustFinish) {
+        sound.unloadAsync()
+        soundObject = null
+      }
+    })
+  } catch (e) {
+    // Sound not critical, fail silently
+    console.log('Sound alert failed:', e.message)
+  }
+}
+
+/** Play a job-complete celebration sound */
+export async function playJobCompleteSound() {
+  try {
+    const sampleRate = 8000
+    const duration = 0.2
+    const numSamples = Math.floor(sampleRate * duration)
+    
+    // Descending tones: 880Hz then 660Hz
+    const buffer1 = new Int16Array(numSamples)
+    for (let i = 0; i < numSamples; i++) {
+      buffer1[i] = Math.sin(2 * Math.PI * 880 * (i / sampleRate)) * 8000
+    }
+    const buffer2 = new Int16Array(numSamples)
+    for (let i = 0; i < numSamples; i++) {
+      buffer2[i] = Math.sin(2 * Math.PI * 660 * (i / sampleRate)) * 8000
+    }
+    
+    const combined = new Int16Array(numSamples + numSamples + Math.floor(sampleRate * 0.15))
+    combined.set(buffer1)
+    combined.set(new Int16Array(Math.floor(sampleRate * 0.15)), numSamples) // gap
+    combined.set(buffer2, numSamples + Math.floor(sampleRate * 0.15))
+    
+    const wav = createWav(combined, sampleRate)
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(wav)))
+    
+    const { sound } = await Audio.Sound.createAsync(
+      { uri: `data:audio/wav;base64,${base64}` },
+      { shouldPlay: true }
+    )
+    setTimeout(() => sound.unloadAsync(), 1000)
+  } catch (e) {
+    console.log('Complete sound failed:', e.message)
+  }
+}
+
+/** Generate a WAV file from PCM data */
+function createWav(samples, sampleRate) {
+  const numChannels = 1
+  const bitsPerSample = 16
+  const byteRate = sampleRate * numChannels * bitsPerSample / 8
+  const blockAlign = numChannels * bitsPerSample / 8
+  const dataSize = samples.length * blockAlign
+  const buffer = new ArrayBuffer(44 + dataSize)
+  const view = new DataView(buffer)
+  
+  const writeStr = (off, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i))
+  }
+  
+  writeStr(0, 'RIFF')
+  view.setUint32(4, 36 + dataSize, true)
+  writeStr(8, 'WAVE')
+  writeStr(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true) // PCM
+  view.setUint16(22, numChannels, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, byteRate, true)
+  view.setUint16(32, blockAlign, true)
+  view.setUint16(34, bitsPerSample, true)
+  writeStr(36, 'data')
+  view.setUint32(40, dataSize, true)
+  
+  for (let i = 0; i < samples.length; i++) {
+    view.setInt16(44 + i * 2, samples[i], true)
+  }
+  return new Uint8Array(buffer)
+}
+
+// ── End Sound Alert System ────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. REGISTER DEVICE FOR PUSH NOTIFICATIONS

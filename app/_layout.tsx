@@ -15,6 +15,7 @@ export default function RootLayout() {
       <Stack.Screen name="screens/TechHomeScreen" />
       <Stack.Screen name="screens/TechProfileScreen" />
       <Stack.Screen name="screens/DigiLockerScreen" />
+      <Stack.Screen name="screens/JobHistoryScreen" />
     </Stack>
   );
 }

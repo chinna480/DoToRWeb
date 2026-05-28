@@ -118,6 +118,15 @@ Router.register('tech-home', {
         const myPhone = Store.get('techPhone', '');
         const SPEED = 0.3; // km/min (~18 km/h — realistic city speed)
 
+        // ── GPS-based matching configuration ─────────────────────────────────────
+        // RADIUS_KM:         Maximum distance (km) to show pending jobs to a tech
+        // AUTO_ASSIGN_RADIUS: Distance (km) within which a job is auto-assigned
+        // If GPS is unavailable, falls back to text-based location/pincode matching
+        const RADIUS_KM = 10          // Show jobs within 10km
+        const AUTO_ASSIGN_RADIUS = 5  // Auto-assign jobs within 5km
+        let autoAssignRunning = false // prevent double auto-assign attempts
+        // ─────────────────────────────────────────────────────────────────────────
+
         // ── Browser Notification Support ────────────────────────────────────────
         // Request permission for desktop browser notifications
         if ('Notification' in window && Notification.permission === 'default') {
@@ -182,7 +191,14 @@ Router.register('tech-home', {
           }
           if (title) title.textContent = pending.length + ' jobs waiting';
           if (count) count.textContent = pending.length;
-          el.innerHTML = pending.map(o => `
+          el.innerHTML = pending.map(o => {
+            // Show GPS distance if available
+            const distDisplay = o.gpsDistance != null
+              ? (o.gpsDistance <= AUTO_ASSIGN_RADIUS
+                  ? `📍 ${o.gpsDistance.toFixed(1)} km (auto-assign range 🎯)`
+                  : `📍 ${o.gpsDistance.toFixed(1)} km away`)
+              : null;
+            return `
             <div class="job-card pending">
               <div class="job-new-badge">NEW</div>
               <div class="job-customer">👤 ${o.customerName}</div>
@@ -190,6 +206,7 @@ Router.register('tech-home', {
               <div class="job-location">📍 ${o.location}</div>
               ${o.pincode ? `<div class="job-location">📮 ${o.pincode}</div>` : ''}
               <div class="job-time">🕐 ${o.time}</div>
+              ${distDisplay ? `<div class="job-location" style="${o.gpsDistance <= AUTO_ASSIGN_RADIUS ? 'color:#2e7d32;font-weight:800' : ''}">${distDisplay}</div>` : ''}
               <div class="job-actions">
                 ${ongoingOrder
                   ? '<div style="width:100%;background:#fff3e0;padding:10px;border-radius:10px;text-align:center;font-size:12px;font-weight:700;color:#e65100">⚠️ Complete current job first</div>'
@@ -201,7 +218,7 @@ Router.register('tech-home', {
               </div>
               ${o.id ? `<button class="btn btn-primary btn-sm btn-block" onclick="window.goToChatFromPending('${o.id}','${o.customerName || 'Customer'}'}" style="margin-top:8px">💬 Chat with Customer</button>` : ''}
             </div>
-          `).join('');
+          `}).join('');
         }
 
         function renderCompletedJobs(completed) {
@@ -331,16 +348,101 @@ Router.register('tech-home', {
           }
         });
 
+        // ── GPS-based proximity matching + auto-assign ─────────────────────────────
+        //
+        // FILTERING LOGIC (two-tier approach):
+        //
+        // 1. GPS-BASED (preferred):
+        //    - When tech's GPS is available, calculate Haversine distance from tech's
+        //      location to each order's saved GPS coords (custLat/custLng).
+        //    - Only orders within RADIUS_KM (10km) are shown.
+        //    - Orders within AUTO_ASSIGN_RADIUS (5km) are auto-assigned.
+        //
+        // 2. TEXT-BASED (fallback):
+        //    - Falls back to area/pincode matching.
+        //
+        // AUTO-ASSIGN: When a new pending order appears, if within AUTO_ASSIGN_RADIUS,
+        // the tech automatically accepts it (first to write wins).
+        // ────────────────────────────────────────────────────────────────────────────
+
+        // Get tech's current GPS position for distance calculations
+        function initTechGPS() {
+          startGPS((lat, lng) => {
+            myLat = lat; myLng = lng;
+            // Save to techsOnline so the auto-assign system can find nearby techs
+            if (myPhone) {
+              firebase.database().ref('techsOnline/' + myPhone).set({
+                lat, lng,
+                name: Store.get('techName', 'Technician'),
+                lastSeen: Date.now()
+              });
+            }
+            // Re-filter pending jobs now that we have GPS
+            // Force re-trigger orders listener
+            const ordersRef2 = firebase.database().ref('orders');
+            ordersRef2.once('value', (snap) => { onOrders(snap); });
+          }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 });
+        }
+        initTechGPS();
+
+        // ── Text-based order matching (fallback when GPS is unavailable) ─────────
+        function textMatchOrder(order) {
+          const techLoc     = Store.get('techLocation', '').toLowerCase().trim();
+          const techPincode = Store.get('techPincode', '').toLowerCase().trim();
+          if (techLoc) {
+            const orderLoc = (order.location || '').toLowerCase().trim();
+            if (!orderLoc.includes(techLoc) && !techLoc.includes(orderLoc)) return false;
+          }
+          if (techPincode) {
+            const orderPincode = (order.pincode || '').toLowerCase().trim();
+            if (orderPincode && orderPincode !== techPincode) return false;
+          }
+          return true;
+        }
+
+        // ── Auto-accept order (called by auto-assign) ────────────────────────────
+        async function autoAcceptOrder(order) {
+          try {
+            const snap = await firebase.database().ref('orders/' + order.id).once('value');
+            if (!snap.exists()) { autoAssignRunning = false; return; }
+            const current = snap.val();
+            if (current.status !== 'pending' || current.autoAssignedBy) {
+              autoAssignRunning = false;
+              return; // Another tech already claimed it
+            }
+            const name = Store.get('techName', 'Technician');
+            const loc = Store.get('techLocation', '');
+            const phone = Store.get('techPhone', '');
+            Store.set('currentOrderId', order.id);
+            await firebase.database().ref('orders/' + order.id).update({
+              status: 'accepted',
+              techPhone: phone,
+              techName: name,
+              autoAssignedBy: phone,
+              autoAssignTime: Date.now()
+            });
+            firebase.database().ref('techInfo').set({ name, location: loc, phone });
+            const area = (order.location || '').toLowerCase().trim();
+            if (area) {
+              firebase.database().ref('areaAssignments/' + area).set({ name, phone, location: loc });
+            }
+            showAlert('✅ Auto-Assigned!', `${order.customerName}'s job (${order.brand} ${order.repair}) was auto-assigned to you as the nearest technician!`);
+          } catch (e) {
+            console.log('Auto-assign failed (another tech may have claimed it):', e.message);
+          }
+          autoAssignRunning = false;
+        }
+
         // Listen for orders
         const ordersRef = firebase.database().ref('orders');
         const onOrders = (snap) => {
-          const pending = [], completed = [];
+          const allPending = [], completed = [];
           let ongoing = null, count = 0;
           dailyCompletedCount = 0;
 
           snap.forEach(child => {
             const order = { id: child.key, ...child.val() };
-            if (order.status === 'pending') pending.push(order);
+            if (order.status === 'pending')   allPending.push(order);
             if (order.status === 'accepted') {
               // Only mark as ongoing if THIS tech accepted the job
               if (order.techPhone === myPhone) ongoing = order;
@@ -348,25 +450,41 @@ Router.register('tech-home', {
             if (order.status === 'completed') { completed.push(order); count++; dailyCompletedCount++; }
           });
 
-          // Filter pending jobs by technician's location area AND pincode
-          const techLoc     = Store.get('techLocation', '').toLowerCase().trim();
-          const techPincode = Store.get('techPincode', '').toLowerCase().trim();
-          let filteredPending = pending;
+          // ── STEP 1: Filter pending jobs by GPS distance (preferred) ───────────
+          let pending = allPending;
 
-          // Use flexible location matching: check if one contains the other
-          // This handles Google Places formatting differences (e.g. "Kukatpally" vs "Kukatpally, Hyderabad")
-          if (techLoc) {
-            filteredPending = filteredPending.filter(o => {
-              const orderLoc = (o.location || '').toLowerCase().trim();
-              return orderLoc.includes(techLoc) || techLoc.includes(orderLoc);
+          if (myLat !== 17.3850 || myLng !== 78.4867) {
+            // GPS is available — filter by actual geo-distance
+            pending = pending.filter(o => {
+              if (o.custLat && o.custLng) {
+                const d = parseFloat(calcDistance(myLat, myLng, o.custLat, o.custLng));
+                return !isNaN(d) && d <= RADIUS_KM;
+              }
+              // Fallback: if order has no GPS coords, use text matching
+              return textMatchOrder(o);
             });
+            // Sort by distance (closest first)
+            pending.sort((a, b) => {
+              const dA = a.custLat ? parseFloat(calcDistance(myLat, myLng, a.custLat, a.custLng)) : Infinity;
+              const dB = b.custLat ? parseFloat(calcDistance(myLat, myLng, b.custLat, b.custLng)) : Infinity;
+              return dA - dB;
+            });
+          } else {
+            // ── STEP 2: Fallback — text-based location/pincode matching ─────────
+            pending = pending.filter(o => textMatchOrder(o));
           }
-          if (techPincode) {
-            filteredPending = filteredPending.filter(o => {
-              const orderPincode = (o.pincode || '').toLowerCase().trim();
-              // If the order has no pincode (older orders), still show it
-              if (!orderPincode) return true;
-              return orderPincode === techPincode;
+
+          // ── STEP 3: Auto-assign nearest tech for close-by jobs ────────────────
+          if (!ongoing && (myLat !== 17.3850 || myLng !== 78.4867)) {
+            pending.forEach(order => {
+              if (!prevPendingIds.has(order.id) && order.custLat && order.custLng) {
+                const d = parseFloat(calcDistance(myLat, myLng, order.custLat, order.custLng));
+                if (!isNaN(d) && d <= AUTO_ASSIGN_RADIUS && !autoAssignRunning) {
+                  autoAssignRunning = true;
+                  const delay = Math.random() * 2000; // 0-2 seconds
+                  setTimeout(() => { autoAcceptOrder(order); }, delay);
+                }
+              }
             });
           }
 
@@ -376,7 +494,7 @@ Router.register('tech-home', {
 
           // Show browser notifications for NEW pending orders (skip on first load to avoid spamming)
           if (!isFirstLoad) {
-            filteredPending.forEach(o => {
+            pending.forEach(o => {
               if (!prevPendingIds.has(o.id)) {
                 showBrowserNotification(
                   '🔔 New Job Request!',
@@ -387,10 +505,19 @@ Router.register('tech-home', {
             });
           }
           isFirstLoad = false;
-          prevPendingIds = new Set(filteredPending.map(o => o.id));
+          prevPendingIds = new Set(pending.map(o => o.id));
 
-          pending.length = 0;
-          pending.push(...filteredPending);
+          // Attach GPS distance to pending jobs for display
+          if (myLat !== 17.3850 || myLng !== 78.4867) {
+            pending = pending.map(o => {
+              let distKm = null;
+              if (o.custLat && o.custLng) {
+                const d = parseFloat(calcDistance(myLat, myLng, o.custLat, o.custLng));
+                if (!isNaN(d)) distKm = d;
+              }
+              return { ...o, gpsDistance: distKm };
+            });
+          }
 
           document.getElementById('totalJobs').textContent = dailyCompletedCount;
           document.getElementById('pendingCount').textContent = pending.length;
@@ -559,6 +686,10 @@ Router.register('tech-home', {
             areaAssignmentsRef.off('value');
             custLocRef.off('value', onCustLoc);
             stopGPS();
+            // Remove tech from online tracking on cleanup
+            if (myPhone) {
+              firebase.database().ref('techsOnline/' + myPhone).remove();
+            }
             if (map) { map.remove(); window._currentMap = null; }
             delete window.switchTechTab;
             delete window.acceptJob;

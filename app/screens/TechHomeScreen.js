@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { onValue, ref, remove, set, update } from 'firebase/database';
+import { get, onValue, ref, remove, set, update } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert, Linking,
@@ -13,6 +13,15 @@ import {
 } from 'react-native';
 import { db } from '../firebase/config';
 import { calcDistance } from '../utils/distance';
+
+// ── GPS-based matching configuration ─────────────────────────────────────
+// RADIUS_KM:         Maximum distance (km) to show pending jobs to a tech
+// AUTO_ASSIGN_RADIUS: Distance (km) within which a job is auto-assigned
+// If GPS is unavailable, falls back to text-based location/pincode matching
+const RADIUS_KM = 10          // Show jobs within 10km
+const AUTO_ASSIGN_RADIUS = 5  // Auto-assign jobs within 5km
+// ─────────────────────────────────────────────────────────────────────────
+
 import {
   notifyCustomerJobDone,
   notifyCustomerTechAccepted,
@@ -20,6 +29,8 @@ import {
   notifyCustomerTechNearby,
   notifyTechJobDone,
   notifyTechNewJob,
+  playJobCompleteSound,
+  playNewJobSound,
 } from '../utils/notifications';
 
 // ✅ Safe import — won't crash if react-native-maps is not installed
@@ -61,11 +72,18 @@ export default function TechHomeScreen() {
   const sentArrived       = useRef(false)
   const prevPendingIds    = useRef(new Set())
   const areaAssignments   = useRef({})
+  const autoAssignRunning = useRef(false) // prevent double auto-assign attempts
 
   useEffect(() => {
     loadTech()
     const unsub = listenOrders()
-    return () => { unsub(); if (watchRef.current) watchRef.current.remove() }
+    return () => {
+      unsub()
+      if (watchRef.current) watchRef.current.remove()
+      // Remove tech from online tracking on unmount
+      const phone = techPhoneRef.current
+      if (phone) remove(ref(db, 'techsOnline/' + phone))
+    }
   }, [])
 
   useEffect(() => {
@@ -108,6 +126,31 @@ export default function TechHomeScreen() {
     techPincodeRef.current = (pi || '').toLowerCase().trim()
     techPhoneRef.current = p || ''
     if (t) techPushToken.current = t
+
+    // ── GPS-based matching: fetch current location for distance calculations ──
+    // This one-time position is used to filter pending jobs by actual geo-distance
+    // instead of relying purely on text-based area/pincode matching.
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status === 'granted') {
+        const pos = await Location.getCurrentPositionAsync({})
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        setMyLat(lat)
+        setMyLng(lng)
+        // Save to techsOnline so the auto-assign system can find nearby techs
+        if (p) {
+          set(ref(db, 'techsOnline/' + p), {
+            lat,
+            lng,
+            name: n || 'Technician',
+            lastSeen: Date.now()
+          })
+        }
+      }
+    } catch (e) {
+      console.warn('GPS not available, falling back to text-based matching')
+    }
   }
 
   const logout = () => {
@@ -115,6 +158,8 @@ export default function TechHomeScreen() {
       { text: 'Cancel' },
       {
         text: 'Logout', style: 'destructive', onPress: async () => {
+          const phone = techPhoneRef.current
+          if (phone) remove(ref(db, 'techsOnline/' + phone))
           await AsyncStorage.clear()
           router.replace('/screens/RoleScreen')
         }
@@ -132,10 +177,48 @@ export default function TechHomeScreen() {
         const lat = pos.coords.latitude, lng = pos.coords.longitude
         setMyLat(lat); setMyLng(lng)
         set(ref(db, 'techLocation'), { lat, lng })
+        // Also keep techsOnline updated for GPS matching
+        const phone = techPhoneRef.current
+        if (phone) {
+          set(ref(db, 'techsOnline/' + phone), {
+            lat,
+            lng,
+            name: techName,
+            lastSeen: Date.now()
+          })
+        }
       }
     )
   }
 
+  // ── L2RF: GPS-based Proximity Matching + Auto-assign ─────────────────────
+  //
+  // FILTERING LOGIC (two-tier approach):
+  //
+  // 1. GPS-BASED (preferred):
+  //    - When a tech's GPS is available, we calculate the Haversine distance
+  //      from the tech's current location to each order's saved GPS coords
+  //      (custLat/custLng, saved when the customer booked).
+  //    - Only orders within RADIUS_KM (10km) are shown.
+  //    - Orders within AUTO_ASSIGN_RADIUS (5km) are auto-assigned.
+  //
+  // 2. TEXT-BASED (fallback):
+  //    - If GPS is not available for either the tech or the order, we fall
+  //      back to matching by location text (area name) and pincode.
+  //    - Uses substring matching: checks if order location contains the tech's
+  //      area string OR vice versa (handles formatting differences).
+  //    - "Kukatpally" matches "Kukatpally, Hyderabad" and vice versa.
+  //    - Pincode must match exactly, unless the order has no pincode.
+  //
+  // AUTO-ASSIGN LOGIC:
+  //  - When a NEW pending order appears (not seen before) and the tech has no
+  //    ongoing job, the tech calculates their distance to the order.
+  //  - If distance <= AUTO_ASSIGN_RADIUS, the tech attempts to claim the job
+  //    by updating the order atomically.
+  //  - The first tech to write wins — subsequent techs will see the order is
+  //    already accepted and skip it.
+  //  - A small random delay (0-2s) is added to reduce race conditions.
+  // ─────────────────────────────────────────────────────────────────────────
   const listenOrders = () => {
     // Listen for area-to-technician assignments
     const unsubArea = onValue(ref(db, 'areaAssignments'), snap => {
@@ -168,41 +251,75 @@ export default function TechHomeScreen() {
         }
       })
 
-      // Filter pending jobs by technician's location area and pincode
-      const filterLoc     = techLocRef.current
-      const filterPincode = techPincodeRef.current
-      const myPhone       = techPhoneRef.current
+      const myPhone = techPhoneRef.current
 
+      // ── STEP 1: Filter pending jobs by GPS distance (preferred) ───────────
       let pending = allPending
+      const techLat = myLat
+      const techLng = myLng
 
-      // Use flexible location matching: check if one contains the other
-      // This handles Google Places formatting differences (e.g. "Kukatpally" vs "Kukatpally, Hyderabad")
-      if (filterLoc) {
+      if (techLat !== 17.3850 || techLng !== 78.4867) {
+        // GPS is available — filter by actual geo-distance
         pending = pending.filter(o => {
-          const orderLoc = (o.location || '').toLowerCase().trim()
-          return orderLoc.includes(filterLoc) || filterLoc.includes(orderLoc)
+          if (o.custLat && o.custLng) {
+            const d = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
+            return !isNaN(d) && d <= RADIUS_KM
+          }
+          // Fallback: if order has no GPS coords, use text matching
+          return textMatchOrder(o)
+        })
+        // Sort by distance (closest first) — like Rapido shows nearest rides first
+        pending.sort((a, b) => {
+          const dA = a.custLat ? parseFloat(calcDistance(techLat, techLng, a.custLat, a.custLng)) : Infinity
+          const dB = b.custLat ? parseFloat(calcDistance(techLat, techLng, b.custLat, b.custLng)) : Infinity
+          return dA - dB
+        })
+      } else {
+        // ── STEP 2: Fallback — text-based location/pincode matching ─────────
+        // This handles Google Places formatting differences
+        // (e.g. "Kukatpally" vs "Kukatpally, Hyderabad")
+        pending = pending.filter(o => textMatchOrder(o))
+      }
+
+      // ── STEP 3: Auto-assign nearest tech for close-by jobs ────────────────
+      // Only if tech has no ongoing job and we have GPS
+      if (!ongoing && (techLat !== 17.3850 || techLng !== 78.4867)) {
+        pending.forEach(order => {
+          // Only auto-assign brand-new orders (not previously seen)
+          if (!prevPendingIds.current.has(order.id) && order.custLat && order.custLng) {
+            const d = parseFloat(calcDistance(techLat, techLng, order.custLat, order.custLng))
+            if (!isNaN(d) && d <= AUTO_ASSIGN_RADIUS && !autoAssignRunning.current) {
+              autoAssignRunning.current = true
+              // Add small random delay to reduce race conditions between techs
+              const delay = Math.random() * 2000 // 0-2 seconds
+              setTimeout(() => {
+                autoAcceptOrder(order)
+              }, delay)
+            }
+          }
         })
       }
-      if (filterPincode) {
-        pending = pending.filter(o => {
-          const orderPincode = (o.pincode || '').toLowerCase().trim()
-          // If the order has no pincode (older orders), still show it
-          if (!orderPincode) return true
-          return orderPincode === filterPincode
-        })
-      }
 
-      // Area assignment: do NOT block pending jobs from being visible to other techs.
-      // The area assignment is only used when a tech accepts a job (to track who's serving which area),
-      // but all pending jobs should be visible to all techs in that location/pincode.
-
-      // Send notifications safely — catch errors so they don't block state updates
+      // Send notifications AND play sound for new pending jobs
       pending.forEach(order => {
         if (!prevPendingIds.current.has(order.id)) {
           notifyTechNewJob(techPushToken.current, order.customerName, order.brand, order.repair).catch(() => {})
+          playNewJobSound().catch(() => {})
         }
       })
       prevPendingIds.current = new Set(pending.map(o => o.id))
+
+      // Also attach GPS distance to pending jobs for display
+      if (techLat !== 17.3850 || techLng !== 78.4867) {
+        pending = pending.map(o => {
+          let distKm = null
+          if (o.custLat && o.custLng) {
+            const d = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
+            if (!isNaN(d)) distKm = d
+          }
+          return { ...o, gpsDistance: distKm }
+        })
+      }
 
       setPending(pending)
       setOngoing(ongoing)
@@ -219,6 +336,76 @@ export default function TechHomeScreen() {
     })
 
     return () => { unsub(); unsubArea() }
+  }
+
+  // ── Text-based order matching (fallback when GPS is unavailable) ─────────
+  // Checks if order location text contains the tech's area OR vice versa,
+  // and if pincodes match (when both are present).
+  function textMatchOrder(order) {
+    const filterLoc = techLocRef.current
+    const filterPincode = techPincodeRef.current
+
+    if (filterLoc) {
+      const orderLoc = (order.location || '').toLowerCase().trim()
+      if (!orderLoc.includes(filterLoc) && !filterLoc.includes(orderLoc)) {
+        return false
+      }
+    }
+    if (filterPincode) {
+      const orderPincode = (order.pincode || '').toLowerCase().trim()
+      // If the order has no pincode (older orders), still show it
+      if (orderPincode && orderPincode !== filterPincode) {
+        return false
+      }
+    }
+    return true
+  }
+
+  // ── Auto-accept order (called by auto-assign) ────────────────────────────
+  // Each tech checks if the order is still pending, then atomically claims it.
+  // The first tech to update wins — subsequent techs see it's already claimed.
+  async function autoAcceptOrder(order) {
+    try {
+      const name = techName
+      const phone = techPhoneRef.current || ''
+      const loc = techLoc
+
+      // Double-check the order is still pending by reading current value
+      const currentSnap = await get(ref(db, 'orders/' + order.id))
+      if (!currentSnap.exists()) { autoAssignRunning.current = false; return }
+      const current = currentSnap.val()
+      if (current.status !== 'pending' || current.autoAssignedBy) {
+        autoAssignRunning.current = false
+        return // Another tech already claimed it
+      }
+
+      // Try to claim — atomic update, first write wins
+      await update(ref(db, 'orders/' + order.id), {
+        status: 'accepted',
+        techPhone: phone,
+        techName: name,
+        autoAssignedBy: phone,
+        autoAssignTime: Date.now()
+      })
+
+      await AsyncStorage.setItem('currentOrderId', order.id)
+      set(ref(db, 'techInfo'), { name, location: loc, phone })
+
+      // Claim area
+      const area = (order.location || '').toLowerCase().trim()
+      if (area) {
+        set(ref(db, 'areaAssignments/' + area), { name, phone, location: loc })
+      }
+
+      Alert.alert('✅ Auto-Assigned!', `${order.customerName}'s job (${order.brand} ${order.repair}) was auto-assigned to you as the nearest technician!`)
+      if (order.customerPushToken) {
+        await notifyCustomerTechAccepted(order.customerPushToken, name)
+      }
+    } catch (e) {
+      // Another tech likely got it first — that's fine
+      console.log('Auto-assign failed (another tech may have claimed it):', e.message)
+    }
+    autoAssignRunning.current = false
   }
 
   const acceptJob = async (orderId, order) => {
@@ -258,7 +445,7 @@ export default function TechHomeScreen() {
       { text: 'Cancel' },
       {
         text: 'Complete ✅', onPress: async () => {
-          update(ref(db, 'orders/' + orderId), { status: 'completed' })
+          update(ref(db, 'orders/' + orderId), { status: 'completed', completedTime: Date.now() })
           remove(ref(db, 'techLocation'))
           remove(ref(db, 'techInfo'))
           remove(ref(db, 'custLocation'))
@@ -267,6 +454,7 @@ export default function TechHomeScreen() {
             await notifyCustomerJobDone(ongoingJob.customerPushToken)
           }
           await notifyTechJobDone()
+          playJobCompleteSound().catch(() => {})
           Alert.alert('🎉 Job Complete!', 'Great work! Customer will be asked to review.')
         }
       }
@@ -349,6 +537,12 @@ export default function TechHomeScreen() {
           <Text style={s.jobType}>📱 {ongoingJob.brand} — {ongoingJob.repair}</Text>
           <Text style={s.jobLoc}>📍 {ongoingJob.location}</Text>
           {ongoingJob.pincode ? <Text style={s.jobLoc}>📮 {ongoingJob.pincode}</Text> : null}
+          {ongoingJob.description ? (
+            <View style={s.ongoingDesc}>
+              <Text style={s.ongoingDescLabel}>📝 Customer's Description:</Text>
+              <Text style={s.ongoingDescText}>"{ongoingJob.description}"</Text>
+            </View>
+          ) : null}
           <Text style={s.inProgressTxt}>⚡ In Progress...</Text>
 
           <View style={s.distBanner}>
@@ -457,40 +651,60 @@ export default function TechHomeScreen() {
           <Text style={{ fontSize: 13, color: '#888', marginTop: 5 }}>No pending jobs right now</Text>
         </View>
       ) : (
-        pendingJobs.map(order => (
-          <View key={order.id} style={s.jobCard}>
-            <View style={s.newBadge}><Text style={s.newBadgeTxt}>NEW</Text></View>
-            <Text style={s.jobCust}>👤 {order.customerName}</Text>
-            <Text style={s.jobType}>📱 {order.brand} — {order.repair}</Text>
-            <Text style={s.jobLoc}>📍 {order.location}</Text>
-            {order.pincode ? <Text style={s.jobLoc}>📮 {order.pincode}</Text> : null}
-            <Text style={s.jobTime}>🕐 {order.time}</Text>
-            <View style={s.jobActions}>
-              {ongoingJob ? (
-                <View style={{ flex: 1, backgroundColor: '#fff3e0', padding: 10, borderRadius: 10, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#e65100' }}>⚠️ Complete current job first</Text>
+        pendingJobs.map(order => {
+          // Show GPS distance if available
+          const distDisplay = order.gpsDistance != null
+            ? (order.gpsDistance <= AUTO_ASSIGN_RADIUS
+                ? `📍 ${order.gpsDistance.toFixed(1)} km (auto-assign range 🎯)`
+                : `📍 ${order.gpsDistance.toFixed(1)} km away`)
+            : null
+
+          return (
+            <View key={order.id} style={s.jobCard}>
+              <View style={s.newBadge}><Text style={s.newBadgeTxt}>NEW</Text></View>
+              <Text style={s.jobCust}>👤 {order.customerName}</Text>
+              <Text style={s.jobType}>📱 {order.brand} — {order.repair}</Text>
+              <Text style={s.jobLoc}>📍 {order.location}</Text>
+              {order.pincode ? <Text style={s.jobLoc}>📮 {order.pincode}</Text> : null}
+              {order.description ? (
+                <View style={s.descTag}>
+                  <Text style={s.descTagText}>📝 "{order.description.substring(0, 80)}{order.description.length > 80 ? '...' : ''}"</Text>
                 </View>
-              ) : (
-                <>
-                  <TouchableOpacity style={s.rejectBtn} onPress={() => rejectJob(order.id)}>
-                    <Text style={s.rejectTxt}>✕ Reject</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.acceptBtn} onPress={() => acceptJob(order.id, order)}>
-                    <Text style={s.acceptTxt}>✓ Accept</Text>
-                  </TouchableOpacity>
-                </>
+              ) : null}
+              <Text style={s.jobTime}>🕐 {order.time}</Text>
+              {/* GPS distance display — shows how far the customer is */}
+              {distDisplay && (
+                <Text style={[s.jobLoc, order.gpsDistance <= AUTO_ASSIGN_RADIUS && s.jobAutoRange]}>
+                  {distDisplay}
+                </Text>
+              )}
+              <View style={s.jobActions}>
+                {ongoingJob ? (
+                  <View style={{ flex: 1, backgroundColor: '#fff3e0', padding: 10, borderRadius: 10, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#e65100' }}>⚠️ Complete current job first</Text>
+                  </View>
+                ) : (
+                  <>
+                    <TouchableOpacity style={s.rejectBtn} onPress={() => rejectJob(order.id)}>
+                      <Text style={s.rejectTxt}>✕ Reject</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.acceptBtn} onPress={() => acceptJob(order.id, order)}>
+                      <Text style={s.acceptTxt}>✓ Accept</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+              {order.id && (
+                <TouchableOpacity
+                  style={s.pendingChatBtn}
+                  onPress={() => router.push(`/screens/ChatScreen?orderId=${order.id}&role=tech&customerName=${encodeURIComponent(order.customerName || 'Customer')}&techName=${encodeURIComponent(techName)}`)}
+                >
+                  <Text style={s.pendingChatTxt}>💬 Chat with Customer</Text>
+                </TouchableOpacity>
               )}
             </View>
-            {order.id && (
-              <TouchableOpacity
-                style={s.pendingChatBtn}
-                onPress={() => router.push(`/screens/ChatScreen?orderId=${order.id}&role=tech&customerName=${encodeURIComponent(order.customerName || 'Customer')}&techName=${encodeURIComponent(techName)}`)}
-              >
-                <Text style={s.pendingChatTxt}>💬 Chat with Customer</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        ))
+          )
+        })
       )}
 
       <View style={{ height: 90 }} />
@@ -521,6 +735,11 @@ export default function TechHomeScreen() {
               <Text style={s.compType}>📱 {order.brand} — {order.repair}</Text>
               <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📍 {order.location}</Text>
               {order.pincode ? <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📮 {order.pincode}</Text> : null}
+              {order.description ? (
+                <Text style={{ fontSize: 11, color: '#FF6B00', marginTop: 2, fontStyle: 'italic' }}>
+                  📝 "{order.description.substring(0, 50)}{order.description.length > 50 ? '...' : ''}"
+                </Text>
+              ) : null}
             </View>
             <View style={s.compRight}>
               <Text style={s.compPrice}>✅ Done</Text>
@@ -599,6 +818,7 @@ const s = StyleSheet.create({
   jobType:       { fontSize: 13, fontWeight: '700', color: '#FF6B00', marginTop: 4 },
   jobLoc:        { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 3 },
   jobTime:       { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 3 },
+  jobAutoRange:  { color: '#2e7d32', fontWeight: '800' },
   jobActions:    { flexDirection: 'row', gap: 10, marginTop: 15 },
   rejectBtn:     { flex: 1, backgroundColor: '#ffebee', padding: 12, borderRadius: 12, alignItems: 'center' },
   rejectTxt:     { color: '#c62828', fontSize: 14, fontWeight: '800' },
@@ -629,6 +849,13 @@ const s = StyleSheet.create({
   pendingChatBtn: { backgroundColor: '#FF6B00', padding: 10, borderRadius: 12, alignItems: 'center', marginTop: 8 },
   pendingChatTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
   completedCard: { backgroundColor: '#fff', borderRadius: 14, padding: 15, marginHorizontal: 15, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 2 },
+  // ── Description Styles ──
+  descTag:       { backgroundColor: '#fff8e1', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginTop: 4, alignSelf: 'flex-start' },
+  descTagText:   { fontSize: 11, color: '#e65100', fontWeight: '600', fontStyle: 'italic' },
+  ongoingDesc:   { backgroundColor: '#fff8e1', borderRadius: 10, padding: 10, marginTop: 6 },
+  ongoingDescLabel: { fontSize: 11, fontWeight: '800', color: '#e65100', marginBottom: 3 },
+  ongoingDescText:  { fontSize: 12, color: '#333', fontStyle: 'italic', lineHeight: 18 },
+
   compCust:      { fontSize: 13, fontWeight: '800', color: '#1A3A6B' },
   compType:      { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 3 },
   compRight:     { alignItems: 'flex-end' },

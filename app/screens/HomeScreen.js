@@ -13,6 +13,7 @@ import {
   View
 } from 'react-native';
 import { db } from '../firebase/config';
+import { calcDistance } from '../utils/distance';
 import {
   notifyCustomerBookingConfirmed,
   registerForNotifications,
@@ -36,6 +37,13 @@ export default function HomeScreen() {
   const [myOrders, setMyOrders]         = useState([])
   const [custPhone, setCustPhone]       = useState('')
   const [ordersFilter, setOrdersFilter] = useState('all') // 'all', 'active', 'completed'
+  const [description, setDescription] = useState('') // customer's problem description
+  // ── GPS-based ETA tracking from technician ─────────────────────────────────
+  const [techLat, setTechLat]       = useState(null)
+  const [techLng, setTechLng]       = useState(null)
+  const [custLat, setCustLat]       = useState(null)
+  const [custLng, setCustLng]       = useState(null)
+  const [trackingOrderId, setTrackingOrderId] = useState(null) // which accepted order we're tracking
 
   // ── Load FRESH data every time screen is focused ──────────────────────────
   useEffect(() => {
@@ -44,6 +52,35 @@ export default function HomeScreen() {
       if (token) AsyncStorage.setItem('pushToken', token)
     })
   }, [])
+
+  // ── Listen for technician's live location when we have an accepted order ──
+  useEffect(() => {
+    if (!trackingOrderId) return
+
+    // Listen for technician's GPS location
+    const techUnsub = onValue(ref(db, 'techLocation'), snap => {
+      if (snap.exists()) {
+        setTechLat(snap.val().lat)
+        setTechLng(snap.val().lng)
+      }
+    })
+
+    // Also get customer's own location for distance calculation
+    ;(async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync()
+        if (status === 'granted') {
+          const pos = await Location.getCurrentPositionAsync({})
+          setCustLat(pos.coords.latitude)
+          setCustLng(pos.coords.longitude)
+        }
+      } catch (e) {}
+    })()
+
+    return () => {
+      techUnsub()
+    }
+  }, [trackingOrderId])
 
   const loadUser = async () => {
     const n = await AsyncStorage.getItem('custName')
@@ -61,12 +98,18 @@ export default function HomeScreen() {
     onValue(ref(db, 'orders'), snap => {
       if (!snap.exists()) { setMyOrders([]); return }
       const orders = []
+      let foundAccepted = false
       snap.forEach(child => {
         const o = { id: child.key, ...child.val() }
         if (o.customerPhone === phone) {
           orders.push(o)
+          if (o.status === 'accepted') {
+            foundAccepted = true
+            setTrackingOrderId(o.id)
+          }
         }
       })
+      if (!foundAccepted) setTrackingOrderId(null)
       setMyOrders(orders.reverse())
     })
   }
@@ -76,6 +119,7 @@ export default function HomeScreen() {
     setBrands(type === 'phone' ? PHONE_BRANDS : LAPTOP_BRANDS)
     setSelectedBrand(null)
     setRepairs([])
+    setDescription('') // clear description when switching device type
   }
 
   const selectBrand = (brand) => {
@@ -93,11 +137,15 @@ export default function HomeScreen() {
     await AsyncStorage.setItem('lastBrand',  selectedBrand)
     await AsyncStorage.setItem('lastRepair', repair)
 
+    // Get GPS coords to save with the order (for GPS-based technician matching)
+    let orderLat = null, orderLng = null
     try {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status === 'granted') {
         const pos = await Location.getCurrentPositionAsync({})
-        set(ref(db, 'custLocation'), { lat: pos.coords.latitude, lng: pos.coords.longitude })
+        orderLat = pos.coords.latitude
+        orderLng = pos.coords.longitude
+        set(ref(db, 'custLocation'), { lat: orderLat, lng: orderLng })
       }
     } catch (e) {}
 
@@ -109,9 +157,16 @@ export default function HomeScreen() {
       pincode,
       brand:              selectedBrand,
       repair,
+      description:        description.trim(), // customer's problem description
       status:             'pending',
       time:               new Date().toLocaleTimeString(),
+      // GPS coordinates for distance-based technician matching
+      custLat:            orderLat,
+      custLng:            orderLng,
     }
+
+    // Clear description after booking
+    setDescription('')
 
     try {
       const newOrderRef = await push(ref(db, 'orders'), order)
@@ -205,7 +260,21 @@ export default function HomeScreen() {
 
       {repairs.length > 0 && (
         <>
-          <Text style={s.sectionTitle}>Step 3 — What needs Repair?</Text>
+          <Text style={s.sectionTitle}>Step 3 — Describe the Issue</Text>
+          <View style={s.descBox}>
+            <Text style={s.descLabel}>📝 What's the problem? (so technician knows what to bring)</Text>
+            <TextInput
+              style={s.descInput}
+              placeholder="e.g. Screen cracked, phone not charging, battery draining fast..."
+              placeholderTextColor="#aaa"
+              multiline
+              numberOfLines={3}
+              value={description}
+              onChangeText={setDescription}
+            />
+          </View>
+
+          <Text style={s.sectionTitle}>Step 4 — Choose Repair Type</Text>
           {repairs.map(repair => (
             <TouchableOpacity key={repair} style={s.repairItem} onPress={() => bookRepair(repair)}>
               <Text style={s.repairText}>🔧 {repair}</Text>
@@ -269,9 +338,7 @@ export default function HomeScreen() {
               <Text style={[s.orderSubTabText, ordersFilter === tab.key && s.orderSubTabTextActive]}>{tab.label}</Text>
             </TouchableOpacity>
           ))}
-        </View>
-
-        {filtered.length === 0 ? (
+        </View>          {filtered.length === 0 ? (
           <View style={{ padding: 50, alignItems: 'center' }}>
             <Text style={{ fontSize: 50, marginBottom: 15 }}>📦</Text>
             <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3A6B' }}>No {ordersFilter === 'all' ? '' : ordersFilter} orders yet</Text>
@@ -281,6 +348,18 @@ export default function HomeScreen() {
           filtered.map((order, i) => {
             const statusColor = order.status === 'completed' ? '#2e7d32' : order.status === 'accepted' ? '#FF6B00' : '#888'
             const statusIcon = order.status === 'completed' ? '✅' : order.status === 'accepted' ? '🔧' : '⏳'
+
+            // ── Calculate GPS-based ETA for accepted orders ──────────────────
+            let customerEta = null
+            let customerDist = null
+            if (order.status === 'accepted' && techLat && techLng && custLat && custLng) {
+              const d = parseFloat(calcDistance(custLat, custLng, techLat, techLng))
+              const SPEED = 0.3 // km/min
+              const etaMins = Math.round(d / SPEED)
+              customerDist = d.toFixed(1) + ' km'
+              customerEta = '~' + Math.max(1, etaMins) + ' mins'
+            }
+
             return (
               <TouchableOpacity key={i} style={s.orderCard}>
                 <View style={s.orderLeft}>
@@ -289,6 +368,17 @@ export default function HomeScreen() {
                   <Text style={s.orderLoc}>📍 {order.location}</Text>
                   {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
                   <Text style={s.orderTime}>🕐 {order.time}</Text>
+                  {/* Show technician name for accepted orders */}
+                  {order.status === 'accepted' && order.techName && (
+                    <Text style={s.orderTech}>🛵 {order.techName} is coming!</Text>
+                  )}
+                  {/* GPS-based ETA display for accepted orders */}
+                  {order.status === 'accepted' && customerDist && (
+                    <View style={s.custEtaRow}>
+                      <Text style={s.custEtaText}>📍 {customerDist} away</Text>
+                      <Text style={s.custEtaBadge}>{customerEta}</Text>
+                    </View>
+                  )}
                 </View>
                 <View style={s.orderRight}>
                   <Text style={[s.orderStatus, { color: statusColor }]}>{statusIcon}</Text>
@@ -385,6 +475,15 @@ const s = StyleSheet.create({
   orderStatusLabel: { fontSize: 11, fontWeight: '800', textTransform: 'capitalize' },
   orderChatBtn:     { backgroundColor: '#FF6B00', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginTop: 4 },
   orderChatTxt:     { color: '#fff', fontSize: 10, fontWeight: '800' },
+
+  // ── Description Input ──
+  descBox:          { backgroundColor: '#fff', borderRadius: 14, marginHorizontal: 15, marginBottom: 10, padding: 14, elevation: 2 },
+  descLabel:        { fontSize: 12, fontWeight: '700', color: '#1A3A6B', marginBottom: 8 },
+  descInput:        { backgroundColor: '#f8f8f8', borderRadius: 10, padding: 12, fontSize: 13, color: '#333', minHeight: 80, textAlignVertical: 'top' },
+  orderTech:        { fontSize: 12, fontWeight: '700', color: '#FF6B00', marginTop: 4 },
+  custEtaRow:       { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, backgroundColor: '#e8f5e9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, alignSelf: 'flex-start' },
+  custEtaText:      { fontSize: 11, fontWeight: '700', color: '#2e7d32' },
+  custEtaBadge:     { fontSize: 10, fontWeight: '800', color: '#fff', backgroundColor: '#FF6B00', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
 
   // ── Order Sub-Tabs ──
   orderSubTabs:     { flexDirection: 'row', marginHorizontal: 15, marginBottom: 12, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', elevation: 2 },

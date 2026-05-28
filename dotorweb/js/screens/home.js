@@ -214,16 +214,31 @@ Router.register('home', {
           }
         };
         custLocRef.on('value', onCustLoc);
+
+        // ── Store customer GPS in window for ETA calculations ────────────────
+        window._custEtaData = null;
         custLocUnsub = () => custLocRef.off('value', onCustLoc);
 
-        // ── Listen for technician location (proximity detection) ──────────────
+        // ── Listen for technician location (proximity detection + ETA display) ─
         const techLocRef = firebase.database().ref('techLocation');
         const onTechLoc = (snap) => {
-          if (!snap.exists() || !hasAcceptedOrder || notifTechNearby || !custLat || !custLng) return;
+          if (!snap.exists() || !hasAcceptedOrder || !custLat || !custLng) return;
           const { lat, lng } = snap.val();
           if (!lat || !lng) return;
           const d = parseFloat(calcDistance(custLat, custLng, lat, lng));
-          if (!isNaN(d) && d <= 1.0) {
+          const SPEED = 0.3; // km/min
+          const etaMins = Math.round(d / SPEED);
+
+          // Update ETA data for customer display
+          window._custEtaData = {
+            dist: d.toFixed(1) + ' km',
+            eta: '~' + Math.max(1, etaMins) + ' mins'
+          };
+          // Re-render orders to show live ETA
+          if (cachedOrders.length > 0) renderCustomerOrders(cachedOrders);
+
+          // Proximity notification (within 1km)
+          if (!isNaN(d) && d <= 1.0 && !notifTechNearby) {
             notifTechNearby = true;
             showCustBrowserNotification(
               '🚗 Technician Nearby!',
@@ -283,7 +298,13 @@ Router.register('home', {
                   'job-complete'
                 );
               }
-              if (o.customerPhone === myPhone) orders.push(o);
+              if (o.customerPhone === myPhone) {
+                // Add GPS distance/ETA if order is accepted and techLocation exists
+                if (o.status === 'accepted') {
+                  // We'll update ETA live via techLocation listener below
+                }
+                orders.push(o);
+              }
             });
             prevOrderStatuses = currentStatuses;
             orders.reverse();
@@ -327,7 +348,16 @@ Router.register('home', {
             document.getElementById('custOrdersList').innerHTML = filtered.map(o => {
               const statusColor = o.status === 'completed' ? '#2e7d32' : o.status === 'accepted' ? 'var(--primary)' : 'var(--gray)';
               const statusIcon = o.status === 'completed' ? '✅' : o.status === 'accepted' ? '🔧' : '⏳';
-              return `
+              // Calculate GPS-based ETA for accepted orders
+          let custEtaHtml = ''
+          if (o.status === 'accepted' && o.techName) {
+            custEtaHtml = `<div class="order-tech-name">🛵 ${o.techName} is coming!</div>`
+            if (window._custEtaData && window._custEtaData.dist) {
+              custEtaHtml += `<div class="cust-eta-row"><span class="cust-eta-text">📍 ${window._custEtaData.dist} away</span><span class="cust-eta-badge">${window._custEtaData.eta}</span></div>`
+            }
+          }
+
+          return `
                 <div class="order-card">
                   <div class="order-left">
                     <div class="order-device">📱 ${o.brand}</div>
@@ -335,6 +365,7 @@ Router.register('home', {
                     <div class="order-location">📍 ${o.location}</div>
                     ${o.pincode ? `<div class="order-location">📮 ${o.pincode}</div>` : ''}
                     <div class="order-time">🕐 ${o.time}</div>
+                    ${custEtaHtml}
                   </div>
                   <div class="order-right">
                     <div style="font-size:20px;text-align:center">${statusIcon}</div>
@@ -423,7 +454,10 @@ Router.register('home', {
             brand: selectedBrand,
             repair: repair,
             status: 'pending',
-            time: new Date().toLocaleTimeString()
+            time: new Date().toLocaleTimeString(),
+            // GPS coordinates for distance-based technician matching
+            custLat: pos ? pos.lat : null,
+            custLng: pos ? pos.lng : null
           };
           try {
             const newRef = firebase.database().ref('orders').push(order);

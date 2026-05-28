@@ -122,7 +122,7 @@ export default function TechProfileScreen() {
 
   const MENU = [
     { icon: '💰', label: 'My Earnings',    sub: `₹${totalEarning} Total`, onPress: () => Alert.alert('Earnings', `Total: ₹${totalEarning}\nToday: ₹${todayEarning}\nThis Week: ₹${weekEarning}`) },
-    { icon: '📋', label: 'Job History',    sub: `${totalJobs} jobs done`, onPress: () => {} },
+    { icon: '📋', label: 'Job History',    sub: `${totalJobs} jobs done`, onPress: () => router.push('/screens/JobHistoryScreen') },
     { icon: '⭐', label: 'My Rating',      sub: `${rating} stars`,         onPress: () => Alert.alert('Rating', `Your rating: ${rating} ⭐`) },
     { icon: '🎁', label: 'Refer and Earn', sub: 'Get ₹100 per referral',  onPress: () => Alert.alert('Refer', 'Share DoToR and earn ₹100!') },
     { icon: '🏆', label: 'My Rewards',     sub: null,                      onPress: () => Alert.alert('Rewards', 'Coming Soon!') },
