@@ -18,6 +18,7 @@ import { db } from '../firebase/config';
 import { calcDistance } from '../utils/distance';
 import {
   notifyCustomerBookingConfirmed,
+  notifyTechsForNewOrder,
   registerForNotifications,
 } from '../utils/notifications';
 
@@ -231,6 +232,13 @@ export default function HomeScreen() {
       await AsyncStorage.setItem('lastCustName', name)
 
       await notifyCustomerBookingConfirmed(selectedBrand, repair)
+
+      // ── Free push notification to technicians (no Cloud Functions needed!) ──
+      // Sends directly from customer's device via Expo Push API (free)
+      notifyTechsForNewOrder(order, orderId).catch(err =>
+        console.error('⚠️ notifyTechsForNewOrder failed (non-blocking):', err)
+      );
+
       Alert.alert(
         '✅ Booking Confirmed!',
         `Brand: ${selectedBrand}\nRepair: ${repair}\n\nTrack your technician?`,

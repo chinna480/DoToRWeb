@@ -9,6 +9,9 @@ import { Audio } from 'expo-av'
 import * as Device from 'expo-device'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
+import { db } from '../firebase/config'
+import { ref, get } from 'firebase/database'
+import { calcDistance } from './distance'
 
 // ── Configure how notifications appear when app is in foreground ──────────────
 Notifications.setNotificationHandler({
@@ -322,4 +325,156 @@ export async function notifyCustomerBookingConfirmed(brand, repair) {
     '✅ Booking Confirmed!',
     `${brand} ${repair} — A technician will be assigned shortly.`
   )
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. FREE ALTERNATIVE TO CLOUD FUNCTIONS — Notify techs directly from app
+//    No server/Cloud Functions needed! Uses customer's device to send
+//    push notifications to nearby technicians via Expo Push API (free).
+//    Handles the "app closed" scenario by falling back to ALL registered techs.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * After a customer books a repair, this sends push notifications to technicians.
+ * Call this after successfully creating an order in Firebase.
+ *
+ * Flow:
+ * 1. Reads techsOnline to find nearby technicians (GPS-based)
+ * 2. Calculates distance using Haversine formula
+ * 3. Sends Expo push to nearby techs within 10km
+ * 4. If no nearby techs found, falls back to ALL registered techs
+ *    (handles the "app completely closed" scenario)
+ *
+ * @param {object} order - The order object that was just created
+ * @param {number} orderId - The Firebase key of the new order
+ */
+export async function notifyTechsForNewOrder(order, orderId) {
+  const RADIUS_KM = 10;
+
+  const orderLat = order.custLat;
+  const orderLng = order.custLng;
+
+  console.log('🔍 [Client] Notifying techs for new order:', order.customerName);
+
+  let notifiedTechs = 0;
+
+  try {
+    // ── STEP 1: Try to find nearby techs via GPS (techsOnline) ──
+    const techsSnap = await get(ref(db, 'techsOnline'));
+
+    if (techsSnap.exists() && orderLat && orderLng) {
+      const nearbyTechs = [];
+
+      techsSnap.forEach(child => {
+        const techPhone = child.key;
+        const tech = child.val();
+        if (tech.lat && tech.lng) {
+          const dist = parseFloat(calcDistance(orderLat, orderLng, tech.lat, tech.lng));
+          console.log(`  📍 Tech ${techPhone}: ${dist.toFixed(1)} km away`);
+          if (dist <= RADIUS_KM) {
+            nearbyTechs.push({ phone: techPhone, distance: dist, name: tech.name || 'Technician' });
+          }
+        }
+      });
+
+      if (nearbyTechs.length > 0) {
+        console.log(`✅ Found ${nearbyTechs.length} nearby technician(s)`);
+        await notifyTechList(nearbyTechs, order, orderId);
+        notifiedTechs += nearbyTechs.length;
+      }
+    }
+
+    // ── STEP 2: Fallback — notify ALL registered techs (app-closed scenario) ──
+    if (notifiedTechs === 0) {
+      console.log('📡 No online/nearby techs — falling back to ALL registered techs');
+      const allTechs = [];
+
+      // Try techUsers first (primary path where tokens are saved)
+      const usersSnap = await get(ref(db, 'techUsers'));
+      if (usersSnap.exists()) {
+        usersSnap.forEach(child => {
+          allTechs.push({ phone: child.key, name: child.val().name || 'Technician' });
+        });
+      }
+
+      // Also try legacy techs path
+      const legacySnap = await get(ref(db, 'techs'));
+      if (legacySnap.exists()) {
+        const existingPhones = new Set(allTechs.map(t => t.phone));
+        legacySnap.forEach(child => {
+          if (!existingPhones.has(child.key)) {
+            allTechs.push({ phone: child.key, name: child.val().name || 'Technician' });
+          }
+        });
+      }
+
+      if (allTechs.length > 0) {
+        console.log(`📡 Notifying ${allTechs.length} registered tech(s)`);
+        await notifyTechList(allTechs, order, orderId);
+        notifiedTechs = allTechs.length;
+      }
+    }
+
+    if (notifiedTechs === 0) {
+      console.log('⏭️ No technicians could be notified');
+    } else {
+      console.log(`🎉 ${notifiedTechs} tech(s) notified!`);
+    }
+  } catch (err) {
+    console.error('❌ Error notifying techs:', err);
+  }
+}
+
+/**
+ * Internal helper: Send push to a list of techs by looking up their push tokens
+ */
+async function notifyTechList(techsList, order, orderId) {
+  const notifications = techsList.map(async (tech) => {
+    try {
+      const pushToken = await getTechToken(tech.phone);
+      if (pushToken) {
+        const distanceText = tech.distance != null ? ` (${tech.distance.toFixed(1)} km away)` : '';
+        await sendPushNotification(
+          pushToken,
+          '🔔 New Job Nearby!',
+          `${order.customerName} needs ${order.brand} ${order.repair}${distanceText}. Accept now!`,
+          { screen: 'TechHomeScreen', orderId }
+        );
+        console.log(`  📲 Sent push to ${tech.phone}`);
+      } else {
+        console.log(`  ⚠️ No push token for ${tech.phone}`);
+      }
+    } catch (err) {
+      console.error(`  ❌ Failed to notify ${tech.phone}:`, err.message);
+    }
+  });
+
+  await Promise.all(notifications);
+}
+
+/**
+ * Internal helper: Look up a tech's Expo push token from multiple Firebase paths
+ */
+async function getTechToken(techPhone) {
+  // Path 1: techUsers/{phone}/pushToken
+  const userSnap = await get(ref(db, `techUsers/${techPhone}`));
+  if (userSnap.exists() && userSnap.val().pushToken) {
+    return userSnap.val().pushToken;
+  }
+
+  // Path 2: pushTokens/{phone}
+  const tokenSnap = await get(ref(db, `pushTokens/${techPhone}`));
+  if (tokenSnap.exists()) {
+    const val = tokenSnap.val();
+    return typeof val === 'string' ? val : val.pushToken || null;
+  }
+
+  // Path 3: techs/{phone}/pushToken (legacy path)
+  const legacySnap = await get(ref(db, `techs/${techPhone}/pushToken`));
+  if (legacySnap.exists()) {
+    return legacySnap.val();
+  }
+
+  return null;
 }
