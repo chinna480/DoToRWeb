@@ -1,13 +1,10 @@
 // Home Screen - Customer booking
 const PHONE_BRANDS = ['iPhone', 'Samsung', 'OnePlus', 'Redmi', 'Vivo', 'Oppo', 'Realme', 'Nokia'];
 const LAPTOP_BRANDS = ['Dell', 'HP', 'Lenovo', 'MacBook', 'Asus', 'Acer', 'MSI', 'Sony'];
-const PHONE_REPAIRS = ['Screen Replacement', 'Battery Replacement', 'Charging Port', 'Speaker Issue', 'Camera Repair', 'Water Damage', 'Back Panel', 'Software Issue'];
-const LAPTOP_REPAIRS = ['Screen Replacement', 'Battery Replacement', 'Keyboard Repair', 'Charging Port', 'RAM Upgrade', 'Hard Disk', 'Overheating', 'Software Issue'];
 const WHY_DOTOR = [
   { icon: '🏠', title: 'Doorstep Service', desc: 'Technician comes to your home!' },
   { icon: '👀', title: 'Repair in Front of You', desc: '100% transparent process!' },
   { icon: '⚡', title: 'Fast Service', desc: 'Arrives within 60 mins!' },
-  { icon: '🛡️', title: '30 Day Warranty', desc: 'All repairs covered!' },
   { icon: '💰', title: 'Best Price', desc: 'No hidden charges ever!' },
 ];
 
@@ -15,7 +12,6 @@ Router.register('home', {
   render() {
     const name = Store.get('custName', 'Customer');
     const loc = Store.get('custLocation', 'Your Location');
-    const phone = Store.get('custPhone', '');
     const whyHtml = WHY_DOTOR.map(w => `
       <div class="why-item">
         <span class="why-icon">${w.icon}</span>
@@ -41,10 +37,6 @@ Router.register('home', {
                 <span style="font-size:24px">👤</span>
               </div>
             </div>
-            <div class="search-bar">
-              <span style="font-size:16px">🔍</span>
-              <input class="form-input" placeholder="Search repair service..." />
-            </div>
             <div class="banner" onclick="Router.navigate('schedule')">
               <div>
                 <div class="banner-text">🔧 Expert Repair at Your Doorstep!</div>
@@ -67,18 +59,26 @@ Router.register('home', {
               <div class="section-title">Step 2 — Select Brand</div>
               <div class="brand-grid" id="brandGrid"></div>
             </div>
-            <div id="repairSection" style="display:none">
-              <div class="section-title">Step 4 — What Needs Repair?</div>
-              <div class="quick-select-label">Quick select:</div>
-              <div class="repair-chip-grid" id="repairChipGrid"></div>
-              <div class="quick-select-label">Or type your own:</div>
+            <div id="actionSection" style="display:none">
+              <div class="section-title">Step 3 — Describe the Issue</div>
               <div class="desc-box">
+                <div class="desc-label">📝 What's the problem? (so technician knows what to bring)</div>
                 <textarea
-                  id="manualRepairInput"
+                  id="descriptionInput"
                   class="form-textarea"
-                  rows="2"
-                  placeholder="e.g. Screen Replacement, Battery Replacement, Water Damage..."
+                  rows="3"
+                  placeholder="e.g. Screen cracked, phone not charging, battery draining fast..."
                 ></textarea>
+              </div>
+              <div class="schedule-btn" onclick="Router.navigate('schedule')">
+                <span class="schedule-btn-icon">📅</span>
+                <div class="schedule-btn-content">
+                  <div class="schedule-btn-title">Need an Appointment?</div>
+                  <div class="schedule-btn-sub">Book a convenient time slot</div>
+                </div>
+                <span class="schedule-btn-arrow">→</span>
+              </div>
+              <div class="desc-box">
                 <button id="submitRepairBtn" class="submit-repair-btn" onclick="window.submitRepair()">
                   📋 Submit Repair Request
                 </button>
@@ -428,7 +428,7 @@ Router.register('home', {
             </div>
           `).join('');
           document.getElementById('brandSection').style.display = 'block';
-          document.getElementById('repairSection').style.display = 'none';
+          document.getElementById('actionSection').style.display = 'none';
         };
 
         window.selectBrand = (brand) => {
@@ -436,35 +436,24 @@ Router.register('home', {
           document.querySelectorAll('.brand-card').forEach(c => c.classList.remove('active'));
           document.querySelector(`.brand-card[data-brand="${brand}"]`).classList.add('active');
 
-          // Render repair chip buttons based on selected device
-          const repairs = selectedDevice === 'phone' ? PHONE_REPAIRS : LAPTOP_REPAIRS;
-          const chipGrid = document.getElementById('repairChipGrid');
-          chipGrid.innerHTML = repairs.map(r => `
-            <div class="repair-chip" data-repair="${r}" onclick="window.selectQuickRepair('${r}')">
-              🔧 ${r}
-            </div>
-          `).join('');
+          // Clear description input when switching brands
+          const descInput = document.getElementById('descriptionInput');
+          if (descInput) descInput.value = '';
 
-          document.getElementById('repairSection').style.display = 'block';
-          document.getElementById('manualRepairInput').value = '';
-          document.getElementById('manualRepairInput').focus();
+          document.getElementById('actionSection').style.display = 'block';
         };
 
         window.selectQuickRepair = (repair) => {
-          document.getElementById('manualRepairInput').value = repair;
-          document.getElementById('manualRepairInput').focus();
-          // Highlight the selected chip
-          document.querySelectorAll('.repair-chip').forEach(c => c.classList.remove('active'));
-          document.querySelector(`.repair-chip[data-repair="${repair}"]`).classList.add('active');
+          // No longer used - kept for compatibility
         };
 
         window.submitRepair = () => {
-          const repair = document.getElementById('manualRepairInput').value.trim();
-          if (!repair) {
-            showAlert('Missing', 'Please describe what repair you need.');
+          const desc = document.getElementById('descriptionInput')?.value?.trim();
+          if (!desc) {
+            showAlert('Missing', 'Please describe your issue.');
             return;
           }
-          window.bookRepair(repair);
+          window.bookRepair(desc);
         };
 
         window.bookRepair = async (repair) => {

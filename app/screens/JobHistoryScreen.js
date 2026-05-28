@@ -21,7 +21,7 @@ export default function JobHistoryScreen() {
   const [jobs, setJobs] = useState([])
   const [filter, setFilter] = useState('all') // 'all', 'today', 'week', 'month'
   const [search, setSearch] = useState('')
-  const [stats, setStats] = useState({ total: 0, today: 0, week: 0, month: 0, earnings: 0 })
+  const [stats, setStats] = useState({ total: 0, today: 0, week: 0, month: 0 })
   const [fullscreenImg, setFullscreenImg] = useState(null)
   const loadUnsub = useRef(null)
 
@@ -40,7 +40,6 @@ export default function JobHistoryScreen() {
       if (!snap.exists()) { setJobs([]); return }
 
       const allJobs = []
-      let totalEarnings = 0
       const now = new Date()
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
       const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).getTime()
@@ -70,7 +69,6 @@ export default function JobHistoryScreen() {
             _date: new Date(t).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
             _time: o.time || new Date(t).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
           })
-          if (o.status === 'completed') totalEarnings += 299
         }
       })
 
@@ -82,8 +80,7 @@ export default function JobHistoryScreen() {
         total: allJobs.length,
         today: todayCount,
         week: weekCount,
-        month: monthCount,
-        earnings: totalEarnings
+        month: monthCount
       })
     })
   }
@@ -126,7 +123,7 @@ export default function JobHistoryScreen() {
           </TouchableOpacity>
           <View>
             <Text style={s.headerTitle}>📋 Job History</Text>
-            <Text style={s.headerSub}>{stats.total} total jobs · ₹{stats.earnings} earned</Text>
+            <Text style={s.headerSub}>{stats.total} total jobs</Text>
           </View>
         </View>
 
@@ -145,24 +142,6 @@ export default function JobHistoryScreen() {
               <Text style={{ fontSize: 18, color: '#888' }}>✕</Text>
             </TouchableOpacity>
           ) : null}
-        </View>
-
-        {/* EARNINGS BANNER */}
-        <View style={s.earningsBanner}>
-          <View style={s.earnStat}>
-            <Text style={s.earnNum}>₹{stats.earnings}</Text>
-            <Text style={s.earnLabel}>Total Earned</Text>
-          </View>
-          <View style={s.earnDivider} />
-          <View style={s.earnStat}>
-            <Text style={s.earnNum}>{stats.today}</Text>
-            <Text style={s.earnLabel}>Today</Text>
-          </View>
-          <View style={s.earnDivider} />
-          <View style={s.earnStat}>
-            <Text style={s.earnNum}>{stats.week}</Text>
-            <Text style={s.earnLabel}>This Week</Text>
-          </View>
         </View>
 
         {/* FILTER TABS */}
@@ -262,11 +241,6 @@ const s = StyleSheet.create({
   headerSub:      { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
   searchBar:      { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', margin: 15, padding: 12, borderRadius: 14, elevation: 3 },
   searchInput:    { flex: 1, fontSize: 13, color: '#333' },
-  earningsBanner: { flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 15, borderRadius: 14, padding: 16, elevation: 2, marginBottom: 10 },
-  earnStat:       { flex: 1, alignItems: 'center' },
-  earnNum:        { fontSize: 18, fontWeight: '800', color: '#1A3A6B' },
-  earnLabel:      { fontSize: 11, color: '#888', fontWeight: '700', marginTop: 3 },
-  earnDivider:    { width: 1, backgroundColor: '#eee', marginVertical: 4 },
   filterRow:      { flexDirection: 'row', marginHorizontal: 15, marginBottom: 12, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', elevation: 2 },
   filterTab:      { flex: 1, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
   filterTabActive:{ borderBottomColor: '#FF6B00' },

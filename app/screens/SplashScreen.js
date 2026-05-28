@@ -1,8 +1,6 @@
 import { useRouter } from 'expo-router'
 import { useEffect, useRef } from 'react'
 import { Animated, Easing, StatusBar, StyleSheet, Text, View } from 'react-native'
-import LiquidGlassLogo from '../../components/LiquidGlassLogo'
-
 export default function SplashScreen() {
   const router = useRouter()
   const progress = useRef(new Animated.Value(0)).current
@@ -30,7 +28,11 @@ export default function SplashScreen() {
     <Animated.View style={[s.container, fadeOut]}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <Animated.View style={{ opacity: fadeAnim }}>
-        <LiquidGlassLogo />
+        <View style={s.logoContainer}>
+          <Text style={s.logoIcon}>🔧</Text>
+          <Text style={s.logoText}>DoToR</Text>
+          <Text style={s.logoSub}>Device Doctor</Text>
+        </View>
       </Animated.View>
       <Animated.Text style={[s.caption, { opacity: taglineFade }]}>We are the Doctor of your Device</Animated.Text>
       <View style={s.loaderBg}>
@@ -43,6 +45,10 @@ export default function SplashScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', padding: 30 },
+  logoContainer: { alignItems: 'center', justifyContent: 'center' },
+  logoIcon: { fontSize: 64, marginBottom: 8 },
+  logoText: { fontSize: 36, fontWeight: '900', color: '#1A3A6B', letterSpacing: 2 },
+  logoSub: { fontSize: 14, fontWeight: '600', color: '#FF6B00', letterSpacing: 3, textTransform: 'uppercase', marginTop: 4 },
   caption: { fontSize: 16, fontWeight: '700', color: '#1A3A6B', marginTop: 25, textAlign: 'center', paddingHorizontal: 30, lineHeight: 22 },
   loaderBg: { width: 80, height: 4, backgroundColor: '#eee', borderRadius: 4, marginTop: 40, overflow: 'hidden' },
   loaderBar: { height: '100%', backgroundColor: '#FF6B00', borderRadius: 4 },

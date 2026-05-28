@@ -42,7 +42,6 @@ export default function HomeScreen() {
   const [description, setDescription] = useState('') // customer's problem description
   const [images, setImages] = useState([]) // uploaded image base64 strings
   const [uploadingImg, setUploadingImg] = useState(false)
-  const [manualRepair, setManualRepair] = useState('') // manually typed repair type
   // ── GPS-based ETA tracking from technician ─────────────────────────────────
   const [techLat, setTechLat]       = useState(null)
   const [techLng, setTechLng]       = useState(null)
@@ -219,10 +218,9 @@ export default function HomeScreen() {
       custLng:            orderLng,
     }
 
-    // Clear description, images, and manual repair after booking
+    // Clear description and images after booking
     setDescription('')
     setImages([])
-    setManualRepair('')
 
     try {
       const newOrderRef = await push(ref(db, 'orders'), order)
@@ -251,7 +249,6 @@ export default function HomeScreen() {
     { icon:'🏠', title:'Doorstep Service',       desc:'Technician comes to your home!' },
     { icon:'👀', title:'Repair in Front of You', desc:'100% transparent process!' },
     { icon:'⚡', title:'Fast Service',            desc:'Arrives within 60 mins!' },
-    { icon:'🛡️', title:'30 Day Warranty',         desc:'All repairs covered!' },
     { icon:'💰', title:'Best Price',              desc:'No hidden charges ever!' },
   ]
 
@@ -273,11 +270,6 @@ export default function HomeScreen() {
         <TouchableOpacity style={s.avatar} onPress={() => router.push('/screens/CustomerProfileScreen')}>
           <Text style={{ fontSize: 24 }}>👤</Text>
         </TouchableOpacity>
-      </View>
-
-      <View style={s.searchBar}>
-        <Text style={{ fontSize: 16 }}>🔍</Text>
-        <TextInput style={s.searchInput} placeholder="Search repair service..." placeholderTextColor="#aaa" />
       </View>
 
       <TouchableOpacity style={s.banner} onPress={() => router.push('/screens/ScheduleScreen')}>
@@ -364,45 +356,29 @@ export default function HomeScreen() {
             {uploadingImg && <Text style={s.uploadingTxt}>⏳ Processing...</Text>}
           </View>
 
-          <Text style={s.sectionTitle}>Step 4 — What Needs Repair?</Text>
+          {/* ── Schedule Appointment ── */}
+          <TouchableOpacity style={s.scheduleBtn} onPress={() => router.push('/screens/ScheduleScreen')}>
+            <Text style={s.scheduleBtnIcon}>📅</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.scheduleBtnTitle}>Need an Appointment?</Text>
+              <Text style={s.scheduleBtnSub}>Book a convenient time slot</Text>
+            </View>
+            <Text style={s.scheduleBtnArrow}>→</Text>
+          </TouchableOpacity>
 
-          {/* ── Quick-select repair buttons ── */}
-          <Text style={s.quickSelectLabel}>Quick select:</Text>
-          <View style={s.repairChipGrid}>
-            {repairs.map(repair => (
-              <TouchableOpacity
-                key={repair}
-                style={[s.repairChip, manualRepair === repair && s.repairChipActive]}
-                onPress={() => setManualRepair(repair)}
-              >
-                <Text style={[s.repairChipText, manualRepair === repair && s.repairChipTextActive]}>🔧 {repair}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* ── Manual repair input + submit ── */}
-          <Text style={s.quickSelectLabel}>Or type your own:</Text>
+          {/* ── Submit ── */}
           <View style={s.descBox}>
-            <TextInput
-              style={s.descInput}
-              placeholder="e.g. Screen Replacement, Battery Replacement, Water Damage..."
-              placeholderTextColor="#aaa"
-              multiline
-              numberOfLines={2}
-              value={manualRepair}
-              onChangeText={setManualRepair}
-            />
             <TouchableOpacity
-              style={[s.submitBtn, !manualRepair.trim() && s.submitBtnDisabled]}
+              style={[s.submitBtn, !description.trim() && s.submitBtnDisabled]}
               onPress={() => {
-                const repair = manualRepair.trim()
-                if (!repair) {
-                  Alert.alert('Missing', 'Please describe what repair you need.')
+                const desc = description.trim()
+                if (!desc) {
+                  Alert.alert('Missing', 'Please describe your issue.')
                   return
                 }
-                bookRepair(repair)
+                bookRepair(desc)
               }}
-              disabled={!manualRepair.trim()}
+              disabled={!description.trim()}
             >
               <Text style={s.submitBtnText}>📋 Submit Repair Request</Text>
             </TouchableOpacity>
@@ -565,8 +541,6 @@ const s = StyleSheet.create({
   userName:         { fontSize: 20, color: '#fff', fontWeight: '800' },
   userLoc:          { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
   avatar:           { width: 50, height: 50, backgroundColor: '#fff', borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
-  searchBar:        { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', padding: 12, borderRadius: 14, margin: 15, elevation: 3 },
-  searchInput:      { flex: 1, fontSize: 13, color: '#333' },
   banner:           { backgroundColor: '#1A3A6B', padding: 18, borderRadius: 14, marginHorizontal: 15, marginBottom: 5, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   bannerText:       { color: '#fff', fontSize: 15, fontWeight: '800' },
   bannerSub:        { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 3 },
@@ -584,14 +558,6 @@ const s = StyleSheet.create({
   repairItem:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 15, marginHorizontal: 15, marginBottom: 10, borderRadius: 12, elevation: 2 },
   repairText:       { fontSize: 13, fontWeight: '700', color: '#1A3A6B' },
   arrow:            { fontSize: 18, color: '#FF6B00', fontWeight: '800' },
-
-  // ── Repair Chip Grid ──
-  quickSelectLabel: { fontSize: 12, fontWeight: '700', color: '#888', marginHorizontal: 15, marginBottom: 8, marginTop: -4 },
-  repairChipGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginHorizontal: 15, marginBottom: 14 },
-  repairChip:       { backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, borderWidth: 2, borderColor: '#e0e0e0', elevation: 1 },
-  repairChipActive: { borderColor: '#FF6B00', backgroundColor: '#fff5ee' },
-  repairChipText:   { fontSize: 12, fontWeight: '700', color: '#1A3A6B' },
-  repairChipTextActive: { color: '#FF6B00' },
   whyItem:          { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#fff', padding: 14, marginHorizontal: 15, marginBottom: 10, borderRadius: 14, elevation: 2 },
   whyIcon:          { fontSize: 28 },
   whyTitle:         { fontSize: 13, fontWeight: '800', color: '#1A3A6B' },
@@ -632,6 +598,13 @@ const s = StyleSheet.create({
   custEtaRow:       { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, backgroundColor: '#e8f5e9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, alignSelf: 'flex-start' },
   custEtaText:      { fontSize: 11, fontWeight: '700', color: '#2e7d32' },
   custEtaBadge:     { fontSize: 10, fontWeight: '800', color: '#fff', backgroundColor: '#FF6B00', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+
+  // ── Schedule Button ──
+  scheduleBtn:      { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#fff', padding: 16, marginHorizontal: 15, marginBottom: 14, borderRadius: 14, elevation: 2, borderWidth: 2, borderColor: '#1A3A6B' },
+  scheduleBtnIcon:  { fontSize: 28 },
+  scheduleBtnTitle: { fontSize: 14, fontWeight: '800', color: '#1A3A6B' },
+  scheduleBtnSub:   { fontSize: 11, color: '#888', marginTop: 2 },
+  scheduleBtnArrow: { fontSize: 22, color: '#1A3A6B', fontWeight: '800' },
 
   // ── Submit Button ──
   submitBtn:        { backgroundColor: '#FF6B00', padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 14, elevation: 3 },

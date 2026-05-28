@@ -559,18 +559,18 @@ export default function TechHomeScreen() {
       </View>
 
       {/* STATS */}
-      <View style={s.earningsRow}>
-        <View style={s.earnCard}>
-          <Text style={s.earnLabel}>Today's Jobs</Text>
-          <Text style={s.earnAmt}>{dailyCompleted}</Text>
+      <View style={s.statsRow}>
+        <View style={s.statCard}>
+          <Text style={s.statLabel}>Today's Jobs</Text>
+          <Text style={s.statNum}>{dailyCompleted}</Text>
         </View>
-        <View style={s.earnCard}>
-          <Text style={s.earnLabel}>Pending</Text>
-          <Text style={s.earnAmt}>{pendingJobs.length}</Text>
+        <View style={s.statCard}>
+          <Text style={s.statLabel}>Pending</Text>
+          <Text style={s.statNum}>{pendingJobs.length}</Text>
         </View>
-        <View style={s.earnCard}>
-          <Text style={s.earnLabel}>Status</Text>
-          <Text style={[s.earnAmt, { fontSize: 13 }]}>{isOnline ? '🟢 Active' : '🔴 Off'}</Text>
+        <View style={s.statCard}>
+          <Text style={s.statLabel}>Status</Text>
+          <Text style={[s.statNum, { fontSize: 13 }]}>{isOnline ? '🟢 Active' : '🔴 Off'}</Text>
         </View>
       </View>
 
@@ -685,10 +685,6 @@ export default function TechHomeScreen() {
           <Text style={s.quickIcon}>✅</Text>
           <Text style={s.quickLabel}>Completed</Text>
           <Text style={s.quickSub}>{dailyCompleted} today</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.quickCard} onPress={logout}>
-          <Text style={s.quickIcon}>🚪</Text>
-          <Text style={s.quickLabel}>Logout</Text>
         </TouchableOpacity>
       </View>          <View style={{ height: 90 }} />
     </ScrollView>
@@ -903,10 +899,10 @@ const s = StyleSheet.create({
   offlinePill:   { backgroundColor: '#ffebee' },
   onlineTxt:     { fontSize: 12, fontWeight: '800', color: '#2e7d32' },
   offlineTxt:    { color: '#c62828' },
-  earningsRow:   { flexDirection: 'row', gap: 10, margin: 15 },
-  earnCard:      { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', elevation: 3 },
-  earnLabel:     { fontSize: 11, color: '#888', fontWeight: '700' },
-  earnAmt:       { fontSize: 18, fontWeight: '800', color: '#1A3A6B', marginTop: 4 },
+  statsRow:   { flexDirection: 'row', gap: 10, margin: 15 },
+  statCard:      { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', elevation: 3 },
+  statLabel:     { fontSize: 11, color: '#888', fontWeight: '700' },
+  statNum:       { fontSize: 18, fontWeight: '800', color: '#1A3A6B', marginTop: 4 },
   sectionTitle:  { fontSize: 16, fontWeight: '800', color: '#1A3A6B', marginHorizontal: 15, marginTop: 20, marginBottom: 12 },
   emptyCard:     { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginHorizontal: 15, alignItems: 'center', elevation: 2, marginBottom: 5 },
   emptyTxt:      { color: '#888', fontWeight: '600', fontSize: 13 },

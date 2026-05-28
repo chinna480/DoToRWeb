@@ -26,9 +26,6 @@ export default function TechProfileScreen() {
   const [photo, setPhoto]         = useState(null)
   const [rating]                  = useState(4.8)
   const [totalJobs, setTotal]     = useState(0)
-  const [todayEarning, setToday]  = useState(0)
-  const [weekEarning, setWeek]    = useState(0)
-  const [totalEarning, setTotalE] = useState(0)
   const [completedJobs, setCompleted] = useState([])
   const [notifications, setNotifications] = useState(true)
   const [isOnline, setIsOnline]   = useState(true)
@@ -57,25 +54,21 @@ export default function TechProfileScreen() {
   const loadJobs = (myPhone) => {
     onValue(ref(db, 'orders'), snap => {
       if (!snap.exists()) {
-        setTotal(0); setTotalE(0); setToday(0); setWeek(0); setCompleted([])
+        setTotal(0); setCompleted([])
         return
       }
-      let total = 0, earning = 0, jobs = []
+      let total = 0, jobs = []
 
       snap.forEach(child => {
         const o = child.val()
         // Only count jobs that were accepted/completed by this tech
         if (o.techPhone === myPhone && o.status === 'completed') {
           total++
-          earning += 299
           jobs.push({ id: child.key, ...o })
         }
       })
 
       setTotal(total)
-      setTotalE(earning)
-      setToday(total > 0 ? 299 : 0)
-      setWeek(total * 250)
       setCompleted(jobs.reverse().slice(0, 10))
     })
   }
@@ -121,10 +114,8 @@ export default function TechProfileScreen() {
   }
 
   const MENU = [
-    { icon: '💰', label: 'My Earnings',    sub: `₹${totalEarning} Total`, onPress: () => Alert.alert('Earnings', `Total: ₹${totalEarning}\nToday: ₹${todayEarning}\nThis Week: ₹${weekEarning}`) },
     { icon: '📋', label: 'Job History',    sub: `${totalJobs} jobs done`, onPress: () => router.push('/screens/JobHistoryScreen') },
     { icon: '⭐', label: 'My Rating',      sub: `${rating} stars`,         onPress: () => Alert.alert('Rating', `Your rating: ${rating} ⭐`) },
-    { icon: '🎁', label: 'Refer and Earn', sub: 'Get ₹100 per referral',  onPress: () => Alert.alert('Refer', 'Share DoToR and earn ₹100!') },
     { icon: '🏆', label: 'My Rewards',     sub: null,                      onPress: () => Alert.alert('Rewards', 'Coming Soon!') },
     { icon: '💳', label: 'Payment Info', sub: 'Bank & UPI details', onPress: () => Alert.alert('Payment', 'Add your UPI ID to receive payments directly!\nUPI ID: yourname@upi') },
     { icon: '📊', label: 'Performance',    sub: 'View your stats',         onPress: () => Alert.alert('Stats', `Jobs: ${totalJobs}\nRating: ${rating}`) },
@@ -180,23 +171,6 @@ export default function TechProfileScreen() {
           <Text style={s.starIcon}>⭐</Text>
           <Text style={s.ratingTxt}>{rating} Rating</Text>
           <Text style={s.ratingCount}>({totalJobs} jobs)</Text>
-        </View>
-      </View>
-
-      {/* EARNINGS */}
-      <Text style={s.sectionTitle}>💰 My Earnings</Text>
-      <View style={s.earningsRow}>
-        <View style={[s.earnCard, { backgroundColor: '#FF6B00' }]}>
-          <Text style={s.earnLabel}>Today</Text>
-          <Text style={s.earnAmt}>₹{todayEarning}</Text>
-        </View>
-        <View style={[s.earnCard, { backgroundColor: '#1A3A6B' }]}>
-          <Text style={s.earnLabel}>This Week</Text>
-          <Text style={s.earnAmt}>₹{weekEarning}</Text>
-        </View>
-        <View style={[s.earnCard, { backgroundColor: '#2e7d32' }]}>
-          <Text style={s.earnLabel}>Total</Text>
-          <Text style={s.earnAmt}>₹{totalEarning}</Text>
         </View>
       </View>
 
@@ -299,10 +273,6 @@ const s = StyleSheet.create({
   ratingTxt:        { fontSize: 16, fontWeight: '800', color: '#FF6B00' },
   ratingCount:      { fontSize: 12, color: '#888', fontWeight: '600' },
   sectionTitle:     { fontSize: 16, fontWeight: '800', color: '#111', marginHorizontal: 15, marginTop: 18, marginBottom: 10 },
-  earningsRow:      { flexDirection: 'row', gap: 10, marginHorizontal: 15, marginBottom: 5 },
-  earnCard:         { flex: 1, borderRadius: 14, padding: 14, alignItems: 'center', elevation: 3 },
-  earnLabel:        { fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '700' },
-  earnAmt:          { fontSize: 18, fontWeight: '800', color: '#fff', marginTop: 4 },
   statsRow:         { flexDirection: 'row', gap: 10, marginHorizontal: 15, marginBottom: 5 },
   statCard:         { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', elevation: 2 },
   statNum:          { fontSize: 20, fontWeight: '800', color: '#1A3A6B' },

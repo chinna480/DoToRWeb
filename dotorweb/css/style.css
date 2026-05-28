@@ -427,18 +427,6 @@ html, body {
 }
 .home-avatar:active { transform: scale(0.95); }
 
-/* ─── Search Bar ─── */
-.search-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--white);
-  padding: 12px 15px;
-  border-radius: var(--radius);
-  margin: 15px;
-  box-shadow: var(--shadow);
-}
-
 /* ─── Banner ─── */
 .banner {
   background: var(--dark);
@@ -585,6 +573,35 @@ html, body {
 .submit-repair-btn:active { transform: scale(0.97); }
 .submit-repair-btn:hover { opacity: 0.92; }
 .submit-repair-btn:disabled { background: #ccc; box-shadow: none; cursor: default; }
+
+/* ─── Schedule Button ─── */
+.schedule-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--white);
+  padding: 16px;
+  margin: 0 15px 14px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 2px solid var(--dark);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.schedule-btn:active { transform: scale(0.97); }
+.schedule-btn-icon { font-size: 28px; }
+.schedule-btn-content { flex: 1; }
+.schedule-btn-title { font-size: 14px; font-weight: 800; color: var(--dark); }
+.schedule-btn-sub { font-size: 11px; color: var(--gray); margin-top: 2px; }
+.schedule-btn-arrow { font-size: 22px; color: var(--dark); font-weight: 800; }
+
+/* ─── Desc Label ─── */
+.desc-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dark);
+  margin-bottom: 8px;
+}
 
 /* ─── Why DoToR ─── */
 .why-item {
@@ -755,9 +772,9 @@ html, body {
 .online-pill.active { background: #e8f5e9; color: var(--success); }
 .online-pill.inactive { background: #ffebee; color: var(--danger); }
 
-/* ─── Earnings Row ─── */
-.earnings-row { display: flex; gap: 10px; margin: 15px; }
-.earn-card {
+/* ─── Stats Row (tech home) ─── */
+.stats-row { display: flex; gap: 10px; margin: 15px; }
+.stat-card-sm {
   flex: 1;
   background: var(--white);
   border-radius: var(--radius);
@@ -765,9 +782,8 @@ html, body {
   text-align: center;
   box-shadow: var(--shadow);
 }
-.earn-label { font-size: 11px; color: var(--gray); font-weight: 700; }
-.earn-value { font-size: 18px; font-weight: 800; color: var(--dark); margin-top: 4px; }
-.earn-value-sm { font-size: 13px; }
+.stat-label-sm { font-size: 11px; color: var(--gray); font-weight: 700; }
+.stat-value-sm { font-size: 18px; font-weight: 800; color: var(--dark); margin-top: 4px; }
 
 /* ─── Job Cards ─── */
 .job-card {
@@ -1409,17 +1425,6 @@ html, body {
   border-radius: var(--radius-sm);
   width: 100%;
 }
-
-/* ─── Earnings Cards ─── */
-.earn-card-colored {
-  flex: 1;
-  border-radius: var(--radius);
-  padding: 14px;
-  text-align: center;
-  box-shadow: var(--shadow);
-}
-.earn-card-label { font-size: 11px; color: rgba(255,255,255,0.8); font-weight: 700; }
-.earn-card-value { font-size: 18px; font-weight: 800; color: var(--white); margin-top: 4px; }
 
 /* ─── Toggle/Switch ─── */
 .toggle {
@@ -2082,8 +2087,6 @@ html, body {
   background: #f8f9ff;
 }
 
-/* ─── Tech Profile Earnings Row ─── */
-.tech-earnings-row { display: flex; gap: 10px; margin: 0 15px 5px; }
 .tech-stats-row { display: flex; gap: 10px; margin: 0 15px 5px; }
 
 /* ─── Scrollbar ─── */
@@ -2110,8 +2113,6 @@ html, body {
   align-items: center;
   gap: 4px;
   background: rgba(26,58,107,0.88);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   padding: 3px 9px 3px 7px;
   border-radius: 14px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);

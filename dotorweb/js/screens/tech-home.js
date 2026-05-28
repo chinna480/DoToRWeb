@@ -23,10 +23,10 @@ Router.register('tech-home', {
                 </button>
               </div>
             </div>
-            <div class="earnings-row">
-              <div class="earn-card"><div class="earn-label">Today's Jobs</div><div class="earn-value" id="totalJobs">0</div></div>
-              <div class="earn-card"><div class="earn-label">Pending</div><div class="earn-value" id="pendingCount">0</div></div>
-              <div class="earn-card"><div class="earn-label">Total</div><div class="earn-value" id="totalCompleted">0</div></div>
+            <div class="stats-row">
+              <div class="stat-card-sm"><div class="stat-label-sm">Today's Jobs</div><div class="stat-value-sm" id="totalJobs">0</div></div>
+              <div class="stat-card-sm"><div class="stat-label-sm">Pending</div><div class="stat-value-sm" id="pendingCount">0</div></div>
+              <div class="stat-card-sm"><div class="stat-label-sm">Total</div><div class="stat-value-sm" id="totalCompleted">0</div></div>
             </div>
             <div class="section-title">🔧 Ongoing Job</div>
             <div id="ongoingJob">
@@ -43,10 +43,6 @@ Router.register('tech-home', {
                 <div class="quick-icon-wrap">✅</div>
                 <div class="quick-label">Completed</div>
                 <div class="quick-sub-label" id="quickCompletedLabel">0 today</div>
-              </div>
-              <div class="quick-card" onclick="window.techWebLogout()">
-                <div class="quick-icon-wrap">🚪</div>
-                <div class="quick-label">Logout</div>
               </div>
             </div>
             <div style="height:80px"></div>
