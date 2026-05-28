@@ -42,6 +42,7 @@ export default function HomeScreen() {
   const [description, setDescription] = useState('') // customer's problem description
   const [images, setImages] = useState([]) // uploaded image base64 strings
   const [uploadingImg, setUploadingImg] = useState(false)
+  const [manualRepair, setManualRepair] = useState('') // manually typed repair type
   // ── GPS-based ETA tracking from technician ─────────────────────────────────
   const [techLat, setTechLat]       = useState(null)
   const [techLng, setTechLng]       = useState(null)
@@ -218,9 +219,10 @@ export default function HomeScreen() {
       custLng:            orderLng,
     }
 
-    // Clear description and images after booking
+    // Clear description, images, and manual repair after booking
     setDescription('')
     setImages([])
+    setManualRepair('')
 
     try {
       const newOrderRef = await push(ref(db, 'orders'), order)
@@ -362,13 +364,49 @@ export default function HomeScreen() {
             {uploadingImg && <Text style={s.uploadingTxt}>⏳ Processing...</Text>}
           </View>
 
-          <Text style={s.sectionTitle}>Step 4 — Choose Repair Type</Text>
-          {repairs.map(repair => (
-            <TouchableOpacity key={repair} style={s.repairItem} onPress={() => bookRepair(repair)}>
-              <Text style={s.repairText}>🔧 {repair}</Text>
-              <Text style={s.arrow}>→</Text>
+          <Text style={s.sectionTitle}>Step 4 — What Needs Repair?</Text>
+
+          {/* ── Quick-select repair buttons ── */}
+          <Text style={s.quickSelectLabel}>Quick select:</Text>
+          <View style={s.repairChipGrid}>
+            {repairs.map(repair => (
+              <TouchableOpacity
+                key={repair}
+                style={[s.repairChip, manualRepair === repair && s.repairChipActive]}
+                onPress={() => setManualRepair(repair)}
+              >
+                <Text style={[s.repairChipText, manualRepair === repair && s.repairChipTextActive]}>🔧 {repair}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* ── Manual repair input + submit ── */}
+          <Text style={s.quickSelectLabel}>Or type your own:</Text>
+          <View style={s.descBox}>
+            <TextInput
+              style={s.descInput}
+              placeholder="e.g. Screen Replacement, Battery Replacement, Water Damage..."
+              placeholderTextColor="#aaa"
+              multiline
+              numberOfLines={2}
+              value={manualRepair}
+              onChangeText={setManualRepair}
+            />
+            <TouchableOpacity
+              style={[s.submitBtn, !manualRepair.trim() && s.submitBtnDisabled]}
+              onPress={() => {
+                const repair = manualRepair.trim()
+                if (!repair) {
+                  Alert.alert('Missing', 'Please describe what repair you need.')
+                  return
+                }
+                bookRepair(repair)
+              }}
+              disabled={!manualRepair.trim()}
+            >
+              <Text style={s.submitBtnText}>📋 Submit Repair Request</Text>
             </TouchableOpacity>
-          ))}
+          </View>
         </>
       )}
 
@@ -546,6 +584,14 @@ const s = StyleSheet.create({
   repairItem:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 15, marginHorizontal: 15, marginBottom: 10, borderRadius: 12, elevation: 2 },
   repairText:       { fontSize: 13, fontWeight: '700', color: '#1A3A6B' },
   arrow:            { fontSize: 18, color: '#FF6B00', fontWeight: '800' },
+
+  // ── Repair Chip Grid ──
+  quickSelectLabel: { fontSize: 12, fontWeight: '700', color: '#888', marginHorizontal: 15, marginBottom: 8, marginTop: -4 },
+  repairChipGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginHorizontal: 15, marginBottom: 14 },
+  repairChip:       { backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, borderWidth: 2, borderColor: '#e0e0e0', elevation: 1 },
+  repairChipActive: { borderColor: '#FF6B00', backgroundColor: '#fff5ee' },
+  repairChipText:   { fontSize: 12, fontWeight: '700', color: '#1A3A6B' },
+  repairChipTextActive: { color: '#FF6B00' },
   whyItem:          { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#fff', padding: 14, marginHorizontal: 15, marginBottom: 10, borderRadius: 14, elevation: 2 },
   whyIcon:          { fontSize: 28 },
   whyTitle:         { fontSize: 13, fontWeight: '800', color: '#1A3A6B' },
@@ -586,6 +632,11 @@ const s = StyleSheet.create({
   custEtaRow:       { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, backgroundColor: '#e8f5e9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, alignSelf: 'flex-start' },
   custEtaText:      { fontSize: 11, fontWeight: '700', color: '#2e7d32' },
   custEtaBadge:     { fontSize: 10, fontWeight: '800', color: '#fff', backgroundColor: '#FF6B00', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+
+  // ── Submit Button ──
+  submitBtn:        { backgroundColor: '#FF6B00', padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 14, elevation: 3 },
+  submitBtnDisabled:{ backgroundColor: '#ccc', elevation: 0 },
+  submitBtnText:    { color: '#fff', fontSize: 15, fontWeight: '800' },
 
   // ── Order Sub-Tabs ──
   orderSubTabs:     { flexDirection: 'row', marginHorizontal: 15, marginBottom: 12, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', elevation: 2 },

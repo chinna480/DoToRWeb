@@ -68,8 +68,21 @@ Router.register('home', {
               <div class="brand-grid" id="brandGrid"></div>
             </div>
             <div id="repairSection" style="display:none">
-              <div class="section-title">Step 3 — What needs Repair?</div>
-              <div id="repairList"></div>
+              <div class="section-title">Step 4 — What Needs Repair?</div>
+              <div class="quick-select-label">Quick select:</div>
+              <div class="repair-chip-grid" id="repairChipGrid"></div>
+              <div class="quick-select-label">Or type your own:</div>
+              <div class="desc-box">
+                <textarea
+                  id="manualRepairInput"
+                  class="form-textarea"
+                  rows="2"
+                  placeholder="e.g. Screen Replacement, Battery Replacement, Water Damage..."
+                ></textarea>
+                <button id="submitRepairBtn" class="submit-repair-btn" onclick="window.submitRepair()">
+                  📋 Submit Repair Request
+                </button>
+              </div>
             </div>
             <div class="section-title">⭐ Why DoToR?</div>
             ${whyHtml}
@@ -422,15 +435,36 @@ Router.register('home', {
           selectedBrand = brand;
           document.querySelectorAll('.brand-card').forEach(c => c.classList.remove('active'));
           document.querySelector(`.brand-card[data-brand="${brand}"]`).classList.add('active');
+
+          // Render repair chip buttons based on selected device
           const repairs = selectedDevice === 'phone' ? PHONE_REPAIRS : LAPTOP_REPAIRS;
-          const repairList = document.getElementById('repairList');
-          repairList.innerHTML = repairs.map(r => `
-            <div class="repair-item" onclick="window.bookRepair('${r}')">
-              <span class="repair-text">🔧 ${r}</span>
-              <span class="repair-arrow">→</span>
+          const chipGrid = document.getElementById('repairChipGrid');
+          chipGrid.innerHTML = repairs.map(r => `
+            <div class="repair-chip" data-repair="${r}" onclick="window.selectQuickRepair('${r}')">
+              🔧 ${r}
             </div>
           `).join('');
+
           document.getElementById('repairSection').style.display = 'block';
+          document.getElementById('manualRepairInput').value = '';
+          document.getElementById('manualRepairInput').focus();
+        };
+
+        window.selectQuickRepair = (repair) => {
+          document.getElementById('manualRepairInput').value = repair;
+          document.getElementById('manualRepairInput').focus();
+          // Highlight the selected chip
+          document.querySelectorAll('.repair-chip').forEach(c => c.classList.remove('active'));
+          document.querySelector(`.repair-chip[data-repair="${repair}"]`).classList.add('active');
+        };
+
+        window.submitRepair = () => {
+          const repair = document.getElementById('manualRepairInput').value.trim();
+          if (!repair) {
+            showAlert('Missing', 'Please describe what repair you need.');
+            return;
+          }
+          window.bookRepair(repair);
         };
 
         window.bookRepair = async (repair) => {

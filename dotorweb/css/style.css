@@ -521,6 +521,71 @@ html, body {
 .repair-text { font-size: 13px; font-weight: 700; color: var(--dark); }
 .repair-arrow { font-size: 18px; color: var(--primary); font-weight: 800; }
 
+/* ─── Quick Select Repair Chips ─── */
+.quick-select-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gray);
+  margin: 0 15px 8px;
+}
+.repair-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 15px 14px;
+}
+.repair-chip {
+  background: var(--white);
+  padding: 10px 14px;
+  border-radius: 20px;
+  border: 2px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dark);
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--shadow);
+  user-select: none;
+}
+.repair-chip:active { transform: scale(0.96); }
+.repair-chip:hover { border-color: var(--primary); }
+.repair-chip.active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+/* ─── Description Box & Submit Button ─── */
+.desc-box {
+  background: var(--white);
+  border-radius: var(--radius);
+  margin: 0 15px 10px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+.submit-repair-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  background: var(--primary);
+  color: var(--white);
+  border: none;
+  padding: 16px;
+  border-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 14px;
+  box-shadow: 0 3px 8px rgba(255,107,0,0.3);
+  font-family: inherit;
+}
+.submit-repair-btn:active { transform: scale(0.97); }
+.submit-repair-btn:hover { opacity: 0.92; }
+.submit-repair-btn:disabled { background: #ccc; box-shadow: none; cursor: default; }
+
 /* ─── Why DoToR ─── */
 .why-item {
   display: flex;
