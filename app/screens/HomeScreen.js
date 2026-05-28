@@ -1,10 +1,12 @@
 // HomeScreen.js — Fixed stale data + Profile button
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import { onValue, push, ref, set } from 'firebase/database';
 import { useEffect, useState } from 'react';
 import {
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -38,6 +40,8 @@ export default function HomeScreen() {
   const [custPhone, setCustPhone]       = useState('')
   const [ordersFilter, setOrdersFilter] = useState('all') // 'all', 'active', 'completed'
   const [description, setDescription] = useState('') // customer's problem description
+  const [images, setImages] = useState([]) // uploaded image base64 strings
+  const [uploadingImg, setUploadingImg] = useState(false)
   // ── GPS-based ETA tracking from technician ─────────────────────────────────
   const [techLat, setTechLat]       = useState(null)
   const [techLng, setTechLng]       = useState(null)
@@ -127,6 +131,54 @@ export default function HomeScreen() {
     setRepairs(selectedDevice === 'phone' ? PHONE_REPAIRS : LAPTOP_REPAIRS)
   }
 
+  // ── Image Picker ──
+  const pickImageFromGallery = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow access to your photo library to upload images.')
+      return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: 3,
+      quality: 0.5,
+      base64: true,
+    })
+    if (result.canceled) return
+    processSelectedImages(result.assets)
+  }
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow camera access to take a photo of the issue.')
+      return
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.5,
+      base64: true,
+    })
+    if (result.canceled) return
+    processSelectedImages(result.assets)
+  }
+
+  const processSelectedImages = (assets) => {
+    setUploadingImg(true)
+    const newImages = []
+    assets.forEach(asset => {
+      if (asset.base64) {
+        const uri = `data:image/jpeg;base64,${asset.base64}`
+        newImages.push(uri)
+      }
+    })
+    setImages(prev => {
+      const combined = [...prev, ...newImages]
+      return combined.slice(0, 5) // max 5 images per order
+    })
+    setUploadingImg(false)
+  }
+
   const bookRepair = async (repair) => {
     const name              = await AsyncStorage.getItem('custName')     || 'Customer'
     const loc               = await AsyncStorage.getItem('custLocation') || 'Your Location'
@@ -158,6 +210,7 @@ export default function HomeScreen() {
       brand:              selectedBrand,
       repair,
       description:        description.trim(), // customer's problem description
+      images:             images.length > 0 ? images : null, // uploaded photos (base64)
       status:             'pending',
       time:               new Date().toLocaleTimeString(),
       // GPS coordinates for distance-based technician matching
@@ -165,8 +218,9 @@ export default function HomeScreen() {
       custLng:            orderLng,
     }
 
-    // Clear description after booking
+    // Clear description and images after booking
     setDescription('')
+    setImages([])
 
     try {
       const newOrderRef = await push(ref(db, 'orders'), order)
@@ -272,6 +326,40 @@ export default function HomeScreen() {
               value={description}
               onChangeText={setDescription}
             />
+          </View>
+
+          {/* ── Image Upload Section ── */}
+          <View style={s.sectionTitle}>📸 Upload Photos (so technician sees the issue)</View>
+          <View style={s.imgUploadBox}>
+            <View style={s.imgRow}>
+              <TouchableOpacity style={s.imgPickerBtn} onPress={pickImageFromGallery}>
+                <Text style={s.imgPickerIcon}>🖼️</Text>
+                <Text style={s.imgPickerLabel}>Gallery</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.imgPickerBtn} onPress={takePhoto}>
+                <Text style={s.imgPickerIcon}>📷</Text>
+                <Text style={s.imgPickerLabel}>Camera</Text>
+              </TouchableOpacity>
+            </View>
+            {images.length > 0 && (
+              <View style={s.imgPreviewRow}>
+                {images.map((img, i) => (
+                  <View key={i} style={s.imgThumbWrap}>
+                    <Image source={{ uri: img }} style={s.imgThumb} />
+                    <TouchableOpacity
+                      style={s.imgRemoveBtn}
+                      onPress={() => setImages(prev => prev.filter((_, idx) => idx !== i))}
+                    >
+                      <Text style={s.imgRemoveTxt}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+            {images.length > 0 && (
+              <Text style={s.imgCount}>{images.length} photo{images.length > 1 ? 's' : ''} selected</Text>
+            )}
+            {uploadingImg && <Text style={s.uploadingTxt}>⏳ Processing...</Text>}
           </View>
 
           <Text style={s.sectionTitle}>Step 4 — Choose Repair Type</Text>
@@ -480,6 +568,20 @@ const s = StyleSheet.create({
   descBox:          { backgroundColor: '#fff', borderRadius: 14, marginHorizontal: 15, marginBottom: 10, padding: 14, elevation: 2 },
   descLabel:        { fontSize: 12, fontWeight: '700', color: '#1A3A6B', marginBottom: 8 },
   descInput:        { backgroundColor: '#f8f8f8', borderRadius: 10, padding: 12, fontSize: 13, color: '#333', minHeight: 80, textAlignVertical: 'top' },
+
+  // ── Image Upload ──
+  imgUploadBox:     { backgroundColor: '#fff', borderRadius: 14, marginHorizontal: 15, marginBottom: 10, padding: 14, elevation: 2 },
+  imgRow:           { flexDirection: 'row', gap: 12 },
+  imgPickerBtn:     { flex: 1, backgroundColor: '#f8f8f8', borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 2, borderColor: '#eee', borderStyle: 'dashed' },
+  imgPickerIcon:    { fontSize: 28 },
+  imgPickerLabel:   { fontSize: 12, fontWeight: '800', color: '#1A3A6B', marginTop: 4 },
+  imgPreviewRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  imgThumbWrap:     { position: 'relative' },
+  imgThumb:         { width: 80, height: 80, borderRadius: 10, backgroundColor: '#eee' },
+  imgRemoveBtn:     { position: 'absolute', top: -6, right: -6, backgroundColor: '#c62828', width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  imgRemoveTxt:     { color: '#fff', fontSize: 11, fontWeight: '800' },
+  imgCount:         { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 8, textAlign: 'center' },
+  uploadingTxt:     { fontSize: 12, color: '#FF6B00', fontWeight: '700', marginTop: 8, textAlign: 'center' },
   orderTech:        { fontSize: 12, fontWeight: '700', color: '#FF6B00', marginTop: 4 },
   custEtaRow:       { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, backgroundColor: '#e8f5e9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, alignSelf: 'flex-start' },
   custEtaText:      { fontSize: 11, fontWeight: '700', color: '#2e7d32' },

@@ -5,6 +5,8 @@ import { onValue, ref } from 'firebase/database'
 import { useEffect, useState } from 'react'
 import {
   Alert,
+  Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,6 +22,7 @@ export default function JobHistoryScreen() {
   const [filter, setFilter] = useState('all') // 'all', 'today', 'week', 'month'
   const [search, setSearch] = useState('')
   const [stats, setStats] = useState({ total: 0, today: 0, week: 0, month: 0, earnings: 0 })
+  const [fullscreenImg, setFullscreenImg] = useState(null)
   const loadUnsub = useRef(null)
 
   useEffect(() => {
@@ -206,6 +209,19 @@ export default function JobHistoryScreen() {
                   {job.description ? (
                     <Text style={s.jobDesc}>📝 "{job.description.substring(0, 60)}{job.description.length > 60 ? '...' : ''}"</Text>
                   ) : null}
+                  {/* ── Job images ── */}
+                  {job.images && job.images.length > 0 && (
+                    <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
+                      {job.images.slice(0, 3).map((img, i) => (
+                        <TouchableOpacity key={i} onPress={() => setFullscreenImg(img)}>
+                          <Image source={{ uri: img }} style={s.jobHistImgThumb} />
+                        </TouchableOpacity>
+                      ))}
+                      {job.images.length > 3 && (
+                        <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{job.images.length - 3}</Text>
+                      )}
+                    </View>
+                  )}
                   <Text style={s.jobDate}>📅 {job._date} · {job._time}</Text>
                 </View>
               </View>
@@ -223,6 +239,18 @@ export default function JobHistoryScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* ── Fullscreen Image Viewer ── */}
+      <Modal visible={!!fullscreenImg} transparent onRequestClose={() => setFullscreenImg(null)}>
+        <View style={s.modalOverlay}>
+          <TouchableOpacity style={s.modalClose} onPress={() => setFullscreenImg(null)}>
+            <Text style={s.modalCloseTxt}>✕</Text>
+          </TouchableOpacity>
+          {fullscreenImg && (
+            <Image source={{ uri: fullscreenImg }} style={s.modalImage} resizeMode="contain" />
+          )}
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -257,4 +285,9 @@ const s = StyleSheet.create({
   jobAmt:         { fontSize: 16, fontWeight: '800', color: '#2e7d32' },
   statusBadge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   statusText:     { fontSize: 11, fontWeight: '800' },
+  jobHistImgThumb: { width: 36, height: 36, borderRadius: 6, backgroundColor: '#eee' },
+  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
+  modalClose:     { position: 'absolute', top: 55, right: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  modalCloseTxt:  { color: '#fff', fontSize: 18, fontWeight: '800' },
+  modalImage:     { width: '90%', height: '70%' },
 })

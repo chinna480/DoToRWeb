@@ -4,7 +4,8 @@ import { useRouter } from 'expo-router';
 import { get, onValue, ref, remove, set, update } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Linking,
+  Alert, Image, Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -62,6 +63,7 @@ export default function TechHomeScreen() {
   const [distance, setDistance]          = useState('--')
   const [eta, setEta]                    = useState('--')
   const [currentCustPhone, setCustPhone] = useState('')
+  const [fullscreenImg, setFullscreenImg] = useState(null) // image viewer modal
   const watchRef          = useRef(null)
   const mapRef            = useRef(null)
   const techPushToken     = useRef(null)
@@ -543,6 +545,19 @@ export default function TechHomeScreen() {
               <Text style={s.ongoingDescText}>"{ongoingJob.description}"</Text>
             </View>
           ) : null}
+          {/* ── Customer uploaded images in ongoing job ── */}
+          {ongoingJob.images && ongoingJob.images.length > 0 && (
+            <View style={s.ongoingImgRow}>
+              <Text style={s.ongoingImgLabel}>📸 Customer's Photos:</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                {ongoingJob.images.map((img, i) => (
+                  <TouchableOpacity key={i} onPress={() => setFullscreenImg(img)}>
+                    <Image source={{ uri: img }} style={s.ongoingImgThumb} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
           <Text style={s.inProgressTxt}>⚡ In Progress...</Text>
 
           <View style={s.distBanner}>
@@ -628,10 +643,22 @@ export default function TechHomeScreen() {
           <Text style={s.quickIcon}>🚪</Text>
           <Text style={s.quickLabel}>Logout</Text>
         </TouchableOpacity>
-      </View>
-
-      <View style={{ height: 90 }} />
+      </View>          <View style={{ height: 90 }} />
     </ScrollView>
+  )
+
+  // ── Fullscreen Image Viewer Modal ──
+  const renderImageModal = () => (
+    <Modal visible={!!fullscreenImg} transparent onRequestClose={() => setFullscreenImg(null)}>
+      <View style={s.modalOverlay}>
+        <TouchableOpacity style={s.modalClose} onPress={() => setFullscreenImg(null)}>
+          <Text style={s.modalCloseTxt}>✕</Text>
+        </TouchableOpacity>
+        {fullscreenImg && (
+          <Image source={{ uri: fullscreenImg }} style={s.modalImage} resizeMode="contain" />
+        )}
+      </View>
+    </Modal>
   )
 
   // ── PENDING TAB ──
@@ -671,6 +698,17 @@ export default function TechHomeScreen() {
                   <Text style={s.descTagText}>📝 "{order.description.substring(0, 80)}{order.description.length > 80 ? '...' : ''}"</Text>
                 </View>
               ) : null}
+              {/* ── Show customer-uploaded images ── */}
+              {order.images && order.images.length > 0 && (
+                <View style={s.pendingImgRow}>
+                  {order.images.map((img, i) => (
+                    <TouchableOpacity key={i} onPress={() => setFullscreenImg(img)}>
+                      <Image source={{ uri: img }} style={s.pendingImgThumb} />
+                    </TouchableOpacity>
+                  ))}
+                  <Text style={s.pendingImgLabel}>{order.images.length} photo{order.images.length > 1 ? 's' : ''}</Text>
+                </View>
+              )}
               <Text style={s.jobTime}>🕐 {order.time}</Text>
               {/* GPS distance display — shows how far the customer is */}
               {distDisplay && (
@@ -740,6 +778,19 @@ export default function TechHomeScreen() {
                   📝 "{order.description.substring(0, 50)}{order.description.length > 50 ? '...' : ''}"
                 </Text>
               ) : null}
+              {/* ── Completed job images ── */}
+              {order.images && order.images.length > 0 && (
+                <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
+                  {order.images.slice(0, 3).map((img, i) => (
+                    <TouchableOpacity key={i} onPress={() => setFullscreenImg(img)}>
+                      <Image source={{ uri: img }} style={{ width: 36, height: 36, borderRadius: 6, backgroundColor: '#eee' }} />
+                    </TouchableOpacity>
+                  ))}
+                  {order.images.length > 3 && (
+                    <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{order.images.length - 3}</Text>
+                  )}
+                </View>
+              )}
             </View>
             <View style={s.compRight}>
               <Text style={s.compPrice}>✅ Done</Text>
@@ -768,6 +819,7 @@ export default function TechHomeScreen() {
       {activeTab === 'home' && renderHomeTab()}
       {activeTab === 'pending' && renderPendingTab()}
       {activeTab === 'completed' && renderCompletedTab()}
+      {renderImageModal()}
 
       {/* BOTTOM TAB BAR */}
       <View style={s.tabBar}>
@@ -855,6 +907,18 @@ const s = StyleSheet.create({
   ongoingDesc:   { backgroundColor: '#fff8e1', borderRadius: 10, padding: 10, marginTop: 6 },
   ongoingDescLabel: { fontSize: 11, fontWeight: '800', color: '#e65100', marginBottom: 3 },
   ongoingDescText:  { fontSize: 12, color: '#333', fontStyle: 'italic', lineHeight: 18 },
+
+  // ── Image Styles ──
+  pendingImgRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  pendingImgThumb: { width: 44, height: 44, borderRadius: 8, backgroundColor: '#eee', borderWidth: 1, borderColor: '#ddd' },
+  pendingImgLabel: { fontSize: 11, color: '#888', fontWeight: '600' },
+  ongoingImgRow:   { backgroundColor: '#fff3e0', borderRadius: 10, padding: 10, marginTop: 6 },
+  ongoingImgLabel: { fontSize: 11, fontWeight: '800', color: '#e65100', marginBottom: 4 },
+  ongoingImgThumb: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#eee', borderWidth: 1, borderColor: '#ddd' },
+  modalOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
+  modalClose:      { position: 'absolute', top: 55, right: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  modalCloseTxt:   { color: '#fff', fontSize: 18, fontWeight: '800' },
+  modalImage:      { width: '90%', height: '70%' },
 
   compCust:      { fontSize: 13, fontWeight: '800', color: '#1A3A6B' },
   compType:      { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 3 },
