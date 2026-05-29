@@ -21,6 +21,9 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Fix Expo package versions
+        run: npx expo install --fix
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
