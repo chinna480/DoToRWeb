@@ -70,7 +70,16 @@ jobs:
           echo "🎯 All google-services.json checks passed."
 
       - name: Prebuild (generate native Android project)
-        run: npx expo prebuild --clean --no-install --platform android
+        run: npx expo prebuild --no-install --platform android
+
+      - name: Pin Gradle version to 8.3 (required for Expo SDK 50)
+        run: |
+          echo "distributionBase=GRADLE_USER_HOME" > android/gradle/wrapper/gradle-wrapper.properties
+          echo "distributionPath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
+          echo "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.3-bin.zip" >> android/gradle/wrapper/gradle-wrapper.properties
+          echo "zipStoreBase=GRADLE_USER_HOME" >> android/gradle/wrapper/gradle-wrapper.properties
+          echo "zipStorePath=wrapper/dists" >> android/gradle/wrapper/gradle-wrapper.properties
+          cat android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Grant Execute Permission
         run: chmod +x android/gradlew
