@@ -44,14 +44,12 @@ jobs:
             echo "❌ ERROR: Could not read android.package from app.json"
             exit 1
           fi
-          echo "   Expected package: $PACKAGE_NAME"
 
           JSON_PACKAGE=$(node -e "const f=require('./$FILE'); console.log(f.client[0].client_info.android_client_info.package_name)" 2>/dev/null || echo "")
           if [ -z "$JSON_PACKAGE" ]; then
             echo "❌ ERROR: $FILE is not valid or missing required fields"
             exit 1
           fi
-          echo "   Found package in $FILE: $JSON_PACKAGE"
 
           if [ "$PACKAGE_NAME" != "$JSON_PACKAGE" ]; then
             echo "❌ Package name mismatch!"
@@ -59,26 +57,27 @@ jobs:
             echo "   $FILE:    $JSON_PACKAGE"
             exit 1
           fi
-          echo "✅ Package name matches!"
+          echo "✅ Package name matches: $PACKAGE_NAME"
 
       - name: Prebuild Android
         run: npx expo prebuild --no-install --platform android
 
-      - name: Pin Gradle to 8.0.2 (Expo 50 compatible)
+      - name: Pin Gradle to 8.7 (matches AGP requirement)
         run: |
           cat > android/gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
           distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.0.2-all.zip
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-all.zip
           zipStoreBase=GRADLE_USER_HOME
           zipStorePath=wrapper/dists
           EOF
+          echo "✅ Gradle pinned to 8.7"
           cat android/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Pin Android Gradle Plugin to 8.1.0
+      - name: Pin AGP to 8.3.0 in build.gradle
         run: |
-          sed -i 's/com.android.tools.build:gradle:[0-9.]*/com.android.tools.build:gradle:8.1.0/g' android/build.gradle
-          echo "✅ android/build.gradle AGP version:"
+          sed -i 's/com.android.tools.build:gradle:[0-9.]*/com.android.tools.build:gradle:8.3.0/g' android/build.gradle
+          echo "✅ AGP version:"
           grep 'com.android.tools.build' android/build.gradle
 
       - name: Grant Execute Permission
