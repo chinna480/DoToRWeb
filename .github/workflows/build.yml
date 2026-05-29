@@ -19,13 +19,55 @@ jobs:
           node-version: 20
 
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
+
+      - name: Validate google-services.json
+        run: |
+          FILE="google-services.json"
+          if [ ! -f "$FILE" ]; then
+            echo "❌ ERROR: $FILE not found!"
+            echo "   This file is required for Firebase/Google services."
+            echo "   It should be placed in the project root."
+            echo "   Download it from Firebase Console > Project Settings > General > Your apps > google-services.json"
+            exit 1
+          fi
+          echo "✅ $FILE exists"
+
+          PACKAGE_NAME=$(node -e "console.log(require('./app.json').expo.android.package)" 2>/dev/null)
+          if [ -z "$PACKAGE_NAME" ]; then
+            echo "❌ ERROR: Could not read android.package from app.json"
+            exit 1
+          fi
+          echo "   Expected package: $PACKAGE_NAME"
+
+          JSON_PACKAGE=$(node -e "const f=require('./$FILE'); console.log(f.client[0].client_info.android_client_info.package_name)" 2>/dev/null || echo "")
+          if [ -z "$JSON_PACKAGE" ]; then
+            echo "❌ ERROR: $FILE is not valid or missing client[0].client_info.android_client_info.package_name"
+            node -e "require('./$FILE')" 2>/dev/null || echo "   File is not valid JSON"
+            exit 1
+          fi
+          echo "   Found package in $FILE: $JSON_PACKAGE"
+
+          if [ "$PACKAGE_NAME" != "$JSON_PACKAGE" ]; then
+            echo "❌ ERROR: Package name mismatch!"
+            echo "   app.json:    $PACKAGE_NAME"
+            echo "   $FILE: $JSON_PACKAGE"
+            echo "   Update google-services.json from Firebase Console to match the correct package name."
+            exit 1
+          fi
+          echo "✅ Package name matches!"
+
+          echo ""
+          echo "🎯 All google-services.json checks passed."
+
+      - name: Prebuild (generate native Android project)
+        run: npx expo prebuild --clean --no-install --platform android
 
       - name: Grant Execute Permission
         run: chmod +x android/gradlew

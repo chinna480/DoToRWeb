@@ -5,8 +5,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { onValue, push, ref, set } from 'firebase/database';
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
+  Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,6 +18,7 @@ import {
   View
 } from 'react-native';
 import { db } from '../firebase/config';
+import LocationAutocomplete from '../components/LocationAutocomplete';
 import { calcDistance } from '../utils/distance';
 import {
   notifyCustomerBookingConfirmed,
