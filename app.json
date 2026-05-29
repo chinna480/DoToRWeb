@@ -57,7 +57,8 @@
           "color": "#FF6B00",
           "sounds": []
         }
-      ]
+      ],
+      "expo-font"
     ],
     "updates": {
       "url": "https://u.expo.dev/b18f7f63-5dd7-4fe2-8446-2574761e1476"
