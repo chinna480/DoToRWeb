@@ -721,6 +721,15 @@ html, body {
   opacity: 0.8;
 }
 
+/* ─── Address Box (Home) ─── */
+.address-box {
+  background: var(--white);
+  border-radius: var(--radius);
+  margin: 0 15px 10px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+
 /* ─── Why DoToR ─── */
 .why-item {
   display: flex;

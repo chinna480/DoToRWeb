@@ -36,6 +36,7 @@ export default function TechLoginScreen() {
   const [name, setName]           = useState('')
   const [phone, setPhone]         = useState('')
   const [location, setLocation]   = useState('')
+  const [pincode, setPincode]     = useState('')
   const [exp, setExp]             = useState('')
   const [selSkills, setSelSkills] = useState([])
   const [showExp, setShowExp]     = useState(false)
@@ -94,6 +95,7 @@ export default function TechLoginScreen() {
     if (!name)                 { Alert.alert('Error', 'Enter your name!');            return }
     if (phone.length !== 10)   { Alert.alert('Error', 'Enter valid 10 digit number!'); return }
     if (!location)             { Alert.alert('Error', 'Enter your location!');        return }
+    if (!/^\d{6}$/.test(pincode))   { Alert.alert('Error', 'Enter a valid 6-digit pincode!'); return }
     if (!exp)                  { Alert.alert('Error', 'Select your experience!');     return }
     if (selSkills.length === 0){ Alert.alert('Error', 'Select at least one skill!'); return }
     if (!certificate)          { Alert.alert('Error', 'Upload your Certificate!');   return }
@@ -102,6 +104,7 @@ export default function TechLoginScreen() {
     await AsyncStorage.setItem('techName',     name)
     await AsyncStorage.setItem('techPhone',    phone)
     await AsyncStorage.setItem('techLocation', location)
+    await AsyncStorage.setItem('techPincode', pincode)
     await AsyncStorage.setItem('techExp',      exp)
     await AsyncStorage.setItem('techSkills',   JSON.stringify(selSkills))
 
@@ -114,9 +117,10 @@ export default function TechLoginScreen() {
         name,
         phone,
         location,
+        pincode,
       })
       // These paths are used by the newOrderNotification Cloud Function
-      await update(ref(db, 'techUsers/' + phone), { pushToken, name, phone, location })
+      await update(ref(db, 'techUsers/' + phone), { pushToken, name, phone, location, pincode })
       await update(ref(db, 'pushTokens/' + phone), token)
     }
 
@@ -124,8 +128,14 @@ export default function TechLoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView style={s.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        style={s.container}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
 
         <View style={s.header}>
           <TouchableOpacity onPress={() => router.back()}>
@@ -161,6 +171,14 @@ export default function TechLoginScreen() {
             <View style={s.field}>
               <Text style={s.fIcon}>📍</Text>
               <TextInput style={s.input} placeholder="Enter your area" placeholderTextColor="#aaa" value={location} onChangeText={setLocation} />
+            </View>
+          </View>
+
+          <View style={s.group}>
+            <Text style={s.label}>Pincode</Text>
+            <View style={s.field}>
+              <Text style={s.fIcon}>📮</Text>
+              <TextInput style={s.input} placeholder="Enter 6-digit pincode" placeholderTextColor="#aaa" value={pincode} onChangeText={(t) => setPincode(t.replace(/[^0-9]/g, '').slice(0, 6))} keyboardType="numeric" maxLength={6} />
             </View>
           </View>
 

@@ -1,4 +1,11 @@
 // Home Screen - Customer booking
+const TIME_SLOTS = [
+  '09:00 - 10:00', '10:00 - 11:00', '11:00 - 12:00', '12:00 - 13:00',
+  '14:00 - 15:00', '15:00 - 16:00', '16:00 - 17:00', '17:00 - 18:00', '18:00 - 19:00',
+];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 const PHONE_BRANDS = ['iPhone', 'Samsung', 'OnePlus', 'Redmi', 'Vivo', 'Oppo', 'Realme', 'Nokia'];
 const LAPTOP_BRANDS = ['Dell', 'HP', 'Lenovo', 'MacBook', 'Asus', 'Acer', 'MSI', 'Sony'];
 const WHY_DOTOR = [
@@ -37,13 +44,6 @@ Router.register('home', {
                 <span style="font-size:24px">👤</span>
               </div>
             </div>
-            <div class="banner" onclick="Router.navigate('schedule')">
-              <div>
-                <div class="banner-text">🔧 Expert Repair at Your Doorstep!</div>
-                <div class="banner-sub">Book in 30 seconds!</div>
-              </div>
-              <div class="banner-cta"><span class="banner-cta-text">📅 Schedule</span></div>
-            </div>
             <div class="section-title">Step 1 — Select Device</div>
             <div class="device-grid">
               <div class="device-card" data-device="phone" onclick="window.selectDevice('phone')">
@@ -70,17 +70,42 @@ Router.register('home', {
                   placeholder="e.g. Screen cracked, phone not charging, battery draining fast..."
                 ></textarea>
               </div>
-              <div class="schedule-btn" onclick="Router.navigate('schedule')">
-                <span class="schedule-btn-icon">📅</span>
-                <div class="schedule-btn-content">
-                  <div class="schedule-btn-title">Need an Appointment?</div>
-                  <div class="schedule-btn-sub">Book a convenient time slot</div>
+              <!-- ── Inline Appointment Toggle ── -->
+              <div class="appt-toggle" id="apptToggle" onclick="window.toggleAppointment()">
+                <span class="appt-toggle-icon">📅</span>
+                <div class="appt-toggle-content">
+                  <div class="appt-toggle-title">Want to book an appointment?</div>
+                  <div class="appt-toggle-sub">Pick a convenient date & time</div>
                 </div>
-                <span class="schedule-btn-arrow">→</span>
+                <span class="appt-toggle-arrow" id="apptToggleArrow">▶</span>
               </div>
+
+              <!-- ── Appointment Date/Time Picker ── -->
+              <div id="apptDateTimeSection" style="display:none">
+                <div class="section-title">Select Date</div>
+                <div class="date-row" id="apptDateRow"></div>
+                <div class="section-title">Select Time Slot</div>
+                <div class="slots-grid" id="apptSlotsGrid">
+                  ${TIME_SLOTS.map(s => `<button class="slot-btn" data-slot="${s}" onclick="window.selectApptSlot('${s}')">🕐 ${s}</button>`).join('')}
+                </div>
+              </div>
+
+              <!-- ── Your Address ── -->
+              <div class="section-title">📍 Your Address</div>
+              <div class="address-box">
+                <div class="form-field" style="position:relative">
+                  <span class="form-icon">📍</span>
+                  <input class="form-input" id="homeAddress" placeholder="Search your area..." type="text" autocomplete="off" />
+                </div>
+                <div class="form-field" style="margin-top:10px">
+                  <span class="form-icon">📮</span>
+                  <input class="form-input" id="homePincode" placeholder="Enter 6-digit pincode" type="tel" maxlength="6" />
+                </div>
+              </div>
+
               <div class="desc-box">
                 <button id="submitRepairBtn" class="submit-repair-btn" onclick="window.submitRepair()">
-                  📋 Submit Repair Request
+                  <span id="submitBtnText">📋 Submit Repair Request</span>
                 </button>
               </div>
             </div>
@@ -137,6 +162,10 @@ Router.register('home', {
       init() {
         let selectedDevice = null;
         let selectedBrand = null;
+        // ── Appointment state ──
+        let wantAppointment = false;
+        let selectedDate = null;
+        let selectedSlot = null;
         let ordersUnsub = null;
         let prevOrderStatuses = {}; // track order status changes for notifications
         let hasAcceptedOrder = false; // whether customer has an accepted order
@@ -443,6 +472,139 @@ Router.register('home', {
           document.getElementById('actionSection').style.display = 'block';
         };
 
+        // ── Initialize Address/Pincode from Store ──
+        const addrInput = document.getElementById('homeAddress');
+        const pincodeInput = document.getElementById('homePincode');
+        if (addrInput) addrInput.value = Store.get('custLocation', '');
+        if (pincodeInput) pincodeInput.value = Store.get('custPincode', '');
+
+        // Auto-save address/pincode to Store on input
+        if (addrInput) {
+          addrInput.addEventListener('input', () => {
+            Store.set('custLocation', addrInput.value);
+          });
+        }
+        if (pincodeInput) {
+          pincodeInput.addEventListener('input', () => {
+            const filtered = pincodeInput.value.replace(/[^0-9]/g, '').slice(0, 6);
+            pincodeInput.value = filtered;
+            Store.set('custPincode', filtered);
+          });
+        }
+
+        // Initialize Google Places Autocomplete for home address
+        if (typeof window.GOOGLE_MAPS_LOADED !== 'undefined') {
+          window.GOOGLE_MAPS_LOADED.then(() => {
+            if (addrInput && typeof google !== 'undefined' && google.maps?.places) {
+              const autocomplete = new google.maps.places.Autocomplete(addrInput, {
+                types: ['geocode', 'establishment'],
+                componentRestrictions: { country: 'in' },
+                fields: ['formatted_address', 'name', 'address_components'],
+              });
+              autocomplete.addListener('place_changed', () => {
+                const place = autocomplete.getPlace();
+                if (place && place.formatted_address) {
+                  addrInput.value = place.formatted_address;
+                  Store.set('custLocation', place.formatted_address);
+                }
+              });
+            }
+          }).catch(() => {});
+        }
+
+        // ── Generate next 14 days ──
+        function generateDates() {
+          const days = [];
+          const today = new Date();
+          for (let i = 0; i < 14; i++) {
+            const d = new Date(today);
+            d.setDate(d.getDate() + i);
+            days.push(d);
+          }
+          return days;
+        }
+
+        function getAppointmentTime(date, slot) {
+          const startHour = parseInt(slot.split(' - ')[0].split(':')[0], 10);
+          const startMin = parseInt(slot.split(' - ')[0].split(':')[1], 10);
+          const t = new Date(date);
+          t.setHours(startHour, startMin, 0, 0);
+          return t.getTime();
+        }
+
+        function formatDate(d) {
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function renderApptDates() {
+          const row = document.getElementById('apptDateRow');
+          if (!row) return;
+          const dates = generateDates();
+          row.innerHTML = dates.map((d, i) => {
+            const dateStr = d.toISOString();
+            const isSel = selectedDate && d.toDateString() === selectedDate.toDateString();
+            return `
+              <div class="date-card${isSel ? ' active' : ''}" data-date="${dateStr}" onclick="window.selectApptDate('${dateStr}')">
+                <div class="date-day${isSel ? ' active' : ''}">${DAYS[d.getDay()]}</div>
+                <div class="date-num${isSel ? ' active' : ''}">${d.getDate()}</div>
+                <div class="date-month${isSel ? ' active' : ''}">${MONTHS[d.getMonth()]}</div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        window.toggleAppointment = () => {
+          wantAppointment = !wantAppointment;
+          if (!wantAppointment) {
+            selectedDate = null;
+            selectedSlot = null;
+          }
+          const section = document.getElementById('apptDateTimeSection');
+          const arrow = document.getElementById('apptToggleArrow');
+          const toggle = document.getElementById('apptToggle');
+          const submitText = document.getElementById('submitBtnText');
+          if (wantAppointment) {
+            section.style.display = 'block';
+            arrow.textContent = '▼';
+            toggle.classList.add('active');
+            renderApptDates();
+            updateSubmitBtnText();
+          } else {
+            section.style.display = 'none';
+            arrow.textContent = '▶';
+            toggle.classList.remove('active');
+            if (submitText) submitText.textContent = '📋 Submit Repair Request';
+          }
+        };
+
+        window.selectApptDate = (dateStr) => {
+          selectedDate = new Date(dateStr);
+          selectedSlot = null;
+          document.querySelectorAll('#apptDateRow .date-card').forEach(c => c.classList.remove('active'));
+          const card = document.querySelector(`#apptDateRow .date-card[data-date="${dateStr}"]`);
+          if (card) card.classList.add('active');
+          document.querySelectorAll('#apptSlotsGrid .slot-btn').forEach(s => s.classList.remove('active'));
+          updateSubmitBtnText();
+        };
+
+        window.selectApptSlot = (slot) => {
+          selectedSlot = slot;
+          document.querySelectorAll('#apptSlotsGrid .slot-btn').forEach(s => s.classList.remove('active'));
+          const btn = document.querySelector(`#apptSlotsGrid .slot-btn[data-slot="${slot}"]`);
+          if (btn) btn.classList.add('active');
+          updateSubmitBtnText();
+        };
+
+        function updateSubmitBtnText() {
+          const submitText = document.getElementById('submitBtnText');
+          if (!submitText) return;
+          if (wantAppointment && selectedDate && selectedSlot) {
+            submitText.textContent = '📅 Book Appointment & Submit →';
+          } else {
+            submitText.textContent = '📋 Submit Repair Request';
+          }
+        }
+
         window.selectQuickRepair = (repair) => {
           // No longer used - kept for compatibility
         };
@@ -458,42 +620,91 @@ Router.register('home', {
 
         window.bookRepair = async (repair) => {
           const name = Store.get('custName', 'Customer');
-          const loc = Store.get('custLocation', 'Your Location');
-          const phone = Store.get('custPhone', '');
-          const pushToken = Store.get('pushToken', '');
-          Store.set('lastBrand', selectedBrand);
-          Store.set('lastRepair', repair);
+          // Save address & pincode from inputs
+        const addrInput = document.getElementById('homeAddress');
+        const pincodeInput = document.getElementById('homePincode');
+        const addr = addrInput ? addrInput.value.trim() : Store.get('custLocation', 'Your Location');
+        const pin = pincodeInput ? pincodeInput.value.trim() : Store.get('custPincode', '');
+        Store.set('custLocation', addr);
+        Store.set('custPincode', pin);
 
-          const pos = await getCurrentPositionOnce();
-          try { firebase.database().ref('custLocation').set({ lat: pos.lat, lng: pos.lng }); } catch (e) {}
+        const loc = addr;
+        const phone = Store.get('custPhone', '');
+        const pushToken = Store.get('pushToken', '');
+        Store.set('lastBrand', selectedBrand);
+        Store.set('lastRepair', repair);
 
-          const pincode = Store.get('custPincode', '');
+        const pos = await getCurrentPositionOnce();
+        try { firebase.database().ref('custLocation').set({ lat: pos.lat, lng: pos.lng }); } catch (e) {}
+
+        const pincode = pin;
+
+          // ── Appointment data (if customer opted in) ──
+          const hasAppt = wantAppointment && selectedDate && selectedSlot;
+          let appointmentTime = null;
+          if (hasAppt) {
+            appointmentTime = getAppointmentTime(selectedDate, selectedSlot);
+          }
+
           const order = {
             customerName: name,
             customerPhone: phone,
             customerPushToken: pushToken,
             location: loc,
-            pincode,
-            brand: selectedBrand,
+          pincode: pincode,
+          brand: selectedBrand,
             repair: repair,
             status: 'pending',
-            time: new Date().toLocaleTimeString(),
+            time: hasAppt ? selectedSlot : new Date().toLocaleTimeString(),
             // GPS coordinates for distance-based technician matching
             custLat: pos ? pos.lat : null,
-            custLng: pos ? pos.lng : null
+            custLng: pos ? pos.lng : null,
+            // ── Optional appointment fields ──
+            ...(hasAppt && {
+              isAppointment: true,
+              appointmentTime,
+              date: formatDate(selectedDate),
+              dateLabel: `${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}`,
+              timeSlot: selectedSlot,
+              reminderSent: false,
+            }),
           };
           try {
             const newRef = firebase.database().ref('orders').push(order);
             const orderId = newRef.key;
             Store.set('lastOrderId', orderId);
+
+            // Capture appointment alert values BEFORE resetting state
+            const apptDay = hasAppt ? DAYS[selectedDate.getDay()] : '';
+            const apptNum = hasAppt ? selectedDate.getDate() : '';
+            const apptMon = hasAppt ? MONTHS[selectedDate.getMonth()] : '';
+            const apptSlot = hasAppt ? selectedSlot : '';
+
+            const alertMsg = hasAppt
+              ? `Brand: ${selectedBrand}\nRepair: ${repair}\nDate: ${apptDay}, ${apptNum} ${apptMon}\nTime: ${apptSlot}\n\nWe'll send a reminder before your appointment!`
+              : `Brand: ${selectedBrand}\nRepair: ${repair}\n\nTrack your technician?`;
+
+            // Reset appointment state (after capturing values)
+            wantAppointment = false;
+            selectedDate = null;
+            selectedSlot = null;
+            const apptSection = document.getElementById('apptDateTimeSection');
+            if (apptSection) apptSection.style.display = 'none';
+            const toggleArrow = document.getElementById('apptToggleArrow');
+            if (toggleArrow) toggleArrow.textContent = '▶';
+            const toggleEl = document.getElementById('apptToggle');
+            if (toggleEl) toggleEl.classList.remove('active');
+            const submitText = document.getElementById('submitBtnText');
+            if (submitText) submitText.textContent = '📋 Submit Repair Request';
+
             // Show a browser notification for booking confirmation
             showCustBrowserNotification(
-              '✅ Booking Confirmed!',
+              hasAppt ? '✅ Appointment Booked!' : '✅ Booking Confirmed!',
               `Your ${selectedBrand} ${repair} repair request has been submitted. We'll notify you when a technician accepts!`,
               orderId,
               'default'
             );
-            showAlert('✅ Booking Confirmed!', `Brand: ${selectedBrand}\nRepair: ${repair}\n\nTrack your technician?`, [
+            showAlert(hasAppt ? '✅ Appointment Booked!' : '✅ Booking Confirmed!', alertMsg, [
               { text: 'Track Now', onPress: () => Router.navigate('tracking') },
               { text: '💬 Chat', onPress: () => Router.navigate('chat', { orderId, role: 'cust', customerName: name, techName: '' }) },
               { text: 'Later' }
@@ -509,6 +720,9 @@ Router.register('home', {
           delete window.selectDevice;
           delete window.selectBrand;
           delete window.bookRepair;
+          delete window.toggleAppointment;
+          delete window.selectApptDate;
+          delete window.selectApptSlot;
         };
       }
     };

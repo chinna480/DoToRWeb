@@ -28,7 +28,49 @@ const PHONE_REPAIRS  = ['Screen Replacement','Battery Replacement','Charging Por
 const LAPTOP_REPAIRS = ['Screen Replacement','Battery Replacement','Keyboard Repair','Charging Port','RAM Upgrade','Hard Disk','Overheating','Software Issue']
 
 import { useRouter } from 'expo-router';
+
+// ── MapView (native only, gracefully falls back to null on web) ──
+let MapView = null, MarkerNative = null
+if (Platform.OS !== 'web') {
+  try {
+    const Maps = require('react-native-maps')
+    MapView = Maps.default
+    MarkerNative = Maps.Marker
+  } catch (e) {
+    MapView = null
+  }
+}
+
+const TIME_SLOTS = [
+  '09:00 - 10:00', '10:00 - 11:00', '11:00 - 12:00', '12:00 - 13:00',
+  '14:00 - 15:00', '15:00 - 16:00', '16:00 - 17:00', '17:00 - 18:00', '18:00 - 19:00',
+]
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
 export default function HomeScreen() {
+
+  // ── Generate next 14 days ──
+  const generateDates = () => {
+    const days = []
+    const today = new Date()
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today)
+      d.setDate(d.getDate() + i)
+      days.push(d)
+    }
+    return days
+  }
+  const dates = generateDates()
+
+  const getAppointmentTime = (date, slot) => {
+    const startHour = parseInt(slot.split(' - ')[0].split(':')[0], 10)
+    const startMin = parseInt(slot.split(' - ')[0].split(':')[1], 10)
+    const t = new Date(date)
+    t.setHours(startHour, startMin, 0, 0)
+    return t.getTime()
+  }
   const router = useRouter();
   const [activeTab, setActiveTab]       = useState('home')
   const [custName, setCustName]         = useState('')
@@ -43,6 +85,19 @@ export default function HomeScreen() {
   const [description, setDescription] = useState('') // customer's problem description
   const [images, setImages] = useState([]) // uploaded image base64 strings
   const [uploadingImg, setUploadingImg] = useState(false)
+  // ── Address & Pincode ──────────────────────────────────────────────────────
+  const [addressText, setAddressText] = useState('')
+  const [pincodeText, setPincodeText] = useState('')
+  // ── Map Picker Modal ───────────────────────────────────────────────────────
+  const [showMapModal, setShowMapModal] = useState(false)
+  const [mapLat, setMapLat] = useState(null)
+  const [mapLng, setMapLng] = useState(null)
+  const [reverseGeocoding, setReverseGeocoding] = useState(false)
+  // ── Inline Appointment ─────────────────────────────────────────────────────
+  const [wantAppointment, setWantAppointment] = useState(false)
+  const [selectedDate, setSelectedDate] = useState(null)
+  const [selectedSlot, setSelectedSlot] = useState(null)
+
   // ── GPS-based ETA tracking from technician ─────────────────────────────────
   const [techLat, setTechLat]       = useState(null)
   const [techLng, setTechLng]       = useState(null)
@@ -91,9 +146,12 @@ export default function HomeScreen() {
     const n = await AsyncStorage.getItem('custName')
     const l = await AsyncStorage.getItem('custLocation')
     const p = await AsyncStorage.getItem('custPhone')
+    const pi = await AsyncStorage.getItem('custPincode')
     setCustName(n || 'Customer')
     setCustLocation(l || 'Your Location')
     setCustPhone(p || '')
+    setAddressText(l || '')
+    setPincodeText(pi || '')
 
     // Listen for this customer's orders
     if (p) listenOrders(p)
@@ -180,13 +238,57 @@ export default function HomeScreen() {
     setUploadingImg(false)
   }
 
+  const reverseGeocode = async (lat, lng) => {
+    try {
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_PLACES_API_KEY}`
+      const res = await fetch(url)
+      const data = await res.json()
+      if (data.status === 'OK' && data.results.length > 0) {
+        return data.results[0].formatted_address
+      }
+    } catch (e) {}
+    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+  }
+
+  const confirmMapLocation = async () => {
+    if (!mapLat || !mapLng) return
+    setReverseGeocoding(true)
+    const addr = await reverseGeocode(mapLat, mapLng)
+    setAddressText(addr)
+    await AsyncStorage.setItem('custLocation', addr)
+    setCustLocation(addr)
+    setReverseGeocoding(false)
+    setShowMapModal(false)
+  }
+
+  const openMapPicker = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status === 'granted') {
+        const pos = await Location.getCurrentPositionAsync({})
+        setMapLat(pos.coords.latitude)
+        setMapLng(pos.coords.longitude)
+      } else {
+        setMapLat(17.3850)
+        setMapLng(78.4867)
+      }
+    } catch (e) {
+      setMapLat(17.3850)
+      setMapLng(78.4867)
+    }
+    setShowMapModal(true)
+  }
+
   const bookRepair = async (repair) => {
     const name              = await AsyncStorage.getItem('custName')     || 'Customer'
-    const loc               = await AsyncStorage.getItem('custLocation') || 'Your Location'
-    const pincode           = await AsyncStorage.getItem('custPincode')  || ''
     const phone             = await AsyncStorage.getItem('custPhone')    || ''
     const customerPushToken = await AsyncStorage.getItem('pushToken')    || ''
+    const loc               = addressText.trim() || (await AsyncStorage.getItem('custLocation')) || 'Your Location'
+    const pincode           = pincodeText.trim() || (await AsyncStorage.getItem('custPincode')) || ''
 
+    // Save address & pincode to AsyncStorage for future use
+    await AsyncStorage.setItem('custLocation', loc)
+    await AsyncStorage.setItem('custPincode', pincode)
     await AsyncStorage.setItem('lastBrand',  selectedBrand)
     await AsyncStorage.setItem('lastRepair', repair)
 
@@ -202,6 +304,13 @@ export default function HomeScreen() {
       }
     } catch (e) {}
 
+    // ── Appointment data (if customer opted in) ──
+    const hasAppt = wantAppointment && selectedDate && selectedSlot
+    let appointmentTime = null
+    if (hasAppt) {
+      appointmentTime = getAppointmentTime(selectedDate, selectedSlot)
+    }
+
     const order = {
       customerName:       name,
       customerPhone:      phone,
@@ -210,18 +319,28 @@ export default function HomeScreen() {
       pincode,
       brand:              selectedBrand,
       repair,
-      description:        description.trim(), // customer's problem description
-      images:             images.length > 0 ? images : null, // uploaded photos (base64)
+      description:        description.trim(),
+      images:             images.length > 0 ? images : null,
       status:             'pending',
-      time:               new Date().toLocaleTimeString(),
-      // GPS coordinates for distance-based technician matching
+      time:               hasAppt ? selectedSlot : new Date().toLocaleTimeString(),
       custLat:            orderLat,
       custLng:            orderLng,
+      ...(hasAppt && {
+        isAppointment:    true,
+        appointmentTime,
+        date:             `${selectedDate.getFullYear()}-${(selectedDate.getMonth() + 1).toString().padStart(2, '0')}-${selectedDate.getDate().toString().padStart(2, '0')}`,
+        dateLabel:        `${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}`,
+        timeSlot:         selectedSlot,
+        reminderSent:     false,
+      }),
     }
 
-    // Clear description and images after booking
+    // Clear form after booking
     setDescription('')
     setImages([])
+    setWantAppointment(false)
+    setSelectedDate(null)
+    setSelectedSlot(null)
 
     try {
       const newOrderRef = await push(ref(db, 'orders'), order)
@@ -239,9 +358,13 @@ export default function HomeScreen() {
         console.error('⚠️ notifyTechsForNewOrder failed (non-blocking):', err)
       );
 
+      const alertMsg = hasAppt
+        ? `Brand: ${selectedBrand}\nRepair: ${repair}\nDate: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}\n\nWe'll send a reminder before your appointment!`
+        : `Brand: ${selectedBrand}\nRepair: ${repair}\n\nTrack your technician?`
+
       Alert.alert(
-        '✅ Booking Confirmed!',
-        `Brand: ${selectedBrand}\nRepair: ${repair}\n\nTrack your technician?`,
+        hasAppt ? '✅ Appointment Booked!' : '✅ Booking Confirmed!',
+        alertMsg,
         [
           { text: 'Track Now', onPress: () => router.push('/screens/TrackingScreen') },
           { text: '💬 Chat', onPress: () => router.push(`/screens/ChatScreen?orderId=${orderId}&role=cust&customerName=${encodeURIComponent(name)}&techName=`) },
@@ -284,16 +407,6 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </View>
-
-      <TouchableOpacity style={s.banner} onPress={() => router.push('/screens/ScheduleScreen')}>
-        <View>
-          <Text style={s.bannerText}>🔧 Expert Repair at Your Doorstep!</Text>
-          <Text style={s.bannerSub}>Book in 30 seconds!</Text>
-        </View>
-        <View style={s.bannerCta}>
-          <Text style={s.bannerCtaTxt}>📅 Schedule</Text>
-        </View>
-      </TouchableOpacity>
 
       <Text style={s.sectionTitle}>Step 1 — Select Device</Text>
       <View style={s.deviceGrid}>
@@ -369,15 +482,93 @@ export default function HomeScreen() {
             {uploadingImg && <Text style={s.uploadingTxt}>⏳ Processing...</Text>}
           </View>
 
-          {/* ── Schedule Appointment ── */}
-          <TouchableOpacity style={s.scheduleBtn} onPress={() => router.push('/screens/ScheduleScreen')}>
-            <Text style={s.scheduleBtnIcon}>📅</Text>
+          {/* ── Inline Appointment Toggle ── */}
+          <TouchableOpacity style={s.apptToggle} onPress={() => {
+            setWantAppointment(!wantAppointment)
+            if (wantAppointment) { setSelectedDate(null); setSelectedSlot(null) }
+          }}>
+            <Text style={s.apptToggleIcon}>📅</Text>
             <View style={{ flex: 1 }}>
-              <Text style={s.scheduleBtnTitle}>Need an Appointment?</Text>
-              <Text style={s.scheduleBtnSub}>Book a convenient time slot</Text>
+              <Text style={s.apptToggleTitle}>Want to book an appointment?</Text>
+              <Text style={s.apptToggleSub}>Pick a convenient date & time</Text>
             </View>
-            <Text style={s.scheduleBtnArrow}>→</Text>
+            <Text style={s.apptToggleArrow}>{wantAppointment ? '▼' : '▶'}</Text>
           </TouchableOpacity>
+
+          {/* ── Appointment Date/Time Picker ── */}
+          {wantAppointment && (
+            <>
+              <Text style={s.sectionTitle}>Select Date</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.dateRow}
+              >
+                {dates.map((d, i) => {
+                  const isSel = selectedDate && d.toDateString() === selectedDate.toDateString()
+                  return (
+                    <TouchableOpacity
+                      key={i}
+                      style={[s.dateCard, isSel && s.dateCardActive]}
+                      onPress={() => { setSelectedDate(d); setSelectedSlot(null) }}
+                    >
+                      <Text style={[s.dateDay, isSel && s.dateDayActive]}>{DAYS[d.getDay()]}</Text>
+                      <Text style={[s.dateNum, isSel && s.dateNumActive]}>{d.getDate()}</Text>
+                      <Text style={[s.dateMonth, isSel && s.dateMonthActive]}>{MONTHS[d.getMonth()]}</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </ScrollView>
+
+              <Text style={s.sectionTitle}>Select Time Slot</Text>
+              <View style={s.slotsGrid}>
+                {TIME_SLOTS.map(slot => (
+                  <TouchableOpacity
+                    key={slot}
+                    style={[s.slotBtn, selectedSlot === slot && s.slotBtnActive]}
+                    onPress={() => setSelectedSlot(slot)}
+                  >
+                    <Text style={[s.slotTxt, selectedSlot === slot && s.slotTxtActive]}>🕐 {slot}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* ── Your Address ── */}
+          <Text style={s.sectionTitle}>📍 Your Address</Text>
+          <View style={s.addressBox}>
+            <LocationAutocomplete
+              value={addressText}
+              onChangeText={(t) => {
+                setAddressText(t)
+                AsyncStorage.setItem('custLocation', t).catch(() => {})
+                setCustLocation(t)
+              }}
+              placeholder="Search your area..."
+              icon="📍"
+            />
+            <TouchableOpacity style={s.mapBtn} onPress={openMapPicker}>
+              <Text style={s.mapBtnIcon}>🗺️</Text>
+              <Text style={s.mapBtnText}>Select on Map</Text>
+            </TouchableOpacity>
+            <View style={s.fieldRow}>
+              <Text style={s.fieldIcon}>📮</Text>
+              <TextInput
+                style={s.fieldInput}
+                placeholder="Enter 6-digit pincode"
+                placeholderTextColor="#aaa"
+                value={pincodeText}
+                onChangeText={(t) => {
+                  const filtered = t.replace(/[^0-9]/g, '').slice(0, 6)
+                  setPincodeText(filtered)
+                  AsyncStorage.setItem('custPincode', filtered).catch(() => {})
+                }}
+                keyboardType="numeric"
+                maxLength={6}
+              />
+            </View>
+          </View>
 
           {/* ── Submit ── */}
           <View style={s.descBox}>
@@ -393,7 +584,9 @@ export default function HomeScreen() {
               }}
               disabled={!description.trim()}
             >
-              <Text style={s.submitBtnText}>📋 Submit Repair Request</Text>
+              <Text style={s.submitBtnText}>
+                {wantAppointment && selectedDate && selectedSlot ? '📅 Book Appointment & Submit →' : '📋 Submit Repair Request'}
+              </Text>
             </TouchableOpacity>
           </View>
         </>
@@ -529,6 +722,64 @@ export default function HomeScreen() {
       {activeTab === 'home' && renderHome()}
       {activeTab === 'orders' && renderOrders()}
 
+      {/* ── Map Picker Modal ── */}
+      <Modal visible={showMapModal} animationType="slide" transparent={false}>
+        <View style={s.mapModalContainer}>
+          <View style={s.mapModalHeader}>
+            <Text style={s.mapModalTitle}>📍 Select Your Location</Text>
+            <TouchableOpacity onPress={() => setShowMapModal(false)}>
+              <Text style={s.mapModalClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          {mapLat && mapLng && MapView ? (
+            <MapView
+              style={{ flex: 1 }}
+              initialRegion={{
+                latitude: mapLat,
+                longitude: mapLng,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+              }}
+              onPress={(e) => {
+                setMapLat(e.nativeEvent.coordinate.latitude)
+                setMapLng(e.nativeEvent.coordinate.longitude)
+              }}
+            >
+              {MarkerNative && (
+                <MarkerNative
+                  coordinate={{ latitude: mapLat, longitude: mapLng }}
+                  draggable
+                  onDragEnd={(e) => {
+                    setMapLat(e.nativeEvent.coordinate.latitude)
+                    setMapLng(e.nativeEvent.coordinate.longitude)
+                  }}
+                  title="Your Location"
+                />
+              )}
+            </MapView>
+          ) : (
+            <View style={s.mapModalPlaceholder}>
+              <Text style={s.mapModalPlaceholderIcon}>🗺️</Text>
+              <Text style={s.mapModalPlaceholderText}>{MapView ? 'Loading map...' : 'Map is not available on web'}</Text>
+            </View>
+          )}
+          <View style={s.mapModalFooter}>
+            <Text style={s.mapModalHint}>Tap on the map or drag the pin to set your exact location</Text>
+            <TouchableOpacity
+              style={s.mapModalConfirmBtn}
+              onPress={confirmMapLocation}
+              disabled={reverseGeocoding}
+            >
+              {reverseGeocoding ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={s.mapModalConfirmText}>✅ Confirm Location</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* BOTTOM TAB BAR */}
       <View style={s.tabBar}>
         {TABS.map(tab => (
@@ -556,11 +807,6 @@ const s = StyleSheet.create({
   avatar:           { width: 50, height: 50, backgroundColor: '#fff', borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
   versionBadge:     { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   versionBadgeText: { fontSize: 10, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
-  banner:           { backgroundColor: '#1A3A6B', padding: 18, borderRadius: 14, marginHorizontal: 15, marginBottom: 5, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  bannerText:       { color: '#fff', fontSize: 15, fontWeight: '800' },
-  bannerSub:        { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 3 },
-  bannerCta:        { backgroundColor: '#FF6B00', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-  bannerCtaTxt:     { color: '#fff', fontSize: 12, fontWeight: '800' },
   sectionTitle:     { fontSize: 16, fontWeight: '800', color: '#1A3A6B', marginHorizontal: 15, marginTop: 20, marginBottom: 12 },
   deviceGrid:       { flexDirection: 'row', gap: 12, marginHorizontal: 15 },
   deviceCard:       { flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 22, alignItems: 'center', borderWidth: 2, borderColor: 'transparent', elevation: 3 },
@@ -596,6 +842,28 @@ const s = StyleSheet.create({
   descLabel:        { fontSize: 12, fontWeight: '700', color: '#1A3A6B', marginBottom: 8 },
   descInput:        { backgroundColor: '#f8f8f8', borderRadius: 10, padding: 12, fontSize: 13, color: '#333', minHeight: 80, textAlignVertical: 'top' },
 
+  // ── Address Section ──
+  addressBox:       { backgroundColor: '#fff', borderRadius: 14, marginHorizontal: 15, marginBottom: 10, padding: 14, elevation: 2 },
+  mapBtn:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fff5ee', borderWidth: 2, borderColor: '#FF6B00', borderRadius: 12, padding: 12, marginBottom: 12 },
+  mapBtnIcon:       { fontSize: 18 },
+  mapBtnText:       { fontSize: 13, fontWeight: '800', color: '#FF6B00' },
+  fieldRow:         { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: '#eee', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
+  fieldIcon:        { fontSize: 18 },
+  fieldInput:       { flex: 1, fontSize: 14, color: '#1A3A6B', fontWeight: '600' },
+
+  // ── Map Modal ──
+  mapModalContainer:    { flex: 1, backgroundColor: '#fff' },
+  mapModalHeader:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 55, paddingBottom: 15, backgroundColor: '#FF6B00' },
+  mapModalTitle:        { fontSize: 17, fontWeight: '800', color: '#fff' },
+  mapModalClose:        { fontSize: 22, color: '#fff', fontWeight: '800', padding: 4 },
+  mapModalPlaceholder:  { flex: 1, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' },
+  mapModalPlaceholderIcon: { fontSize: 50 },
+  mapModalPlaceholderText: { color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 10 },
+  mapModalFooter:       { padding: 20, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
+  mapModalHint:         { fontSize: 12, color: '#888', fontWeight: '600', textAlign: 'center', marginBottom: 12 },
+  mapModalConfirmBtn:   { backgroundColor: '#FF6B00', padding: 16, borderRadius: 14, alignItems: 'center', elevation: 3 },
+  mapModalConfirmText:  { color: '#fff', fontSize: 16, fontWeight: '800' },
+
   // ── Image Upload ──
   imgUploadBox:     { backgroundColor: '#fff', borderRadius: 14, marginHorizontal: 15, marginBottom: 10, padding: 14, elevation: 2 },
   imgRow:           { flexDirection: 'row', gap: 12 },
@@ -614,12 +882,28 @@ const s = StyleSheet.create({
   custEtaText:      { fontSize: 11, fontWeight: '700', color: '#2e7d32' },
   custEtaBadge:     { fontSize: 10, fontWeight: '800', color: '#fff', backgroundColor: '#FF6B00', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
 
-  // ── Schedule Button ──
-  scheduleBtn:      { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#fff', padding: 16, marginHorizontal: 15, marginBottom: 14, borderRadius: 14, elevation: 2, borderWidth: 2, borderColor: '#1A3A6B' },
-  scheduleBtnIcon:  { fontSize: 28 },
-  scheduleBtnTitle: { fontSize: 14, fontWeight: '800', color: '#1A3A6B' },
-  scheduleBtnSub:   { fontSize: 11, color: '#888', marginTop: 2 },
-  scheduleBtnArrow: { fontSize: 22, color: '#1A3A6B', fontWeight: '800' },
+  // ── Appointment Toggle ──
+  apptToggle:       { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#fff', padding: 16, marginHorizontal: 15, marginBottom: 10, borderRadius: 14, elevation: 2, borderWidth: 2, borderColor: '#FF6B00' },
+  apptToggleIcon:   { fontSize: 28 },
+  apptToggleTitle:  { fontSize: 14, fontWeight: '800', color: '#1A3A6B' },
+  apptToggleSub:    { fontSize: 11, color: '#888', marginTop: 2 },
+  apptToggleArrow:  { fontSize: 18, color: '#FF6B00', fontWeight: '800' },
+
+  // ── Date/Time Picker ──
+  dateRow:          { paddingHorizontal: 15, gap: 10, paddingBottom: 5 },
+  dateCard:         { width: 68, backgroundColor: '#fff', borderRadius: 14, padding: 12, alignItems: 'center', elevation: 2, borderWidth: 2, borderColor: 'transparent' },
+  dateCardActive:   { borderColor: '#FF6B00', backgroundColor: '#fff5ee' },
+  dateDay:          { fontSize: 11, fontWeight: '700', color: '#888' },
+  dateDayActive:    { color: '#FF6B00' },
+  dateNum:          { fontSize: 22, fontWeight: '800', color: '#1A3A6B', marginTop: 4 },
+  dateNumActive:    { color: '#FF6B00' },
+  dateMonth:        { fontSize: 11, fontWeight: '700', color: '#888', marginTop: 2 },
+  dateMonthActive:  { color: '#FF6B00' },
+  slotsGrid:        { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginHorizontal: 15 },
+  slotBtn:          { width: '47%', backgroundColor: '#fff', borderRadius: 12, padding: 14, alignItems: 'center', elevation: 2, borderWidth: 2, borderColor: 'transparent' },
+  slotBtnActive:    { borderColor: '#FF6B00', backgroundColor: '#fff5ee' },
+  slotTxt:          { fontSize: 13, fontWeight: '700', color: '#1A3A6B' },
+  slotTxtActive:    { color: '#FF6B00' },
 
   // ── Submit Button ──
   submitBtn:        { backgroundColor: '#FF6B00', padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 14, elevation: 3 },
