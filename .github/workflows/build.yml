@@ -62,7 +62,7 @@ jobs:
       - name: Prebuild Android
         run: npx expo prebuild --no-install --platform android
 
-      - name: Pin Gradle to 8.7 (matches AGP requirement)
+      - name: Pin Gradle to 8.7
         run: |
           cat > android/gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
@@ -72,13 +72,18 @@ jobs:
           zipStorePath=wrapper/dists
           EOF
           echo "✅ Gradle pinned to 8.7"
-          cat android/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Pin AGP to 8.3.0 in build.gradle
+      - name: Pin AGP to 8.3.0
         run: |
           sed -i 's/com.android.tools.build:gradle:[0-9.]*/com.android.tools.build:gradle:8.3.0/g' android/build.gradle
-          echo "✅ AGP version:"
+          echo "✅ AGP pinned to 8.3.0"
           grep 'com.android.tools.build' android/build.gradle
+
+      - name: Fix missing ndkVersion in build.gradle
+        run: |
+          sed -i '/ext {/a\        ndkVersion = "25.1.8937393"' android/build.gradle
+          echo "✅ ndkVersion added:"
+          grep 'ndkVersion' android/build.gradle
 
       - name: Grant Execute Permission
         run: chmod +x android/gradlew
