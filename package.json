@@ -37,9 +37,6 @@
     "react-native-webview": "13.12.5"
   },
   "devDependencies": {
-    "@react-native-community/cli": "^13.6.9",
-    "@react-native-community/cli-platform-android": "^13.6.9",
-    "@react-native/metro-config": "^0.73.5",
     "@types/react": "~18.3.12",
     "eslint": "^8.57.0",
     "eslint-config-expo": "~8.0.0",
