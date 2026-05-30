@@ -73,21 +73,26 @@ export default function TechLoginScreen() {
   }
 
   const pickImage = async (type) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please allow access to your gallery!')
-      return
-    }
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Please allow access to your gallery!')
+        return
+      }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.8,
-    })
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+      })
 
-    if (!result.canceled) {
-      if (type === 'certificate') setCertificate(result.assets[0].uri)
-      else setAadhar(result.assets[0].uri)
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const uri = result.assets[0].uri
+        if (type === 'certificate') setCertificate(uri)
+        else setAadhar(uri)
+      }
+    } catch (error) {
+      console.warn('ImagePicker error:', error)
+      Alert.alert('Upload Failed', 'Could not pick image. Please try again or check permissions.')
     }
   }
 

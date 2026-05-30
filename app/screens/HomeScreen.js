@@ -17,21 +17,21 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { db } from '../firebase/config';
-import LocationAutocomplete from '../components/LocationAutocomplete';
+import { db, GOOGLE_PLACES_API_KEY } from '../firebase/config';
+import LocationAutocomplete from '../../components/LocationAutocomplete';
+import ErrorBoundary from '../../components/ErrorBoundary';
 import { calcDistance } from '../utils/distance';
 import {
   notifyCustomerBookingConfirmed,
   notifyTechsForNewOrder,
   registerForNotifications,
 } from '../utils/notifications';
+import { useRouter } from 'expo-router';
 
 const PHONE_BRANDS   = ['iPhone','Samsung','OnePlus','Redmi','Vivo','Oppo','Realme','Nokia']
 const LAPTOP_BRANDS  = ['Dell','HP','Lenovo','MacBook','Asus','Acer','MSI','Sony']
 const PHONE_REPAIRS  = ['Screen Replacement','Battery Replacement','Charging Port','Speaker Issue','Camera Repair','Water Damage','Back Panel','Software Issue']
 const LAPTOP_REPAIRS = ['Screen Replacement','Battery Replacement','Keyboard Repair','Charging Port','RAM Upgrade','Hard Disk','Overheating','Software Issue']
-
-import { useRouter } from 'expo-router';
 
 // ── MapView (native only, gracefully falls back to null on web) ──
 let MapView = null, MarkerNative = null
@@ -437,7 +437,7 @@ export default function HomeScreen() {
       )}
 
       {repairs.length > 0 && (
-        <>
+        <ErrorBoundary errorMessage="Booking form crashed. Please try again." style={{ marginHorizontal: 15 }}>
           <Text style={s.sectionTitle}>Step 3 — Describe the Issue</Text>
           <View style={s.descBox}>
             <Text style={s.descLabel}>📝 What's the problem? (so technician knows what to bring)</Text>
@@ -542,16 +542,18 @@ export default function HomeScreen() {
           {/* ── Your Address ── */}
           <Text style={s.sectionTitle}>📍 Your Address</Text>
           <View style={s.addressBox}>
-            <LocationAutocomplete
-              value={addressText}
-              onChangeText={(t) => {
-                setAddressText(t)
-                AsyncStorage.setItem('custLocation', t).catch(() => {})
-                setCustLocation(t)
-              }}
-              placeholder="Search your area..."
-              icon="📍"
-            />
+            <ErrorBoundary errorMessage="Address search unavailable" style={{ marginHorizontal: 0 }}>
+              <LocationAutocomplete
+                value={addressText}
+                onChangeText={(t) => {
+                  setAddressText(t)
+                  AsyncStorage.setItem('custLocation', t).catch(() => {})
+                  setCustLocation(t)
+                }}
+                placeholder="Search your area..."
+                icon="📍"
+              />
+            </ErrorBoundary>
             <TouchableOpacity style={s.mapBtn} onPress={openMapPicker}>
               <Text style={s.mapBtnIcon}>🗺️</Text>
               <Text style={s.mapBtnText}>Select on Map</Text>
@@ -593,7 +595,7 @@ export default function HomeScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-        </>
+        </ErrorBoundary>
       )}
 
       <Text style={s.sectionTitle}>⭐ Why DoToR?</Text>

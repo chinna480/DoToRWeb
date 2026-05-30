@@ -20,7 +20,7 @@ import {
 import * as Location from 'expo-location'
 import { db, GOOGLE_PLACES_API_KEY } from '../firebase/config'
 import { registerForNotifications } from '../utils/notifications'
-import LocationAutocomplete from '../components/LocationAutocomplete'
+import LocationAutocomplete from '../../components/LocationAutocomplete'
 
 // ── MapView (native only, graceful fallback on web) ──
 let MapView = null, MarkerNative = null
