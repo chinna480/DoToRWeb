@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>DoToR - Customer Login</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="shortcut icon" href="./logo.jpeg" type="image/x-icon">
+</head>
+<body>
+
+  <div class="login-container">
+
+    <a href="role.html" class="back-btn">←</a>
+
+    <div class="login-header">
+      <div class="login-icon">👤</div>
+      <h2 class="login-title">Customer Login</h2>
+      <p class="login-sub">Enter your details to continue</p>
+    </div>
+
+    <div class="login-form">
+
+      <div class="input-group">
+        <label class="input-label">Full Name</label>
+        <div class="input-field">
+          <span>👤</span>
+          <input type="text" id="custName" placeholder="Enter your full name">
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Email ID</label>
+        <div class="input-field">
+          <span>📧</span>
+          <input type="email" id="custEmail" placeholder="Enter your email">
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Phone Number</label>
+        <div class="input-field">
+          <span class="flag">🇮🇳 +91</span>
+          <input type="number" id="custPhone" placeholder="Enter 10 digit number">
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Your Location</label>
+        <div class="input-field">
+          <span>📍</span>
+          <input type="text" id="custLocation" placeholder="Enter your area">
+        </div>
+      </div>
+
+      <button class="orange-btn" onclick="custLogin()">
+        Login →
+      </button>
+
+      <p class="switch-role">
+        Are you a Technician?
+        <a href="tech-login.html">Login here</a>
+      </p>
+
+    </div>
+  </div>
+
+  <script>
+    function custLogin() {
+      const name     = document.getElementById('custName').value.trim()
+      const email    = document.getElementById('custEmail').value.trim()
+      const phone    = document.getElementById('custPhone').value.trim()
+      const location = document.getElementById('custLocation').value.trim()
+
+      if (!name)              { alert('Enter your name!'); return }
+      if (!email)             { alert('Enter your email!'); return }
+      if (phone.length !== 10){ alert('Enter valid 10 digit number!'); return }
+      if (!location)          { alert('Enter your location!'); return }
+
+      localStorage.setItem('custName',     name)
+      localStorage.setItem('custEmail',    email)
+      localStorage.setItem('custPhone',    phone)
+      localStorage.setItem('custLocation', location)
+
+      window.location.href = 'home.html'
+    }
+  </script>
+
+</body>
+</html>
