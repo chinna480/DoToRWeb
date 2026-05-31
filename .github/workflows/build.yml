@@ -25,7 +25,7 @@ jobs:
           node-version: '20'
 
       - name: Install Dependencies
-        run: npm install
+        run: yarn install
 
       - name: Fix Expo package versions
         run: npx expo install --fix
