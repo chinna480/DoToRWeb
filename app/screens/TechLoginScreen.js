@@ -106,27 +106,31 @@ export default function TechLoginScreen() {
     if (!certificate)          { Alert.alert('Error', 'Upload your Certificate!');   return }
     if (!aadhar && !aadharVerified) { Alert.alert('Error', 'Verify your Aadhar via DigiLocker or upload manually!'); return }
 
-    await AsyncStorage.setItem('techName',     name)
-    await AsyncStorage.setItem('techPhone',    phone)
-    await AsyncStorage.setItem('techLocation', location)
-    await AsyncStorage.setItem('techPincode', pincode)
-    await AsyncStorage.setItem('techExp',      exp)
-    await AsyncStorage.setItem('techSkills',   JSON.stringify(selSkills))
+    try {
+      await AsyncStorage.setItem('techName',     name)
+      await AsyncStorage.setItem('techPhone',    phone)
+      await AsyncStorage.setItem('techLocation', location)
+      await AsyncStorage.setItem('techPincode', pincode)
+      await AsyncStorage.setItem('techExp',      exp)
+      await AsyncStorage.setItem('techSkills',   JSON.stringify(selSkills))
 
-    const token = await registerForNotifications()
-    if (token) {
-      await AsyncStorage.setItem('pushToken', token)
-      // Save to multiple paths so Cloud Functions can find the token
-      await update(ref(db, 'techs/' + phone), {
-        pushToken: token,
-        name,
-        phone,
-        location,
-        pincode,
-      })
-      // These paths are used by the newOrderNotification Cloud Function
-      await update(ref(db, 'techUsers/' + phone), { pushToken, name, phone, location, pincode })
-      await update(ref(db, 'pushTokens/' + phone), token)
+      const token = await registerForNotifications()
+      if (token) {
+        await AsyncStorage.setItem('pushToken', token)
+        // Save to multiple paths so Cloud Functions can find the token
+        await update(ref(db, 'techs/' + phone), {
+          pushToken: token,
+          name,
+          phone,
+          location,
+          pincode,
+        })
+        // These paths are used by the newOrderNotification Cloud Function
+        await update(ref(db, 'techUsers/' + phone), { pushToken, name, phone, location, pincode })
+        await update(ref(db, 'pushTokens/' + phone), token)
+      }
+    } catch (e) {
+      console.warn('Registration save error (data already saved locally):', e.message)
     }
 
     router.replace('/screens/TechHomeScreen')

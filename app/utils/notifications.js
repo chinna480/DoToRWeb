@@ -250,7 +250,12 @@ export async function sendPushNotification(expoPushToken, title, body, data = {}
 // ─────────────────────────────────────────────────────────────────────────────
 export async function showLocalNotification(title, body) {
   await Notifications.scheduleNotificationAsync({
-    content: { title, body, sound: 'default' },
+    content: {
+      title,
+      body,
+      sound: 'default',
+      ...(Platform.OS === 'android' ? { channelId: 'dotor-channel' } : {}),
+    },
     trigger: null, // show immediately
   })
 }

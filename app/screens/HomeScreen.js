@@ -205,7 +205,7 @@ export default function HomeScreen() {
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
       selectionLimit: 3,
-      quality: 0.5,
+      quality: 0.15,
       base64: true,
     })
     if (result.canceled) return
@@ -219,7 +219,7 @@ export default function HomeScreen() {
       return
     }
     const result = await ImagePicker.launchCameraAsync({
-      quality: 0.5,
+      quality: 0.15,
       base64: true,
     })
     if (result.canceled) return
@@ -284,69 +284,77 @@ export default function HomeScreen() {
   }
 
   const bookRepair = async (repair) => {
-    const name              = await AsyncStorage.getItem('custName')     || 'Customer'
-    const phone             = await AsyncStorage.getItem('custPhone')    || ''
-    const customerPushToken = await AsyncStorage.getItem('pushToken')    || ''
-    const loc               = addressText.trim() || (await AsyncStorage.getItem('custLocation')) || 'Your Location'
-    const pincode           = pincodeText.trim() || (await AsyncStorage.getItem('custPincode')) || ''
-
-    // Save address & pincode to AsyncStorage for future use
-    await AsyncStorage.setItem('custLocation', loc)
-    await AsyncStorage.setItem('custPincode', pincode)
-    await AsyncStorage.setItem('lastBrand',  selectedBrand)
-    await AsyncStorage.setItem('lastRepair', repair)
-
-    // Get GPS coords to save with the order (for GPS-based technician matching)
-    let orderLat = null, orderLng = null
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status === 'granted') {
-        const pos = await Location.getCurrentPositionAsync({})
-        orderLat = pos.coords.latitude
-        orderLng = pos.coords.longitude
-        set(ref(db, 'custLocation'), { lat: orderLat, lng: orderLng })
+      const name              = await AsyncStorage.getItem('custName')     || 'Customer'
+      const phone             = await AsyncStorage.getItem('custPhone')    || ''
+      const customerPushToken = await AsyncStorage.getItem('pushToken')    || ''
+      const loc               = addressText.trim() || (await AsyncStorage.getItem('custLocation')) || 'Your Location'
+      const pincode           = pincodeText.trim() || (await AsyncStorage.getItem('custPincode')) || ''
+
+      // Save address & pincode to AsyncStorage for future use
+      await AsyncStorage.setItem('custLocation', loc)
+      await AsyncStorage.setItem('custPincode', pincode)
+      await AsyncStorage.setItem('lastBrand',  selectedBrand)
+      await AsyncStorage.setItem('lastRepair', repair)
+
+      // Get GPS coords to save with the order (for GPS-based technician matching)
+      let orderLat = null, orderLng = null
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync()
+        if (status === 'granted') {
+          const pos = await Location.getCurrentPositionAsync({})
+          orderLat = pos.coords.latitude
+          orderLng = pos.coords.longitude
+          set(ref(db, 'custLocation'), { lat: orderLat, lng: orderLng })
+        }
+      } catch (e) {
+        console.warn('GPS location failed (non-blocking):', e)
       }
-    } catch (e) {}
 
-    // ── Appointment data (if customer opted in) ──
-    const hasAppt = wantAppointment && selectedDate && selectedSlot
-    let appointmentTime = null
-    if (hasAppt) {
-      appointmentTime = getAppointmentTime(selectedDate, selectedSlot)
-    }
+      // ── Appointment data (if customer opted in) ──
+      const hasAppt = wantAppointment && selectedDate && selectedSlot
+      let appointmentTime = null
+      if (hasAppt) {
+        appointmentTime = getAppointmentTime(selectedDate, selectedSlot)
+      }
 
-    const order = {
-      customerName:       name,
-      customerPhone:      phone,
-      customerPushToken,
-      location:           loc,
-      pincode,
-      brand:              selectedBrand,
-      repair,
-      description:        description.trim(),
-      images:             images.length > 0 ? images : null,
-      status:             'pending',
-      time:               hasAppt ? selectedSlot : new Date().toLocaleTimeString(),
-      custLat:            orderLat,
-      custLng:            orderLng,
-      ...(hasAppt && {
-        isAppointment:    true,
-        appointmentTime,
-        date:             `${selectedDate.getFullYear()}-${(selectedDate.getMonth() + 1).toString().padStart(2, '0')}-${selectedDate.getDate().toString().padStart(2, '0')}`,
-        dateLabel:        `${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}`,
-        timeSlot:         selectedSlot,
-        reminderSent:     false,
-      }),
-    }
+      // ── Limit images to 3 max to prevent Firebase OOM crash ──
+      let safeImages = null
+      if (images.length > 0) {
+        safeImages = images.slice(0, 3)
+      }
 
-    // Clear form after booking
-    setDescription('')
-    setImages([])
-    setWantAppointment(false)
-    setSelectedDate(null)
-    setSelectedSlot(null)
+      const order = {
+        customerName:       name,
+        customerPhone:      phone,
+        customerPushToken,
+        location:           loc,
+        pincode,
+        brand:              selectedBrand,
+        repair,
+        description:        (description || '').trim(),
+        images:             safeImages,
+        status:             'pending',
+        time:               hasAppt ? selectedSlot : new Date().toLocaleTimeString(),
+        custLat:            orderLat,
+        custLng:            orderLng,
+        ...(hasAppt && {
+          isAppointment:    true,
+          appointmentTime,
+          date:             `${selectedDate.getFullYear()}-${(selectedDate.getMonth() + 1).toString().padStart(2, '0')}-${selectedDate.getDate().toString().padStart(2, '0')}`,
+          dateLabel:        `${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}`,
+          timeSlot:         selectedSlot,
+          reminderSent:     false,
+        }),
+      }
 
-    try {
+      // Clear form after booking
+      setDescription('')
+      setImages([])
+      setWantAppointment(false)
+      setSelectedDate(null)
+      setSelectedSlot(null)
+
       const newOrderRef = await push(ref(db, 'orders'), order)
       const orderId = newOrderRef.key
       await AsyncStorage.setItem('lastOrderId', orderId)
@@ -354,7 +362,12 @@ export default function HomeScreen() {
       await AsyncStorage.setItem('lastRepair', repair)
       await AsyncStorage.setItem('lastCustName', name)
 
-      await notifyCustomerBookingConfirmed(selectedBrand, repair)
+      // ── Local notification (fire-and-forget with safety wrapper) ──
+      try {
+        await notifyCustomerBookingConfirmed(selectedBrand, repair)
+      } catch (notifErr) {
+        console.warn('notifyCustomerBookingConfirmed failed (non-blocking):', notifErr)
+      }
 
       // ── Free push notification to technicians (no Cloud Functions needed!) ──
       // Sends directly from customer's device via Expo Push API (free)
@@ -376,6 +389,7 @@ export default function HomeScreen() {
         ]
       )
     } catch (e) {
+      console.error('bookRepair failed:', e)
       Alert.alert('Error', 'Booking failed! Try again.')
     }
   }
