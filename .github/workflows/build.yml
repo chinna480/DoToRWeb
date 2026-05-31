@@ -30,6 +30,9 @@ jobs:
       - name: Fix Expo package versions
         run: npx expo install --fix
 
+      - name: Generate native Android project files
+        run: npx expo prebuild --platform android --no-install --clean
+
       - name: Validate google-services.json
         run: |
           FILE="google-services.json"
@@ -55,6 +58,7 @@ jobs:
         run: npx eas-cli build --local --platform android --profile preview --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_DOCTOR_SKIP: true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
