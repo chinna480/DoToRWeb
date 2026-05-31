@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>DoToR - Home</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="shortcut icon" href="./logo.jpeg" type="image/x-icon">
+</head>
+<body>
+
+  <div class="home-container">
+
+    <div class="home-header">
+      <div>
+        <p class="greeting">Good Morning! 👋</p>
+        <h2 class="user-name" id="userName">Customer</h2>
+        <p class="user-loc" id="userLoc">📍 Hyderabad</p>
+      </div>
+      <div class="profile-circle">👤</div>
+    </div>
+
+    <div class="search-bar">
+      <span>🔍</span>
+      <input type="text" placeholder="Search repair service...">
+    </div>
+
+    <div class="banner">
+      <p class="banner-text">🔧 Expert Repair at Your Doorstep!</p>
+      <p class="banner-sub">Book in 30 seconds!</p>
+    </div>
+
+    <h3 class="section-title">Step 1 — Select Device</h3>
+    <div class="device-grid">
+      <div class="device-card" onclick="selectDevice('phone')">
+        <div class="card-icon">📱</div>
+        <div class="card-name">Phone</div>
+      </div>
+      <div class="device-card" onclick="selectDevice('laptop')">
+        <div class="card-icon">💻</div>
+        <div class="card-name">Laptop</div>
+      </div>
+    </div>
+
+    <div id="brand-section" style="display:none">
+      <h3 class="section-title">Step 2 — Select Brand</h3>
+      <div class="card-grid" id="brand-grid"></div>
+    </div>
+
+    <div id="repair-section" style="display:none">
+      <h3 class="section-title">Step 3 — What needs Repair?</h3>
+      <div class="repair-list" id="repair-list"></div>
+    </div>
+
+    <h3 class="section-title">⭐ Why DoToR?</h3>
+    <div class="points-list">
+      <div class="point-item">
+        <span class="point-icon">🏠</span>
+        <div><p class="point-title">Doorstep Service</p><p class="point-desc">Technician comes to your home!</p></div>
+      </div>
+      <div class="point-item">
+        <span class="point-icon">👀</span>
+        <div><p class="point-title">Repair in Front of You</p><p class="point-desc">100% transparent process!</p></div>
+      </div>
+      <div class="point-item">
+        <span class="point-icon">⚡</span>
+        <div><p class="point-title">Fast Service</p><p class="point-desc">Arrives within 60 mins!</p></div>
+      </div>
+      <div class="point-item">
+        <span class="point-icon">🛡️</span>
+        <div><p class="point-title">30 Day Warranty</p><p class="point-desc">All repairs covered!</p></div>
+      </div>
+      <div class="point-item">
+        <span class="point-icon">💰</span>
+        <div><p class="point-title">Best Price</p><p class="point-desc">No hidden charges ever!</p></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+    import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey:"AIzaSyDS0hDsfqwMiMg5S9Ztp8eku83XerVtbdY",
+      authDomain:"dotor-2e4d8.firebaseapp.com",
+      databaseURL:"https://dotor-2e4d8-default-rtdb.firebaseio.com",
+      projectId:"dotor-2e4d8",
+      storageBucket:"dotor-2e4d8.firebasestorage.app",
+      messagingSenderId:"984437487718",
+      appId:"1:984437487718:web:3d279fdf6e720f119915a7"
+    }
+
+    const app = initializeApp(firebaseConfig)
+    const db  = getDatabase(app)
+
+    document.getElementById('userName').textContent = localStorage.getItem('custName')     || 'Customer'
+    document.getElementById('userLoc').textContent  = '📍 ' + (localStorage.getItem('custLocation') || 'Hyderabad')
+
+    const phoneBrands   = ['iPhone','Samsung','OnePlus','Redmi','Vivo','Oppo','Realme','Nokia']
+    const laptopBrands  = ['Dell','HP','Lenovo','MacBook','Asus','Acer','MSI','Sony']
+    const phoneRepairs  = ['Screen Replacement','Battery Replacement','Charging Port','Speaker Issue','Camera Repair','Water Damage','Back Panel','Software Issue']
+    const laptopRepairs = ['Screen Replacement','Battery Replacement','Keyboard Repair','Charging Port','RAM Upgrade','Hard Disk','Overheating','Software Issue']
+
+    window.selectDevice = function(type) {
+      const brands = type==='phone' ? phoneBrands : laptopBrands
+      const grid   = document.getElementById('brand-grid')
+      grid.innerHTML = ''
+      brands.forEach(brand => {
+        grid.innerHTML += `
+          <div class="service-card" onclick="selectBrand('${brand}','${type}')">
+            <div class="card-icon">${type==='phone'?'📱':'💻'}</div>
+            <div class="card-name">${brand}</div>
+          </div>`
+      })
+      document.getElementById('brand-section').style.display  = 'block'
+      document.getElementById('repair-section').style.display = 'none'
+      document.getElementById('brand-section').scrollIntoView({ behavior:'smooth' })
+    }
+
+    window.selectBrand = function(brand, type) {
+      const repairs = type==='phone' ? phoneRepairs : laptopRepairs
+      const list    = document.getElementById('repair-list')
+      list.innerHTML = ''
+      repairs.forEach(repair => {
+        list.innerHTML += `
+          <div class="repair-item" onclick="bookRepair('${brand}','${repair}')">
+            <span>🔧 ${repair}</span>
+            <span>→</span>
+          </div>`
+      })
+      document.getElementById('repair-section').style.display = 'block'
+      document.getElementById('repair-section').scrollIntoView({ behavior:'smooth' })
+    }
+
+    window.bookRepair = function(brand, repair) {
+      const custName     = localStorage.getItem('custName')     || 'Customer'
+      const custLocation = localStorage.getItem('custLocation') || 'Hyderabad'
+      const custPhone    = localStorage.getItem('custPhone')    || ''
+
+      localStorage.setItem('lastBrand',  brand)
+      localStorage.setItem('lastRepair', repair)
+
+      // Save customer GPS location to Firebase
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+          set(ref(db,'custLocation'), { lat:pos.coords.latitude, lng:pos.coords.longitude })
+        })
+      }
+
+      const order = {
+        customerName:  custName,
+        customerPhone: custPhone,
+        location:      custLocation,
+        brand:         brand,
+        repair:        repair,
+        status:        'pending',
+        time:          new Date().toLocaleTimeString()
+      }
+
+      push(ref(db,'orders'), order)
+        .then(() => {
+          if (confirm(`✅ Booking Confirmed!\n\nBrand: ${brand}\nRepair: ${repair}\n\nClick OK to track your Technician!`)) {
+            window.location.href = 'tracking.html'
+          }
+        })
+        .catch(() => alert('Booking failed! Try again!'))
+    }
+  </script>
+
+</body>
+</html>
