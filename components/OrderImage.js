@@ -1,10 +1,28 @@
 // OrderImage.js — Reusable image component with auto-retry on failure
-// v4: Auto-retries when the image fails to load (no manual tap required)
+// v5: Fixed style?.width check — StyleSheet.create() returns integer IDs,
+//     not plain objects, so style?.width is always undefined when passed
+//     from StyleSheet refs. Use a safe flat object resolver instead.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Image, Text, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
 const MAX_AUTO_RETRIES = 3
 const RETRY_DELAY_MS    = 3000
+
+/**
+ * Safely resolve the numeric `width` from a style prop.
+ * StyleSheet.create() returns integer IDs, not plain objects.
+ * StyleSheet.flatten() converts any style value (integer, object, array) to
+ * a plain object so we can read .width reliably.
+ */
+function resolveWidth(style) {
+  if (!style) return 0
+  try {
+    const flat = StyleSheet.flatten(style)
+    return flat?.width ?? 0
+  } catch {
+    return 0
+  }
+}
 
 export default function OrderImage({ uri, style, resizeMode = 'cover' }) {
   const [loadError, setLoadError] = useState(false)
@@ -62,11 +80,15 @@ export default function OrderImage({ uri, style, resizeMode = 'cover' }) {
     }
   }, [loadError, retry])
 
+  // ── Resolve actual width from style (works with StyleSheet IDs too) ──
+  const resolvedWidth = resolveWidth(style)
+  const iconSize = resolvedWidth > 50 ? 20 : 14
+
   // Validate URI before rendering
   if (!uri || typeof uri !== 'string') {
     return (
       <View style={[style, { backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' }]}>
-        <Text style={{ fontSize: style?.width > 50 ? 20 : 14 }}>📷</Text>
+        <Text style={{ fontSize: iconSize }}>📷</Text>
       </View>
     )
   }
@@ -81,7 +103,7 @@ export default function OrderImage({ uri, style, resizeMode = 'cover' }) {
         }}
         style={[style, { backgroundColor: '#fff3e0', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#ffcc80' }]}
       >
-        <Text style={{ fontSize: style?.width > 50 ? 18 : 12 }}>⚠️</Text>
+        <Text style={{ fontSize: iconSize }}>⚠️</Text>
         <Text style={{ fontSize: 8, color: '#e65100', marginTop: 2, fontWeight: '700' }}>Tap to retry</Text>
       </TouchableOpacity>
     )
