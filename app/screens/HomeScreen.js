@@ -484,20 +484,20 @@ export default function HomeScreen() {
           </View>
 
           {/* ── Image Upload Section ── */}
-          <ErrorBoundary key={`imgs-${images.length}`} errorMessage="Photo upload temporarily unavailable" style={{ marginHorizontal: 0 }}>
-            <View style={s.sectionTitle}>📸 Upload Photos (so technician sees the issue)</View>
-            <View style={s.imgUploadBox}>
-              <View style={s.imgRow}>
-                <TouchableOpacity style={s.imgPickerBtn} onPress={pickImageFromGallery}>
-                  <Text style={s.imgPickerIcon}>🖼️</Text>
-                  <Text style={s.imgPickerLabel}>Gallery</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.imgPickerBtn} onPress={takePhoto}>
-                  <Text style={s.imgPickerIcon}>📷</Text>
-                  <Text style={s.imgPickerLabel}>Camera</Text>
-                </TouchableOpacity>
-              </View>
-              {images.length > 0 && (
+          <Text style={s.sectionTitle}>📸 Upload Photos (so technician sees the issue)</Text>
+          <View style={s.imgUploadBox}>
+            <View style={s.imgRow}>
+              <TouchableOpacity style={s.imgPickerBtn} onPress={pickImageFromGallery}>
+                <Text style={s.imgPickerIcon}>🖼️</Text>
+                <Text style={s.imgPickerLabel}>Gallery</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.imgPickerBtn} onPress={takePhoto}>
+                <Text style={s.imgPickerIcon}>📷</Text>
+                <Text style={s.imgPickerLabel}>Camera</Text>
+              </TouchableOpacity>
+            </View>
+            {images.length > 0 && (
+              <ErrorBoundary key={`imgs-preview`} errorMessage="Could not load image preview" style={{ marginHorizontal: 0 }}>
                 <View style={s.imgPreviewRow}>
                   {images.map((img, i) => (
                     <View key={i} style={s.imgThumbWrap}>
@@ -511,13 +511,13 @@ export default function HomeScreen() {
                     </View>
                   ))}
                 </View>
-              )}
-              {images.length > 0 && (
-                <Text style={s.imgCount}>{images.length} photo{images.length > 1 ? 's' : ''} selected</Text>
-              )}
-              {uploadingImg && <Text style={s.uploadingTxt}>⏳ Processing...</Text>}
-            </View>
-          </ErrorBoundary>
+              </ErrorBoundary>
+            )}
+            {images.length > 0 && (
+              <Text style={s.imgCount}>{images.length} photo{images.length > 1 ? 's' : ''} selected</Text>
+            )}
+            {uploadingImg && <Text style={s.uploadingTxt}>⏳ Processing...</Text>}
+          </View>
 
           {/* ── Inline Appointment Toggle ── */}
           <TouchableOpacity style={s.apptToggle} onPress={() => {
