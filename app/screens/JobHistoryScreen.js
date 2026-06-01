@@ -246,7 +246,7 @@ export default function JobHistoryScreen() {
             <Text style={s.modalCloseTxt}>✕</Text>
           </TouchableOpacity>
           {fullscreenImg && (
-            <Image source={{ uri: fullscreenImg }} style={s.modalImage} resizeMode="contain" />
+            <OrderImage uri={fullscreenImg} style={s.modalImage} resizeMode="contain" />
           )}
         </View>
       </Modal>

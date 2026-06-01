@@ -19,6 +19,7 @@ import {
 import * as ImagePicker from 'expo-image-picker'
 import { db } from '../firebase/config'
 import { uploadImages } from '../utils/uploadImage'
+import OrderImage from '../../components/OrderImage'
 
 export default function ChatScreen() {
   const router = useRouter()
@@ -392,7 +393,7 @@ export default function ChatScreen() {
             <Text style={s.modalCloseTxt}>✕</Text>
           </TouchableOpacity>
           {fullscreenImg && (
-            <Image source={{ uri: fullscreenImg }} style={s.modalImage} resizeMode="contain" />
+            <OrderImage uri={fullscreenImg} style={s.modalImage} resizeMode="contain" />
           )}
         </View>
       </Modal>
