@@ -163,13 +163,22 @@ export default function HomeScreen() {
     if (p) listenOrders(p)
   }
 
+  // Helper: convert Firebase RTDB object-backed arrays to real arrays
+  const toArr = (v) => {
+    if (!v) return null
+    if (Array.isArray(v)) return v
+    if (typeof v === 'object') return Object.values(v)
+    return null
+  }
+
   const listenOrders = (phone) => {
     onValue(ref(db, 'orders'), snap => {
       if (!snap.exists()) { setMyOrders([]); return }
       const orders = []
       let foundAccepted = false
       snap.forEach(child => {
-        const o = { id: child.key, ...child.val() }
+        const val = child.val()
+        const o = { id: child.key, ...val, images: toArr(val.images) }
         if (o.customerPhone === phone) {
           orders.push(o)
           if (o.status === 'accepted') {

@@ -202,7 +202,7 @@ export default function TrackingScreen() {
         </View>
 
         {/* MAP or PLACEHOLDER */}
-        {MapView ? (
+        {MapView && Marker ? (
           <MapView
             style={s.map}
             region={{
@@ -214,7 +214,7 @@ export default function TrackingScreen() {
           >
             <Marker coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Your Location" />
             {techLat && <Marker coordinate={{ latitude: techLat, longitude: techLng }} title="🛵 Technician" pinColor="#FF6B00" />}
-            {techLat && (
+            {techLat && Polyline && (
               <Polyline
                 coordinates={[
                   { latitude: custLat, longitude: custLng },

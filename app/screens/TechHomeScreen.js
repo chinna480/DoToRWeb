@@ -75,11 +75,21 @@ export default function TechHomeScreen() {
   const techLocRef        = useRef('')
   const techPincodeRef    = useRef('')
   const techPhoneRef      = useRef('')
+  const myLatRef          = useRef(17.3850) // ref to avoid stale closures in onValue
+  const myLngRef          = useRef(78.4867) // ref to avoid stale closures in onValue
   const sentNearby        = useRef(false)
   const sentArrived       = useRef(false)
   const prevPendingIds    = useRef(new Set())
   const areaAssignments   = useRef({})
   const autoAssignRunning = useRef(false) // prevent double auto-assign attempts
+
+  // Helper: convert Firebase RTDB object-backed arrays to real arrays
+  const toArr = (v) => {
+    if (!v) return null
+    if (Array.isArray(v)) return v
+    if (typeof v === 'object') return Object.values(v)
+    return null
+  }
 
   useEffect(() => {
     loadTech()
@@ -145,6 +155,8 @@ export default function TechHomeScreen() {
         const lng = pos.coords.longitude
         setMyLat(lat)
         setMyLng(lng)
+        myLatRef.current = lat
+        myLngRef.current = lng
         // Save to techsOnline so the auto-assign system can find nearby techs
         if (p) {
           set(ref(db, 'techsOnline/' + p), {
@@ -177,12 +189,13 @@ export default function TechHomeScreen() {
   const startLocationSharing = async () => {
     if (watchRef.current) return
     const { status } = await Location.requestForegroundPermissionsAsync()
-    if (status !== 'granted') return
-    watchRef.current = await Location.watchPositionAsync(
+    if (status !== 'granted') return      watchRef.current = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.High, timeInterval: 4000 },
       pos => {
         const lat = pos.coords.latitude, lng = pos.coords.longitude
         setMyLat(lat); setMyLng(lng)
+        myLatRef.current = lat
+        myLngRef.current = lng
         set(ref(db, 'techLocation'), { lat, lng })
         // Also keep techsOnline updated for GPS matching
         const phone = techPhoneRef.current
@@ -246,7 +259,8 @@ export default function TechHomeScreen() {
       let ongoing = null, count = 0, dailyCount = 0
 
       snapshot.forEach(child => {
-        const order = { id: child.key, ...child.val() }
+        const val = child.val()
+        const order = { id: child.key, ...val, images: toArr(val.images) }
         if (order.status === 'pending')   allPending.push(order)
         if (order.status === 'accepted') {
           // Only mark as ongoing if THIS tech accepted the job
@@ -261,9 +275,10 @@ export default function TechHomeScreen() {
       const myPhone = techPhoneRef.current
 
       // ── STEP 1: Filter pending jobs by GPS distance (preferred) ───────────
+      // Use refs to avoid stale closures — refs always hold the latest GPS values
       let pending = allPending
-      const techLat = myLat
-      const techLng = myLng
+      const techLat = myLatRef.current
+      const techLng = myLngRef.current
 
       if (techLat !== 17.3850 || techLng !== 78.4867) {
         // GPS is available — filter by actual geo-distance
@@ -629,7 +644,7 @@ export default function TechHomeScreen() {
           </View>
 
           {/* ✅ Safe MapView */}
-          {MapView && (custLat || myLat) && (
+          {MapView && Marker && (custLat || myLat) && (
             <MapView
               ref={mapRef}
               style={s.map}
@@ -644,10 +659,12 @@ export default function TechHomeScreen() {
               {custLat && (
                 <>
                   <Marker coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Customer" />
-                  <Polyline
-                    coordinates={[{ latitude: myLat, longitude: myLng }, { latitude: custLat, longitude: custLng }]}
-                    strokeColor="#FF6B00" strokeWidth={3} lineDashPattern={[8, 8]}
-                  />
+                  {Polyline && (
+                    <Polyline
+                      coordinates={[{ latitude: myLat, longitude: myLng }, { latitude: custLat, longitude: custLng }]}
+                      strokeColor="#FF6B00" strokeWidth={3} lineDashPattern={[8, 8]}
+                    />
+                  )}
                 </>
               )}
             </MapView>

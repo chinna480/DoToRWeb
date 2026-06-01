@@ -28,12 +28,21 @@ export default function ChatScreen() {
   const scrollRef = useRef(null)
   const mounted = useRef(true)
 
+  // Safety: if no orderId, go back
   useEffect(() => {
+    if (!orderId) {
+      Alert.alert('Error', 'No order found. Please go back.')
+      router.back()
+    }
+  }, [orderId])
+
+  useEffect(() => {
+    if (!orderId) return
     mounted.current = true
     loadUser()
     // Listen for order updates to get the correct tech name dynamically
     let orderUnsub
-    if (role === 'cust' && orderId) {
+    if (role === 'cust') {
       orderUnsub = onValue(ref(db, 'orders/' + orderId), snap => {
         if (!mounted.current || !snap.exists()) return
         const order = snap.val()
@@ -41,12 +50,21 @@ export default function ChatScreen() {
           setOtherPersonName(order.techName)
         }
       })
+    } else if (role === 'tech') {
+      // Technician side: listen for customer name updates too
+      orderUnsub = onValue(ref(db, 'orders/' + orderId), snap => {
+        if (!mounted.current || !snap.exists()) return
+        const order = snap.val()
+        if (order.customerName) {
+          setOtherPersonName(order.customerName)
+        }
+      })
     }
     return () => {
       mounted.current = false
       if (orderUnsub) orderUnsub()
     }
-  }, [])
+  }, [orderId])
 
   useEffect(() => {
     if (!orderId) return
@@ -68,13 +86,20 @@ export default function ChatScreen() {
   }, [orderId])
 
   const loadUser = async () => {
-    const n = await AsyncStorage.getItem(`${role}Name`)
+    // Read the correct name based on role
+    // Customer: 'custName' key, Technician: 'techName' key
+    let n = null
+    if (role === 'cust') {
+      n = await AsyncStorage.getItem('custName')
+    } else if (role === 'tech') {
+      n = await AsyncStorage.getItem('techName')
+    }
     setMyName(n || (role === 'cust' ? 'Customer' : 'Technician'))
   }
 
   const sendMessage = async () => {
     const text = inputText.trim()
-    if (!text) return
+    if (!text || !orderId) return
 
     const msgRef = ref(db, `chats/${orderId}/messages`)
     const metaRef = ref(db, `chats/${orderId}/metadata`)
@@ -98,7 +123,7 @@ export default function ChatScreen() {
 
       setInputText('')
     } catch (e) {
-      Alert.alert('Error', 'Failed to send message')
+      Alert.alert('Error', 'Failed to send message. Please try again.')
     }
   }
 
