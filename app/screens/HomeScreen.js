@@ -348,9 +348,17 @@ export default function HomeScreen() {
 
       // Upload images to Firebase Storage (download URLs, no base64!)
       let imageUrls = null
+      let imageUploadFailed = false
       if (images.length > 0) {
         const localUris = images.slice(0, 2).map(img => ({ uri: img.uri }))
+        console.log('[HomeScreen] Uploading', localUris.length, 'image(s) for order', orderId)
         imageUrls = await uploadImages(localUris, orderId)
+        if (!imageUrls && images.length > 0) {
+          imageUploadFailed = true
+          console.warn('[HomeScreen] ⚠️ Image upload returned null — photos will not be visible to technician')
+        } else if (imageUrls) {
+          console.log('[HomeScreen] ✅ Images uploaded success:', JSON.stringify(imageUrls).substring(0, 200))
+        }
       }
 
       const order = {
@@ -362,7 +370,13 @@ export default function HomeScreen() {
         brand:              selectedBrand,
         repair,
         description:        (description || '').trim(),
-        images:             imageUrls, // HTTPS download URLs from Firebase Storage
+        // Store images as an explicit object with numeric keys so Firebase RTDB
+        // stores them deterministically (avoids array-to-object conversion issues).
+        // Using array spread into an object ({...arr}) is safe on all engines
+        // including Hermes (unlike Object.fromEntries which crashes on Android).
+        images:             imageUrls && imageUrls.length > 0
+          ? { ...imageUrls }
+          : null,
         status:             'pending',
         time:               hasAppt ? selectedSlot : new Date().toLocaleTimeString(),
         custLat:            orderLat,
@@ -405,8 +419,8 @@ export default function HomeScreen() {
       );
 
       const alertMsg = hasAppt
-        ? `Brand: ${selectedBrand}\nRepair: ${repair}\nDate: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}\n\nWe'll send a reminder before your appointment!`
-        : `Brand: ${selectedBrand}\nRepair: ${repair}\n\nTrack your technician?`
+        ? `Brand: ${selectedBrand}\nRepair: ${repair}\nDate: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}${imageUploadFailed ? '\n\n⚠️ Photo upload failed — technician may not see your images.' : ''}\n\nWe'll send a reminder before your appointment!`
+        : `Brand: ${selectedBrand}\nRepair: ${repair}${imageUploadFailed ? '\n\n⚠️ Photo upload failed — technician may not see your images.' : ''}\n\nTrack your technician?`
 
       Alert.alert(
         hasAppt ? '✅ Appointment Booked!' : '✅ Booking Confirmed!',

@@ -6,6 +6,8 @@ import * as FileSystem from 'expo-file-system'
 import { getDownloadURL, ref, uploadString } from 'firebase/storage'
 import { storage } from '../firebase/config'
 
+const MAX_RETRIES = 3
+
 /**
  * Upload an image URI (file:// or content://) to Firebase Storage.
  * Returns the HTTPS download URL.
@@ -18,17 +20,43 @@ import { storage } from '../firebase/config'
  * @returns {Promise<string>} Download URL
  */
 export async function uploadImage(uri, path) {
-  // Read the file as base64 — this works reliably on Android where fetch(file://) fails
-  const base64 = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  })
+  let lastError = null
 
-  const storageRef = ref(storage, path)
-  // Upload using base64 format string — no Blob needed
-  await uploadString(storageRef, base64, 'base64', {
-    contentType: 'image/jpeg',
-  })
-  return getDownloadURL(storageRef)
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // Read the file as base64 — this works reliably on Android where fetch(file://) fails
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      })
+
+      if (!base64 || base64.length < 100) {
+        throw new Error(`Base64 data too short (${base64?.length || 0} chars) — file may be empty or corrupted`)
+      }
+
+      console.log(`[uploadImage] Attempt ${attempt}/${MAX_RETRIES} — path: ${path}, base64 size: ${(base64.length / 1024).toFixed(0)}KB`)
+
+      const storageRef = ref(storage, path)
+      // Upload using base64 format string — no Blob needed
+      await uploadString(storageRef, base64, 'base64', {
+        contentType: 'image/jpeg',
+      })
+
+      const downloadUrl = await getDownloadURL(storageRef)
+      console.log(`[uploadImage] ✅ Success — URL length: ${downloadUrl.length}`)
+      return downloadUrl
+    } catch (e) {
+      lastError = e
+      console.warn(`[uploadImage] ❌ Attempt ${attempt}/${MAX_RETRIES} failed:`, e.message || e)
+      if (attempt < MAX_RETRIES) {
+        // Wait before retrying (1s, 2s, 3s...)
+        await new Promise(r => setTimeout(r, attempt * 1000))
+      }
+    }
+  }
+
+  // All retries failed
+  console.error(`[uploadImage] All ${MAX_RETRIES} attempts failed for ${path}:`, lastError?.message)
+  throw lastError
 }
 
 /**
@@ -44,6 +72,7 @@ export async function uploadImages(assets, orderId) {
 
   const timestamp = Date.now()
   const urls = []
+  const errors = []
 
   for (let i = 0; i < assets.length; i++) {
     const asset = assets[i]
@@ -51,7 +80,9 @@ export async function uploadImages(assets, orderId) {
 
     // Only accept images under ~5MB to keep things reasonable
     if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-      console.warn(`Skipped image ${i}: file too large (${(asset.fileSize / 1024 / 1024).toFixed(1)}MB)`)
+      const msg = `Skipped image ${i}: file too large (${(asset.fileSize / 1024 / 1024).toFixed(1)}MB)`
+      console.warn(`[uploadImages] ${msg}`)
+      errors.push(msg)
       continue
     }
 
@@ -60,10 +91,14 @@ export async function uploadImages(assets, orderId) {
       const url = await uploadImage(asset.uri, path)
       urls.push(url)
     } catch (e) {
-      console.error(`Image upload failed for asset ${i}:`, e)
+      const msg = `Image ${i} upload failed after retries: ${e.message || e}`
+      console.error(`[uploadImages] ${msg}`)
+      errors.push(msg)
       // Continue with remaining images — don't block the order on a bad upload
     }
   }
+
+  console.log(`[uploadImages] Result: ${urls.length}/${assets.length} uploaded successfully${errors.length ? ` (${errors.length} failed)` : ''}`)
 
   return urls.length > 0 ? urls : null
 }

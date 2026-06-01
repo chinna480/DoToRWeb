@@ -48,11 +48,21 @@ export default function JobHistoryScreen() {
 
       let todayCount = 0, weekCount = 0, monthCount = 0
 
-      // Helper: convert Firebase RTDB object-backed arrays to real arrays
+      /**
+       * Convert various Firebase RTDB image formats to a real JavaScript array.
+       * Handles arrays, objects with numeric keys (Firebase RTDB format), null.
+       */
       const toArr = (v) => {
         if (!v) return null
-        if (Array.isArray(v)) return v
-        if (typeof v === 'object') return Object.values(v)
+        if (Array.isArray(v)) {
+          const filtered = v.filter(x => typeof x === 'string' && x.startsWith('http'))
+          return filtered.length > 0 ? filtered : null
+        }
+        if (typeof v === 'object') {
+          const values = Object.values(v)
+          const strings = values.filter(x => typeof x === 'string' && x.startsWith('http'))
+          return strings.length > 0 ? strings : null
+        }
         return null
       }
 

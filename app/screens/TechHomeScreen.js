@@ -84,11 +84,35 @@ export default function TechHomeScreen() {
   const areaAssignments   = useRef({})
   const autoAssignRunning = useRef(false) // prevent double auto-assign attempts
 
-  // Helper: convert Firebase RTDB object-backed arrays to real arrays
+  /**
+   * Convert various Firebase RTDB image formats to a real JavaScript array.
+   *
+   * Firebase RTDB stores arrays as objects with numeric keys ({"0": url1, "1": url2}).
+   * We store images explicitly as such objects in HomeScreen.js.
+   * But legacy orders may have arrays, or null, or other formats.
+   * This function handles ALL possible formats:
+   *   - null / undefined  → null
+   *   - array             → as-is
+   *   - object with numeric keys  → Object.values()
+   *   - other             → null
+   */
   const toArr = (v) => {
     if (!v) return null
-    if (Array.isArray(v)) return v
-    if (typeof v === 'object') return Object.values(v)
+    if (Array.isArray(v)) {
+      // Already an array — return it but filter out non-string entries
+      const filtered = v.filter(x => typeof x === 'string' && x.startsWith('http'))
+      return filtered.length > 0 ? filtered : null
+    }
+    if (typeof v === 'object') {
+      // Object with numeric keys (the Firebase RTDB format)
+      const values = Object.values(v)
+      const strings = values.filter(x => typeof x === 'string' && x.startsWith('http'))
+      if (strings.length > 0) {
+        console.log(`[TechHome/toArr] Converted object with ${Object.keys(v).length} keys to ${strings.length} URL(s)`)
+        return strings
+      }
+      return null
+    }
     return null
   }
 
@@ -262,6 +286,15 @@ export default function TechHomeScreen() {
       snapshot.forEach(child => {
         const val = child.val()
         const order = { id: child.key, ...val, images: toArr(val.images) }
+        // ── Diagnostic: Log EVERYTHING about images for debugging ──────────
+        if (val.images) {
+          console.log(`[TechHome] Order ${child.key}: images raw type=${typeof val.images}, isArray=${Array.isArray(val.images)}, value=`, JSON.stringify(val.images).substring(0, 300))
+        }
+        if (order.images && order.images.length > 0) {
+          console.log(`[TechHome] ✅ Order ${order.id} has ${order.images.length} image(s):`, order.images.map(u => u?.substring(0, 60)))
+        } else {
+          console.log(`[TechHome] Order ${order.id}: no images (raw=${typeof val.images}, parsed=${order.images})`)
+        }
         if (order.status === 'pending')   allPending.push(order)
         if (order.status === 'accepted') {
           // Only mark as ongoing if THIS tech accepted the job
