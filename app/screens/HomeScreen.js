@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   Platform,
   ScrollView,
@@ -19,7 +20,6 @@ import {
 } from 'react-native';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import LocationAutocomplete from '../../components/LocationAutocomplete';
-import OrderImage from '../../components/OrderImage';
 import { db, GOOGLE_PLACES_API_KEY } from '../firebase/config';
 import { calcDistance } from '../utils/distance';
 import {
@@ -27,6 +27,8 @@ import {
   notifyTechsForNewOrder,
   registerForNotifications,
 } from '../utils/notifications';
+import * as ImagePicker from 'expo-image-picker'
+import { uploadImages } from '../utils/uploadImage';
 
 const PHONE_BRANDS   = ['iPhone','Samsung','OnePlus','Redmi','Vivo','Oppo','Realme','Nokia']
 const LAPTOP_BRANDS  = ['Dell','HP','Lenovo','MacBook','Asus','Acer','MSI','Sony']
@@ -49,24 +51,6 @@ const TIME_SLOTS = [
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-/**
- * Convert Firebase RTDB image field to a real JS array of URL strings.
- * Firebase stores arrays as objects: {"0": "url1", "1": "url2"}
- * This handles all formats: null, plain array, object-with-numeric-keys.
- */
-const toArr = (v) => {
-  if (!v) return null
-  if (Array.isArray(v)) {
-    const filtered = v.filter(x => typeof x === 'string' && x.startsWith('http'))
-    return filtered.length > 0 ? filtered : null
-  }
-  if (typeof v === 'object') {
-    const strings = Object.values(v).filter(x => typeof x === 'string' && x.startsWith('http'))
-    return strings.length > 0 ? strings : null
-  }
-  return null
-}
 
 export default function HomeScreen() {
 
@@ -117,6 +101,8 @@ export default function HomeScreen() {
   const [custLat, setCustLat]           = useState(null)
   const [custLng, setCustLng]           = useState(null)
   const [trackingOrderId, setTrackingOrderId] = useState(null)
+  const [images, setImages]             = useState([])
+  const [uploadingImages, setUploadingImages] = useState(false)
 
   useEffect(() => {
     loadUser()
@@ -167,7 +153,7 @@ export default function HomeScreen() {
       snap.forEach(child => {
         const val = child.val()
         // ✅ FIX: always convert images with toArr() so .map() never runs on a plain object
-        const o = { id: child.key, ...val, images: toArr(val.images) }
+        const o = { id: child.key, ...val }
         if (o.customerPhone === phone) {
           orders.push(o)
           if (o.status === 'accepted') {
@@ -216,6 +202,43 @@ export default function HomeScreen() {
     setCustLocation(addr)
     setReverseGeocoding(false)
     setShowMapModal(false)
+  }
+
+  // ── Image Picker (Gallery + Camera) ───────────────────────────────────
+  const pickImage = async (fromCamera) => {
+    try {
+      let result
+      if (fromCamera) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync()
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Allow camera access to take a photo.')
+          return
+        }
+        result = await ImagePicker.launchCameraAsync({ quality: 0.4 })
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Allow photo library access to pick images.')
+          return
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.4,
+          allowsMultipleSelection: true,
+          selectionLimit: 4,
+        })
+      }
+      if (result.canceled || !result.assets || result.assets.length === 0) return
+
+      setImages(prev => [...prev, ...result.assets].slice(0, 6)) // max 6 images
+    } catch (e) {
+      console.error('Image pick failed:', e)
+      Alert.alert('Error', 'Failed to pick image. Please try again.')
+    }
+  }
+
+  const removeImage = (index) => {
+    setImages(prev => prev.filter((_, i) => i !== index))
   }
 
   const openMapPicker = async () => {
@@ -267,6 +290,19 @@ export default function HomeScreen() {
       const tempOrderRef = push(ref(db, 'orders'))
       const orderId = tempOrderRef.key
 
+      // Upload images first (if any)
+      let imageUrls = null
+      if (images.length > 0) {
+        setUploadingImages(true)
+        try {
+          imageUrls = await uploadImages(images, orderId)
+        } catch (e) {
+          console.error('Image upload failed:', e)
+        } finally {
+          setUploadingImages(false)
+        }
+      }
+
       const order = {
         customerName:       name,
         customerPhone:      phone,
@@ -280,6 +316,7 @@ export default function HomeScreen() {
         time:               hasAppt ? selectedSlot : new Date().toLocaleTimeString(),
         custLat:            orderLat,
         custLng:            orderLng,
+        images:             imageUrls, // store uploaded image URLs
         ...(hasAppt && {
           isAppointment:    true,
           appointmentTime,
@@ -295,6 +332,7 @@ export default function HomeScreen() {
       setWantAppointment(false)
       setSelectedDate(null)
       setSelectedSlot(null)
+      setImages([]) // clear images after booking
 
       await set(ref(db, 'orders/' + orderId), order)
       await AsyncStorage.setItem('lastOrderId', orderId)
@@ -476,6 +514,47 @@ export default function HomeScreen() {
             </View>
           </View>
 
+          {/* ── Step 4 — Upload Photos ── */}
+          <Text style={s.sectionTitle}>Step 4 — Add Photos (Optional)</Text>
+          <View style={s.photoSection}>
+            <View style={s.photoBtnRow}>
+              <TouchableOpacity style={s.photoBtn} onPress={() => pickImage(false)} disabled={uploadingImages || images.length >= 6}>
+                <Text style={s.photoBtnIcon}>🖼️</Text>
+                <Text style={s.photoBtnText}>Gallery</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.photoBtn} onPress={() => pickImage(true)} disabled={uploadingImages || images.length >= 6}>
+                <Text style={s.photoBtnIcon}>📷</Text>
+                <Text style={s.photoBtnText}>Camera</Text>
+              </TouchableOpacity>
+              {images.length > 0 && (
+                <TouchableOpacity style={s.photoClearBtn} onPress={() => setImages([])}>
+                  <Text style={s.photoClearBtnText}>✕ Clear All</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {uploadingImages && (
+              <View style={s.uploadingBanner}>
+                <ActivityIndicator color="#FF6B00" size="small" />
+                <Text style={s.uploadingText}>📤 Uploading images...</Text>
+              </View>
+            )}
+
+            {images.length > 0 && (
+              <View style={s.imagePreviewRow}>
+                {images.map((img, idx) => (
+                  <View key={idx} style={s.imagePreviewWrap}>
+                    <Image source={{ uri: img.uri }} style={s.imageThumb} />
+                    <TouchableOpacity style={s.imageRemoveBtn} onPress={() => removeImage(idx)}>
+                      <Text style={s.imageRemoveBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+            <Text style={s.photoHint}>Show the issue clearly so the technician knows what to bring (max 6 photos)</Text>
+          </View>
+
           {/* ── Submit ── */}
           <View style={s.descBox}>
             <TouchableOpacity
@@ -602,18 +681,20 @@ export default function HomeScreen() {
                     <Text style={s.orderLoc}>📍 {order.location}</Text>
                     {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
                     <Text style={s.orderTime}>🕐 {order.time}</Text>
-                    {/* ✅ FIX: show uploaded images in orders tab — toArr() already
-                        applied in listenOrders(), so order.images is always a
-                        string[] or null here, never a plain object */}
-                    {order.images && order.images.length > 0 && (
+                    {/* Order images */}
+                    {order.images && Array.isArray(order.images) && order.images.length > 0 && (
                       <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
-                        {order.images.map((url, idx) => (
-                          <OrderImage
+                        {order.images.slice(0, 3).map((url, idx) => (
+                          <Image
                             key={idx}
-                            uri={url}
+                            source={{ uri: url }}
                             style={{ width: 36, height: 36, borderRadius: 6, backgroundColor: '#eee' }}
+                            resizeMode="cover"
                           />
                         ))}
+                        {order.images.length > 3 && (
+                          <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{order.images.length - 3}</Text>
+                        )}
                       </View>
                     )}
                     {order.status === 'accepted' && order.techName && (
@@ -796,6 +877,23 @@ const s = StyleSheet.create({
   slotBtnActive:    { borderColor: '#FF6B00', backgroundColor: '#fff5ee' },
   slotTxt:          { fontSize: 13, fontWeight: '700', color: '#1A3A6B' },
   slotTxtActive:    { color: '#FF6B00' },
+  // ── Photo Section ──
+  photoSection:     { backgroundColor: '#fff', borderRadius: 14, marginHorizontal: 15, marginBottom: 10, padding: 14, elevation: 2 },
+  photoBtnRow:      { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  photoBtn:         { flex: 1, backgroundColor: '#fff5ee', borderWidth: 2, borderColor: '#FF6B00', borderRadius: 12, padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  photoBtnIcon:     { fontSize: 20 },
+  photoBtnText:     { fontSize: 13, fontWeight: '800', color: '#FF6B00' },
+  photoClearBtn:    { backgroundColor: '#ffebee', borderRadius: 12, padding: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  photoClearBtnText:{ fontSize: 12, fontWeight: '800', color: '#c62828' },
+  uploadingBanner:  { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 4 },
+  uploadingText:    { fontSize: 12, color: '#FF6B00', fontWeight: '600' },
+  imagePreviewRow:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  imagePreviewWrap: { position: 'relative' },
+  imageThumb:       { width: 72, height: 72, borderRadius: 10, backgroundColor: '#eee' },
+  imageRemoveBtn:   { position: 'absolute', top: -4, right: -4, backgroundColor: '#ff4444', width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  imageRemoveBtnText:{ fontSize: 10, color: '#fff', fontWeight: '800' },
+  photoHint:        { fontSize: 11, color: '#888', fontWeight: '600', marginTop: 8, textAlign: 'center' },
+
   submitBtn:        { backgroundColor: '#FF6B00', padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 14, elevation: 3 },
   submitBtnDisabled:{ backgroundColor: '#ccc', elevation: 0 },
   submitBtnText:    { color: '#fff', fontSize: 15, fontWeight: '800' },

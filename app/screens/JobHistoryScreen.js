@@ -15,7 +15,6 @@ import {
   View
 } from 'react-native'
 import { db } from '../firebase/config'
-import OrderImage from '../../components/OrderImage'
 
 export default function JobHistoryScreen() {
   const router = useRouter()
@@ -48,27 +47,9 @@ export default function JobHistoryScreen() {
 
       let todayCount = 0, weekCount = 0, monthCount = 0
 
-      /**
-       * Convert various Firebase RTDB image formats to a real JavaScript array.
-       * Handles arrays, objects with numeric keys (Firebase RTDB format), null.
-       */
-      const toArr = (v) => {
-        if (!v) return null
-        if (Array.isArray(v)) {
-          const filtered = v.filter(x => typeof x === 'string' && x.startsWith('http'))
-          return filtered.length > 0 ? filtered : null
-        }
-        if (typeof v === 'object') {
-          const values = Object.values(v)
-          const strings = values.filter(x => typeof x === 'string' && x.startsWith('http'))
-          return strings.length > 0 ? strings : null
-        }
-        return null
-      }
-
       snap.forEach(child => {
         const val = child.val()
-        const o = { id: child.key, ...val, images: toArr(val.images) }
+        const o = { id: child.key, ...val }
         if (o.techPhone === myPhone && (o.status === 'completed' || o.status === 'accepted')) {
           // Try to parse order time for date-based filtering
           let orderTime = 0
@@ -208,19 +189,21 @@ export default function JobHistoryScreen() {
                   {job.description ? (
                     <Text style={s.jobDesc}>📝 "{job.description.substring(0, 60)}{job.description.length > 60 ? '...' : ''}"</Text>
                   ) : null}
-                  {/* ── Job images ── */}
-                  {job.images && job.images.length > 0 && (
+
+                  {/* Job images */}
+                  {job.images && Object.values(job.images).length > 0 && (
                     <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
-                      {job.images.slice(0, 3).map((img, i) => (
+                      {Object.values(job.images).slice(0, 3).map((img, i) => (
                         <TouchableOpacity key={i} onPress={() => setFullscreenImg(img)}>
-                          <OrderImage uri={img} style={s.jobHistImgThumb} />
+                          <Image source={{ uri: img }} style={s.jobHistImgThumb} resizeMode="cover" />
                         </TouchableOpacity>
                       ))}
-                      {job.images.length > 3 && (
-                        <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{job.images.length - 3}</Text>
+                      {Object.values(job.images).length > 3 && (
+                        <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{Object.values(job.images).length - 3}</Text>
                       )}
                     </View>
                   )}
+
                   <Text style={s.jobDate}>📅 {job._date} · {job._time}</Text>
                 </View>
               </View>
@@ -246,10 +229,11 @@ export default function JobHistoryScreen() {
             <Text style={s.modalCloseTxt}>✕</Text>
           </TouchableOpacity>
           {fullscreenImg && (
-            <OrderImage uri={fullscreenImg} style={s.modalImage} resizeMode="contain" />
+            <Image source={{ uri: fullscreenImg }} style={s.modalImage} resizeMode="contain" />
           )}
         </View>
       </Modal>
+
     </View>
   )
 }
@@ -280,6 +264,8 @@ const s = StyleSheet.create({
   statusBadge:    { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   statusText:     { fontSize: 11, fontWeight: '800' },
   jobHistImgThumb: { width: 36, height: 36, borderRadius: 6, backgroundColor: '#eee' },
+
+  // ── Fullscreen Image Modal ──
   modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
   modalClose:     { position: 'absolute', top: 55, right: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
   modalCloseTxt:  { color: '#fff', fontSize: 18, fontWeight: '800' },

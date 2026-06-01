@@ -4,7 +4,8 @@ import { useRouter } from 'expo-router';
 import { get, onValue, ref, remove, set, update } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Linking,
+  Alert, Image, Linking,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -68,6 +69,8 @@ export default function TechHomeScreen() {
   const [distance, setDistance]          = useState('--')
   const [eta, setEta]                    = useState('--')
   const [currentCustPhone, setCustPhone] = useState('')
+  const [fullscreenImg, setFullscreenImg] = useState(null)
+  const [fullscreenOrderId, setFullscreenOrderId] = useState(null)
 
   const watchRef          = useRef(null)
   const mapRef            = useRef(null)
@@ -82,20 +85,6 @@ export default function TechHomeScreen() {
   const prevPendingIds    = useRef(new Set())
   const areaAssignments   = useRef({})
   const autoAssignRunning = useRef(false) // prevent double auto-assign attempts
-
-  /**
-   * Convert various Firebase RTDB image formats to a real JavaScript array.
-   *
-   * Firebase RTDB stores arrays as objects with numeric keys ({"0": url1, "1": url2}).
-   * We store images explicitly as such objects in HomeScreen.js.
-   * But legacy orders may have arrays, or null, or other formats.
-   * This function handles ALL possible formats:
-   *   - null / undefined  → null
-   *   - array             → as-is
-   *   - object with numeric keys  → Object.values()
-   *   - other             → null
-   */
-
 
   useEffect(() => {
     loadTech()
@@ -615,6 +604,20 @@ export default function TechHomeScreen() {
             </View>
           ) : null}
 
+          {/* Ongoing job images */}
+          {ongoingJob.images && Object.values(ongoingJob.images).length > 0 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+              {Object.values(ongoingJob.images).slice(0, 4).map((url, idx) => (
+                <TouchableOpacity key={idx} onPress={() => { setFullscreenImg(url); setFullscreenOrderId(ongoingJob.id) }}>
+                  <Image source={{ uri: url }} style={{ width: 72, height: 72, borderRadius: 10, backgroundColor: '#eee' }} resizeMode="cover" />
+                </TouchableOpacity>
+              ))}
+              {Object.values(ongoingJob.images).length > 4 && (
+                <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{Object.values(ongoingJob.images).length - 4}</Text>
+              )}
+            </View>
+          )}
+
           <Text style={s.inProgressTxt}>⚡ In Progress...</Text>
 
           <View style={s.distBanner}>
@@ -727,6 +730,20 @@ export default function TechHomeScreen() {
                 </View>
               ) : null}
 
+              {/* Order images */}
+              {order.images && Object.values(order.images).length > 0 && (
+                <View style={{ flexDirection: 'row', gap: 4, marginTop: 6 }}>
+                  {Object.values(order.images).slice(0, 3).map((url, idx) => (
+                    <TouchableOpacity key={idx} onPress={() => { setFullscreenImg(url); setFullscreenOrderId(order.id) }}>
+                      <Image source={{ uri: url }} style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: '#eee' }} resizeMode="cover" />
+                    </TouchableOpacity>
+                  ))}
+                  {Object.values(order.images).length > 3 && (
+                    <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{Object.values(order.images).length - 3}</Text>
+                  )}
+                </View>
+              )}
+
               <Text style={s.jobTime}>🕐 {order.time}</Text>
               {/* GPS distance display — shows how far the customer is */}
               {distDisplay && (
@@ -796,7 +813,19 @@ export default function TechHomeScreen() {
                   📝 "{order.description.substring(0, 50)}{order.description.length > 50 ? '...' : ''}"
                 </Text>
               ) : null}
-
+              {/* Completed job images */}
+              {order.images && Object.values(order.images).length > 0 && (
+                <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
+                  {Object.values(order.images).slice(0, 3).map((url, idx) => (
+                    <TouchableOpacity key={idx} onPress={() => { setFullscreenImg(url); setFullscreenOrderId(order.id) }}>
+                      <Image source={{ uri: url }} style={{ width: 36, height: 36, borderRadius: 6, backgroundColor: '#eee' }} resizeMode="cover" />
+                    </TouchableOpacity>
+                  ))}
+                  {Object.values(order.images).length > 3 && (
+                    <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{Object.values(order.images).length - 3}</Text>
+                  )}
+                </View>
+              )}
             </View>
             <View style={s.compRight}>
               <Text style={s.compPrice}>✅ Done</Text>
@@ -808,6 +837,20 @@ export default function TechHomeScreen() {
 
       <View style={{ height: 90 }} />
     </ScrollView>
+  )
+
+  {/* FULLSCREEN IMAGE VIEWER */}
+  const renderFullscreenImage = () => (
+    <Modal visible={!!fullscreenImg} transparent onRequestClose={() => setFullscreenImg(null)}>
+      <View style={s.modalOverlay}>
+        <TouchableOpacity style={s.modalClose} onPress={() => setFullscreenImg(null)}>
+          <Text style={s.modalCloseTxt}>✕</Text>
+        </TouchableOpacity>
+        {fullscreenImg && (
+          <Image source={{ uri: fullscreenImg }} style={s.modalImage} resizeMode="contain" />
+        )}
+      </View>
+    </Modal>
   )
 
   // Show loading while navigating to profile
@@ -825,6 +868,7 @@ export default function TechHomeScreen() {
       {activeTab === 'home' && renderHomeTab()}
       {activeTab === 'pending' && renderPendingTab()}
       {activeTab === 'completed' && renderCompletedTab()}
+      {renderFullscreenImage()}
       {/* BOTTOM TAB BAR */}
       <View style={s.tabBar}>
         {TABS.map(tab => (
@@ -931,4 +975,10 @@ const s = StyleSheet.create({
   tabIndicator:  { position: 'absolute', top: -1, width: 24, height: 3, backgroundColor: '#FF6B00', borderRadius: 2, alignSelf: 'center' },
   tabBadge:      { position: 'absolute', top: 0, right: '15%', backgroundColor: '#FF6B00', width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   tabBadgeTxt:   { fontSize: 9, fontWeight: '800', color: '#fff' },
+
+  // ── Fullscreen Image Viewer ──
+  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
+  modalClose:     { position: 'absolute', top: 55, right: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  modalCloseTxt:  { color: '#fff', fontSize: 18, fontWeight: '800' },
+  modalImage:     { width: '90%', height: '70%' },
 })

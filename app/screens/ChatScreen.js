@@ -3,11 +3,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { onValue, push, ref, set } from 'firebase/database'
 import { useEffect, useRef, useState } from 'react'
 import {
-  ActivityIndicator,
   Alert,
-  Image,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -16,10 +13,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native'
-import * as ImagePicker from 'expo-image-picker'
 import { db } from '../firebase/config'
-import { uploadImages } from '../utils/uploadImage'
-import OrderImage from '../../components/OrderImage'
 
 export default function ChatScreen() {
   const router = useRouter()
@@ -31,8 +25,7 @@ export default function ChatScreen() {
   const [otherPersonName, setOtherPersonName] = useState(role === 'cust' ? (techName || 'Technician') : (customerName || 'Customer'))
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('chat')
-  const [uploadingImage, setUploadingImage] = useState(false)
-  const [fullscreenImg, setFullscreenImg] = useState(null)
+
   const scrollRef = useRef(null)
   const mounted = useRef(true)
 
@@ -104,69 +97,6 @@ export default function ChatScreen() {
     }
     setMyName(n || (role === 'cust' ? 'Customer' : 'Technician'))
   }
-
-  // ── Image Sharing ──────────────────────────────────────────────────────
-  const pickImage = async (fromCamera) => {
-    try {
-      let result
-      if (fromCamera) {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync()
-        if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Allow camera access to take a photo.')
-          return
-        }
-        result = await ImagePicker.launchCameraAsync({ quality: 0.4 })
-      } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-        if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Allow photo library access to pick an image.')
-          return
-        }
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          quality: 0.4,
-          allowsMultipleSelection: true,
-          selectionLimit: 2,
-        })
-      }
-      if (result.canceled || !result.assets || result.assets.length === 0) return
-
-      // Upload images to Firebase Storage
-      setUploadingImage(true)
-      const imageUrls = await uploadImages(result.assets, `chat-${orderId}-${Date.now()}`)
-
-      if (imageUrls && imageUrls.length > 0) {
-        // Send each image as a message
-        for (const url of imageUrls) {
-          const msgRef = ref(db, `chats/${orderId}/messages`)
-          const metaRef = ref(db, `chats/${orderId}/metadata`)
-
-          await push(msgRef, {
-            text: '',
-            imageUrl: url,
-            senderRole: role,
-            senderName: myName,
-            timestamp: Date.now(),
-            read: false,
-          })
-
-          await set(metaRef, {
-            lastMessage: '📸 Photo',
-            lastSender: role,
-            lastTime: Date.now(),
-            customerName: customerName || '',
-            techName: techName || '',
-          })
-        }
-      }
-    } catch (e) {
-      console.error('Image pick/upload failed:', e)
-      Alert.alert('Error', 'Failed to share image. Please try again.')
-    } finally {
-      setUploadingImage(false)
-    }
-  }
-
   const sendMessage = async () => {
     const text = inputText.trim()
     if (!text || !orderId) return
@@ -266,8 +196,6 @@ export default function ChatScreen() {
   // ── Render a single message ──────────────────────────────────────────
   const renderMessage = (item) => {
     const isMyMsg = item.senderRole === role
-    const hasImage = !!item.imageUrl
-
     return (
       <View
         key={item.id}
@@ -278,15 +206,6 @@ export default function ChatScreen() {
       >
         {!isMyMsg && (
           <Text style={s.senderName}>{item.senderName}</Text>
-        )}
-        {hasImage && (
-          <TouchableOpacity onPress={() => setFullscreenImg(item.imageUrl)}>
-            <Image
-              source={{ uri: item.imageUrl }}
-              style={s.chatImage}
-              resizeMode="cover"
-            />
-          </TouchableOpacity>
         )}
         {item.text ? (
           <Text style={[s.msgText, isMyMsg && s.myMsgText]}>
@@ -354,19 +273,7 @@ export default function ChatScreen() {
 
       {/* INPUT */}
       <View style={s.inputBar}>
-        {uploadingImage && (
-          <View style={s.uploadBanner}>
-            <ActivityIndicator color="#FF6B00" size="small" />
-            <Text style={s.uploadBannerText}>📤 Uploading photo...</Text>
-          </View>
-        )}
         <View style={s.inputRow}>
-          <TouchableOpacity style={s.imgAttachBtn} onPress={() => pickImage(false)}>
-            <Text style={s.imgAttachIcon}>🖼️</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.imgAttachBtn} onPress={() => pickImage(true)}>
-            <Text style={s.imgAttachIcon}>📷</Text>
-          </TouchableOpacity>
           <TextInput
             style={s.input}
             placeholder="Type a message..."
@@ -377,26 +284,14 @@ export default function ChatScreen() {
             maxLength={500}
           />
           <TouchableOpacity
-            style={[s.sendBtn, (!inputText.trim() && !uploadingImage) && s.sendBtnDisabled]}
+            style={[s.sendBtn, !inputText.trim() && s.sendBtnDisabled]}
             onPress={sendMessage}
-            disabled={!inputText.trim() || uploadingImage}
+            disabled={!inputText.trim()}
           >
             <Text style={s.sendTxt}>➤</Text>
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* FULLSCREEN IMAGE VIEWER */}
-      <Modal visible={!!fullscreenImg} transparent onRequestClose={() => setFullscreenImg(null)}>
-        <View style={s.modalOverlay}>
-          <TouchableOpacity style={s.modalClose} onPress={() => setFullscreenImg(null)}>
-            <Text style={s.modalCloseTxt}>✕</Text>
-          </TouchableOpacity>
-          {fullscreenImg && (
-            <OrderImage uri={fullscreenImg} style={s.modalImage} resizeMode="contain" />
-          )}
-        </View>
-      </Modal>
 
       {/* BOTTOM TAB BAR */}
       <View style={s.tabBar}>
@@ -501,15 +396,6 @@ const s = StyleSheet.create({
   msgTime: { fontSize: 10, color: '#999', marginTop: 4, alignSelf: 'flex-end' },
   myMsgTime: { color: 'rgba(255,255,255,0.7)' },
 
-  // Chat image in message
-  chatImage: {
-    width: 200,
-    height: 160,
-    borderRadius: 10,
-    backgroundColor: '#e0e0e0',
-    marginBottom: 4,
-  },
-
   // Input
   inputBar: {
     backgroundColor: '#fff',
@@ -518,30 +404,11 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
   },
-  uploadBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-  },
-  uploadBannerText: { fontSize: 12, color: '#FF6B00', fontWeight: '600' },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 6,
   },
-  imgAttachBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f5f5f5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  imgAttachIcon: { fontSize: 18 },
   input: {
     flex: 1,
     backgroundColor: '#f5f5f5',
@@ -563,12 +430,6 @@ const s = StyleSheet.create({
   },
   sendBtnDisabled: { backgroundColor: '#ddd' },
   sendTxt: { fontSize: 18, color: '#fff' },
-
-  // Fullscreen image modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
-  modalClose: { position: 'absolute', top: 55, right: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
-  modalCloseTxt: { color: '#fff', fontSize: 18, fontWeight: '800' },
-  modalImage: { width: '90%', height: '70%' },
 
   // Bottom Tab Bar
   tabBar: {
