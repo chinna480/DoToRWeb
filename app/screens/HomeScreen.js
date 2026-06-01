@@ -1,7 +1,6 @@
 
 // HomeScreen.js — Fixed stale data + Profile button + Image display fix
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { onValue, push, ref, set } from 'firebase/database';
@@ -9,7 +8,6 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Modal,
   Platform,
   ScrollView,
@@ -29,12 +27,9 @@ import {
   notifyTechsForNewOrder,
   registerForNotifications,
 } from '../utils/notifications';
-import { uploadImages } from '../utils/uploadImage';
 
 const PHONE_BRANDS   = ['iPhone','Samsung','OnePlus','Redmi','Vivo','Oppo','Realme','Nokia']
 const LAPTOP_BRANDS  = ['Dell','HP','Lenovo','MacBook','Asus','Acer','MSI','Sony']
-const PHONE_REPAIRS  = ['Screen Replacement','Battery Replacement','Charging Port','Speaker Issue','Camera Repair','Water Damage','Back Panel','Software Issue']
-const LAPTOP_REPAIRS = ['Screen Replacement','Battery Replacement','Keyboard Repair','Charging Port','RAM Upgrade','Hard Disk','Overheating','Software Issue']
 
 let MapView = null, MarkerNative = null
 if (Platform.OS !== 'web') {
@@ -103,13 +98,10 @@ export default function HomeScreen() {
   const [brands, setBrands]             = useState([])
   const [selectedBrand, setSelectedBrand] = useState(null)
   const [repairs, setRepairs]           = useState([])
-  const [selectedRepair, setSelectedRepair] = useState(null) // ✅ FIX: track selected repair
   const [myOrders, setMyOrders]         = useState([])
   const [custPhone, setCustPhone]       = useState('')
   const [ordersFilter, setOrdersFilter] = useState('all')
   const [description, setDescription]   = useState('')
-  const [images, setImages]             = useState([])
-  const [uploadingImg, setUploadingImg] = useState(false)
   const [submitting, setSubmitting]     = useState(false)
   const [addressText, setAddressText]   = useState('')
   const [pincodeText, setPincodeText]   = useState('')
@@ -193,76 +185,14 @@ export default function HomeScreen() {
     setDevice(type)
     setBrands(type === 'phone' ? PHONE_BRANDS : LAPTOP_BRANDS)
     setSelectedBrand(null)
-    setSelectedRepair(null)
     setRepairs([])
     setDescription('')
   }
 
   const selectBrand = (brand) => {
     setSelectedBrand(brand)
-    setRepairs(selectedDevice === 'phone' ? PHONE_REPAIRS : LAPTOP_REPAIRS)
-    setSelectedRepair(null) // ✅ FIX: reset repair selection when brand changes
-    setImages([])
+    setRepairs(selectedDevice === 'phone' ? ['General'] : ['General'])
     setDescription('')
-  }
-
-  // ✅ FIX: selecting a repair now stores it in state instead of immediately booking
-  const selectRepair = (repair) => {
-    setSelectedRepair(repair)
-  }
-
-  const pickImageFromGallery = async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Allow access to your photo library to upload images.')
-        return
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: true,
-        selectionLimit: 2,
-        quality: 0.4,
-      })
-      if (result.canceled) return
-      processSelectedImages(result.assets)
-    } catch (e) {
-      console.error('Image picker failed:', e)
-      Alert.alert('Error', 'Could not open gallery. Try camera instead.')
-    }
-  }
-
-  const takePhoto = async () => {
-    try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync()
-      if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Allow camera access to take a photo of the issue.')
-        return
-      }
-      const result = await ImagePicker.launchCameraAsync({ quality: 0.4 })
-      if (result.canceled) return
-      processSelectedImages(result.assets)
-    } catch (e) {
-      console.error('Camera failed:', e)
-      Alert.alert('Error', 'Could not open camera. Try gallery instead.')
-    }
-  }
-
-  const processSelectedImages = (assets) => {
-    try {
-      setUploadingImg(true)
-      const newImages = assets
-        .filter(a => a && a.uri)
-        .map(a => ({ uri: a.uri, local: true }))
-      setImages(prev => {
-        const combined = [...prev, ...newImages]
-        return combined.slice(0, 2)
-      })
-    } catch (e) {
-      console.error('processSelectedImages error:', e)
-    } finally {
-      setUploadingImg(false)
-    }
   }
 
   const reverseGeocode = async (lat, lng) => {
@@ -337,28 +267,6 @@ export default function HomeScreen() {
       const tempOrderRef = push(ref(db, 'orders'))
       const orderId = tempOrderRef.key
 
-      // ✅ FIX: Upload images and store as object with numeric keys for Firebase RTDB
-      let imageUrls = null
-      let imageUploadFailed = false
-      if (images.length > 0) {
-        const localUris = images.slice(0, 2).map(img => ({ uri: img.uri }))
-        console.log('[HomeScreen] Uploading', localUris.length, 'image(s) for order', orderId)
-        imageUrls = await uploadImages(localUris, orderId)
-        if (!imageUrls) {
-          imageUploadFailed = true
-          console.warn('[HomeScreen] ⚠️ Image upload returned null')
-        } else {
-          console.log('[HomeScreen] ✅ Images uploaded:', JSON.stringify(imageUrls).substring(0, 200))
-        }
-      }
-
-      // ✅ FIX: Store images as object {"0": url, "1": url} — Firebase RTDB
-      // does NOT support sparse arrays reliably. Explicit numeric-keyed object
-      // is the safest format and toArr() handles it on both customer & tech side.
-      const imagesPayload = imageUrls && imageUrls.length > 0
-        ? Object.fromEntries(imageUrls.map((url, i) => [String(i), url]))
-        : null
-
       const order = {
         customerName:       name,
         customerPhone:      phone,
@@ -368,7 +276,6 @@ export default function HomeScreen() {
         brand:              selectedBrand,
         repair,
         description:        (description || '').trim(),
-        images:             imagesPayload,
         status:             'pending',
         time:               hasAppt ? selectedSlot : new Date().toLocaleTimeString(),
         custLat:            orderLat,
@@ -385,8 +292,6 @@ export default function HomeScreen() {
 
       // Clear form
       setDescription('')
-      setImages([])
-      setSelectedRepair(null)
       setWantAppointment(false)
       setSelectedDate(null)
       setSelectedSlot(null)
@@ -408,8 +313,8 @@ export default function HomeScreen() {
       )
 
       const alertMsg = hasAppt
-        ? `Brand: ${selectedBrand}\nRepair: ${repair}\nDate: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}${imageUploadFailed ? '\n\n⚠️ Photo upload failed — technician may not see your images.' : ''}\n\nWe'll send a reminder before your appointment!`
-        : `Brand: ${selectedBrand}\nRepair: ${repair}${imageUploadFailed ? '\n\n⚠️ Photo upload failed — technician may not see your images.' : ''}\n\nTrack your technician?`
+        ? `Brand: ${selectedBrand}\nDate: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}\n\nWe'll send a reminder before your appointment!`
+        : `Brand: ${selectedBrand}\n\nTrack your technician?`
 
       Alert.alert(
         hasAppt ? '✅ Appointment Booked!' : '✅ Booking Confirmed!',
@@ -478,190 +383,124 @@ export default function HomeScreen() {
         </>
       )}
 
-      {/* ✅ FIX: Step 3 now shows repair list as selectable cards — selecting one
-          stores it in selectedRepair state. The Submit button at the bottom
-          uses selectedRepair, so bookRepair() always receives the repair type,
-          never the description text. Previously the repair list items called
-          bookRepair(repair) directly which was removed when the form was added,
-          leaving no way for the repair value to reach bookRepair(). */}
       {repairs.length > 0 && (
         <ErrorBoundary key={selectedBrand || 'brand'} errorMessage="Booking form crashed. Please try again." style={{ marginHorizontal: 15 }}>
-          <Text style={s.sectionTitle}>Step 3 — Select Repair Type</Text>
-          <View style={s.brandGrid}>
-            {repairs.map(repair => (
-              <TouchableOpacity
-                key={repair}
-                style={[s.repairCard, selectedRepair === repair && s.repairCardActive]}
-                onPress={() => selectRepair(repair)}
-              >
-                <Text style={s.cardIcon}>🔧</Text>
-                <Text style={[s.cardName, selectedRepair === repair && s.repairCardActiveTxt]}>{repair}</Text>
-              </TouchableOpacity>
-            ))}
+          <Text style={s.sectionTitle}>Step 3 — Describe the Issue</Text>
+          <View style={s.descBox}>
+            <Text style={s.descLabel}>📝 What's the problem? (so technician knows what to bring)</Text>
+            <TextInput
+              style={s.descInput}
+              placeholder="e.g. Screen cracked, phone not charging, battery draining fast..."
+              placeholderTextColor="#aaa"
+              multiline
+              numberOfLines={3}
+              value={description}
+              onChangeText={setDescription}
+            />
           </View>
 
-          {selectedRepair && (
+          {/* ── Inline Appointment Toggle ── */}
+          <TouchableOpacity style={s.apptToggle} onPress={() => {
+            setWantAppointment(!wantAppointment)
+            if (wantAppointment) { setSelectedDate(null); setSelectedSlot(null) }
+          }}>
+            <Text style={s.apptToggleIcon}>📅</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.apptToggleTitle}>Want to book an appointment?</Text>
+              <Text style={s.apptToggleSub}>Pick a convenient date & time</Text>
+            </View>
+            <Text style={s.apptToggleArrow}>{wantAppointment ? '▼' : '▶'}</Text>
+          </TouchableOpacity>
+
+          {wantAppointment && (
             <>
-              <Text style={s.sectionTitle}>Step 4 — Describe the Issue</Text>
-              <View style={s.descBox}>
-                <Text style={s.descLabel}>📝 What's the problem? (so technician knows what to bring)</Text>
-                <TextInput
-                  style={s.descInput}
-                  placeholder="e.g. Screen cracked, phone not charging, battery draining fast..."
-                  placeholderTextColor="#aaa"
-                  multiline
-                  numberOfLines={3}
-                  value={description}
-                  onChangeText={setDescription}
-                />
-              </View>
+              <Text style={s.sectionTitle}>Select Date</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.dateRow}>
+                {dates.map((d, i) => {
+                  const isSel = selectedDate && d.toDateString() === selectedDate.toDateString()
+                  return (
+                    <TouchableOpacity key={i} style={[s.dateCard, isSel && s.dateCardActive]} onPress={() => { setSelectedDate(d); setSelectedSlot(null) }}>
+                      <Text style={[s.dateDay, isSel && s.dateDayActive]}>{DAYS[d.getDay()]}</Text>
+                      <Text style={[s.dateNum, isSel && s.dateNumActive]}>{d.getDate()}</Text>
+                      <Text style={[s.dateMonth, isSel && s.dateMonthActive]}>{MONTHS[d.getMonth()]}</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </ScrollView>
 
-              {/* ── Image Upload Section ── */}
-              <Text style={s.sectionTitle}>📸 Upload Photos (so technician sees the issue)</Text>
-              <View style={s.imgUploadBox}>
-                <View style={s.imgRow}>
-                  <TouchableOpacity style={s.imgPickerBtn} onPress={pickImageFromGallery}>
-                    <Text style={s.imgPickerIcon}>🖼️</Text>
-                    <Text style={s.imgPickerLabel}>Gallery</Text>
+              <Text style={s.sectionTitle}>Select Time Slot</Text>
+              <View style={s.slotsGrid}>
+                {TIME_SLOTS.map(slot => (
+                  <TouchableOpacity key={slot} style={[s.slotBtn, selectedSlot === slot && s.slotBtnActive]} onPress={() => setSelectedSlot(slot)}>
+                    <Text style={[s.slotTxt, selectedSlot === slot && s.slotTxtActive]}>🕐 {slot}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={s.imgPickerBtn} onPress={takePhoto}>
-                    <Text style={s.imgPickerIcon}>📷</Text>
-                    <Text style={s.imgPickerLabel}>Camera</Text>
-                  </TouchableOpacity>
-                </View>
-                {images.length > 0 && (
-                  <ErrorBoundary key="imgs-preview" errorMessage="Could not load image preview" style={{ marginHorizontal: 0 }}>
-                    <View style={s.imgPreviewRow}>
-                      {images.map((img, i) => {
-                        // ✅ FIX: safely extract URI whether img is {uri,local} object or plain string
-                        const uri = (img && typeof img === 'object' && img.uri) ? img.uri : (typeof img === 'string' ? img : null)
-                        if (!uri) return null
-                        return (
-                          <View key={i} style={s.imgThumbWrap}>
-                            <Image source={{ uri }} style={s.imgThumb} />
-                            <TouchableOpacity
-                              style={s.imgRemoveBtn}
-                              onPress={() => setImages(prev => prev.filter((_, idx) => idx !== i))}
-                            >
-                              <Text style={s.imgRemoveTxt}>✕</Text>
-                            </TouchableOpacity>
-                          </View>
-                        )
-                      })}
-                    </View>
-                  </ErrorBoundary>
-                )}
-                {images.length > 0 && (
-                  <Text style={s.imgCount}>{images.length} photo{images.length > 1 ? 's' : ''} selected</Text>
-                )}
-                {uploadingImg && <Text style={s.uploadingTxt}>⏳ Processing...</Text>}
-              </View>
-
-              {/* ── Inline Appointment Toggle ── */}
-              <TouchableOpacity style={s.apptToggle} onPress={() => {
-                setWantAppointment(!wantAppointment)
-                if (wantAppointment) { setSelectedDate(null); setSelectedSlot(null) }
-              }}>
-                <Text style={s.apptToggleIcon}>📅</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.apptToggleTitle}>Want to book an appointment?</Text>
-                  <Text style={s.apptToggleSub}>Pick a convenient date & time</Text>
-                </View>
-                <Text style={s.apptToggleArrow}>{wantAppointment ? '▼' : '▶'}</Text>
-              </TouchableOpacity>
-
-              {wantAppointment && (
-                <>
-                  <Text style={s.sectionTitle}>Select Date</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.dateRow}>
-                    {dates.map((d, i) => {
-                      const isSel = selectedDate && d.toDateString() === selectedDate.toDateString()
-                      return (
-                        <TouchableOpacity key={i} style={[s.dateCard, isSel && s.dateCardActive]} onPress={() => { setSelectedDate(d); setSelectedSlot(null) }}>
-                          <Text style={[s.dateDay, isSel && s.dateDayActive]}>{DAYS[d.getDay()]}</Text>
-                          <Text style={[s.dateNum, isSel && s.dateNumActive]}>{d.getDate()}</Text>
-                          <Text style={[s.dateMonth, isSel && s.dateMonthActive]}>{MONTHS[d.getMonth()]}</Text>
-                        </TouchableOpacity>
-                      )
-                    })}
-                  </ScrollView>
-
-                  <Text style={s.sectionTitle}>Select Time Slot</Text>
-                  <View style={s.slotsGrid}>
-                    {TIME_SLOTS.map(slot => (
-                      <TouchableOpacity key={slot} style={[s.slotBtn, selectedSlot === slot && s.slotBtnActive]} onPress={() => setSelectedSlot(slot)}>
-                        <Text style={[s.slotTxt, selectedSlot === slot && s.slotTxtActive]}>🕐 {slot}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </>
-              )}
-
-              {/* ── Your Address ── */}
-              <Text style={s.sectionTitle}>📍 Your Address</Text>
-              <View style={s.addressBox}>
-                <ErrorBoundary errorMessage="Address search unavailable" style={{ marginHorizontal: 0 }}>
-                  <LocationAutocomplete
-                    value={addressText}
-                    onChangeText={(t) => {
-                      setAddressText(t)
-                      AsyncStorage.setItem('custLocation', t).catch(() => {})
-                      setCustLocation(t)
-                    }}
-                    placeholder="Search your area..."
-                    icon="📍"
-                  />
-                </ErrorBoundary>
-                <TouchableOpacity style={s.mapBtn} onPress={openMapPicker}>
-                  <Text style={s.mapBtnIcon}>🗺️</Text>
-                  <Text style={s.mapBtnText}>Select on Map</Text>
-                </TouchableOpacity>
-                <View style={s.fieldRow}>
-                  <Text style={s.fieldIcon}>📮</Text>
-                  <TextInput
-                    style={s.fieldInput}
-                    placeholder="Enter 6-digit pincode"
-                    placeholderTextColor="#aaa"
-                    value={pincodeText}
-                    onChangeText={(t) => {
-                      const filtered = t.replace(/[^0-9]/g, '').slice(0, 6)
-                      setPincodeText(filtered)
-                      AsyncStorage.setItem('custPincode', filtered).catch(() => {})
-                    }}
-                    keyboardType="numeric"
-                    maxLength={6}
-                  />
-                </View>
-              </View>
-
-              {/* ── Submit ── */}
-              <View style={s.descBox}>
-                <TouchableOpacity
-                  style={[s.submitBtn, (!description.trim() || submitting) && s.submitBtnDisabled]}
-                  onPress={() => {
-                    const desc = description.trim()
-                    if (!desc) {
-                      Alert.alert('Missing', 'Please describe your issue.')
-                      return
-                    }
-                    // ✅ FIX: pass selectedRepair (the repair type), not the description
-                    if (submitting) return
-                    setSubmitting(true)
-                    bookRepair(selectedRepair).finally(() => setSubmitting(false))
-                  }}
-                  disabled={!description.trim() || submitting}
-                >
-                  <Text style={s.submitBtnText}>
-                    {submitting
-                      ? '⏳ Submitting...'
-                      : wantAppointment && selectedDate && selectedSlot
-                        ? '📅 Book Appointment & Submit →'
-                        : '📋 Submit Repair Request'}
-                  </Text>
-                </TouchableOpacity>
+                ))}
               </View>
             </>
           )}
+
+          {/* ── Your Address ── */}
+          <Text style={s.sectionTitle}>📍 Your Address</Text>
+          <View style={s.addressBox}>
+            <ErrorBoundary errorMessage="Address search unavailable" style={{ marginHorizontal: 0 }}>
+              <LocationAutocomplete
+                value={addressText}
+                onChangeText={(t) => {
+                  setAddressText(t)
+                  AsyncStorage.setItem('custLocation', t).catch(() => {})
+                  setCustLocation(t)
+                }}
+                placeholder="Search your area..."
+                icon="📍"
+              />
+            </ErrorBoundary>
+            <TouchableOpacity style={s.mapBtn} onPress={openMapPicker}>
+              <Text style={s.mapBtnIcon}>🗺️</Text>
+              <Text style={s.mapBtnText}>Select on Map</Text>
+            </TouchableOpacity>
+            <View style={s.fieldRow}>
+              <Text style={s.fieldIcon}>📮</Text>
+              <TextInput
+                style={s.fieldInput}
+                placeholder="Enter 6-digit pincode"
+                placeholderTextColor="#aaa"
+                value={pincodeText}
+                onChangeText={(t) => {
+                  const filtered = t.replace(/[^0-9]/g, '').slice(0, 6)
+                  setPincodeText(filtered)
+                  AsyncStorage.setItem('custPincode', filtered).catch(() => {})
+                }}
+                keyboardType="numeric"
+                maxLength={6}
+              />
+            </View>
+          </View>
+
+          {/* ── Submit ── */}
+          <View style={s.descBox}>
+            <TouchableOpacity
+              style={[s.submitBtn, (!description.trim() || submitting) && s.submitBtnDisabled]}
+              onPress={() => {
+                const desc = description.trim()
+                if (!desc) {
+                  Alert.alert('Missing', 'Please describe your issue.')
+                  return
+                }
+                if (submitting) return
+                setSubmitting(true)
+                bookRepair('Service').finally(() => setSubmitting(false))
+              }}
+              disabled={!description.trim() || submitting}
+            >
+              <Text style={s.submitBtnText}>
+                {submitting
+                  ? '⏳ Submitting...'
+                  : wantAppointment && selectedDate && selectedSlot
+                    ? '📅 Book Appointment & Submit →'
+                    : '📋 Submit Repair Request'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </ErrorBoundary>
       )}
 
@@ -894,10 +733,7 @@ const s = StyleSheet.create({
   brandGrid:        { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginHorizontal: 15 },
   brandCard:        { width: '30%', backgroundColor: '#fff', borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2, borderWidth: 2, borderColor: 'transparent' },
   brandCardActive:  { borderColor: '#FF6B00' },
-  // ✅ Repair card styles — similar to brand cards but slightly wider
-  repairCard:        { width: '47%', backgroundColor: '#fff', borderRadius: 12, padding: 12, alignItems: 'center', elevation: 2, borderWidth: 2, borderColor: 'transparent' },
-  repairCardActive:  { borderColor: '#FF6B00', backgroundColor: '#fff5ee' },
-  repairCardActiveTxt: { color: '#FF6B00' },
+
   cardIcon:         { fontSize: 30 },
   cardName:         { fontSize: 12, fontWeight: '800', color: '#1A3A6B', marginTop: 5, textAlign: 'center' },
   whyItem:          { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#fff', padding: 14, marginHorizontal: 15, marginBottom: 10, borderRadius: 14, elevation: 2 },
@@ -936,18 +772,7 @@ const s = StyleSheet.create({
   mapModalHint:         { fontSize: 12, color: '#888', fontWeight: '600', textAlign: 'center', marginBottom: 12 },
   mapModalConfirmBtn:   { backgroundColor: '#FF6B00', padding: 16, borderRadius: 14, alignItems: 'center', elevation: 3 },
   mapModalConfirmText:  { color: '#fff', fontSize: 16, fontWeight: '800' },
-  imgUploadBox:     { backgroundColor: '#fff', borderRadius: 14, marginHorizontal: 15, marginBottom: 10, padding: 14, elevation: 2 },
-  imgRow:           { flexDirection: 'row', gap: 12 },
-  imgPickerBtn:     { flex: 1, backgroundColor: '#f8f8f8', borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 2, borderColor: '#eee', borderStyle: 'dashed' },
-  imgPickerIcon:    { fontSize: 28 },
-  imgPickerLabel:   { fontSize: 12, fontWeight: '800', color: '#1A3A6B', marginTop: 4 },
-  imgPreviewRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  imgThumbWrap:     { position: 'relative' },
-  imgThumb:         { width: 80, height: 80, borderRadius: 10, backgroundColor: '#eee' },
-  imgRemoveBtn:     { position: 'absolute', top: -6, right: -6, backgroundColor: '#c62828', width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  imgRemoveTxt:     { color: '#fff', fontSize: 11, fontWeight: '800' },
-  imgCount:         { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 8, textAlign: 'center' },
-  uploadingTxt:     { fontSize: 12, color: '#FF6B00', fontWeight: '700', marginTop: 8, textAlign: 'center' },
+
   orderTech:        { fontSize: 12, fontWeight: '700', color: '#FF6B00', marginTop: 4 },
   custEtaRow:       { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, backgroundColor: '#e8f5e9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, alignSelf: 'flex-start' },
   custEtaText:      { fontSize: 11, fontWeight: '700', color: '#2e7d32' },
