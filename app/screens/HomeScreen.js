@@ -17,10 +17,11 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { db, GOOGLE_PLACES_API_KEY } from '../firebase/config';
+import { db, GOOGLE_PLACES_API_KEY, storage } from '../firebase/config';
 import LocationAutocomplete from '../../components/LocationAutocomplete';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import { calcDistance } from '../utils/distance';
+import { uploadImages } from '../utils/uploadImage';
 import {
   notifyCustomerBookingConfirmed,
   notifyTechsForNewOrder,
@@ -87,8 +88,9 @@ export default function HomeScreen() {
   const [custPhone, setCustPhone]       = useState('')
   const [ordersFilter, setOrdersFilter] = useState('all') // 'all', 'active', 'completed'
   const [description, setDescription] = useState('') // customer's problem description
-  const [images, setImages] = useState([]) // uploaded image base64 strings
-  const [uploadingImg, setUploadingImg] = useState(false)
+  const [images, setImages] = useState([]) // local file URIs { uri: string } before submit; download URLs from Storage after
+  const [uploadingImg, setUploadingImg] = useState(false) // true while images are being uploaded to Storage
+  const [submitting, setSubmitting] = useState(false)
   // ── Address & Pincode ──────────────────────────────────────────────────────
   const [addressText, setAddressText] = useState('')
   const [pincodeText, setPincodeText] = useState('')
@@ -192,54 +194,66 @@ export default function HomeScreen() {
   const selectBrand = (brand) => {
     setSelectedBrand(brand)
     setRepairs(selectedDevice === 'phone' ? PHONE_REPAIRS : LAPTOP_REPAIRS)
+    setImages([]) // clear stale images to prevent rendering crashes
+    setDescription('')
   }
 
   // ── Image Picker ──
   const pickImageFromGallery = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow access to your photo library to upload images.')
-      return
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Allow access to your photo library to upload images.')
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        selectionLimit: 2,
+        quality: 0.4,
+      })
+      if (result.canceled) return
+      processSelectedImages(result.assets)
+    } catch (e) {
+      console.error('Image picker failed:', e)
+      Alert.alert('Error', 'Could not open gallery. Try camera instead.')
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      selectionLimit: 3,
-      quality: 0.15,
-      base64: true,
-    })
-    if (result.canceled) return
-    processSelectedImages(result.assets)
   }
 
   const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow camera access to take a photo of the issue.')
-      return
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Allow camera access to take a photo of the issue.')
+        return
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 0.4,
+      })
+      if (result.canceled) return
+      processSelectedImages(result.assets)
+    } catch (e) {
+      console.error('Camera failed:', e)
+      Alert.alert('Error', 'Could not open camera. Try gallery instead.')
     }
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.15,
-      base64: true,
-    })
-    if (result.canceled) return
-    processSelectedImages(result.assets)
   }
 
   const processSelectedImages = (assets) => {
-    setUploadingImg(true)
-    const newImages = []
-    assets.forEach(asset => {
-      if (asset.base64) {
-        const uri = `data:image/jpeg;base64,${asset.base64}`
-        newImages.push(uri)
-      }
-    })
-    setImages(prev => {
-      const combined = [...prev, ...newImages]
-      return combined.slice(0, 5) // max 5 images per order
-    })
-    setUploadingImg(false)
+    try {
+      setUploadingImg(true)
+      // Store only local file URIs — upload to Firebase Storage happens at submit time
+      const newImages = assets
+        .filter(a => a && a.uri)
+        .map(a => ({ uri: a.uri, local: true }))
+      setImages(prev => {
+        const combined = [...prev, ...newImages]
+        return combined.slice(0, 2) // max 2 images per order
+      })
+    } catch (e) {
+      console.error('processSelectedImages error:', e)
+    } finally {
+      setUploadingImg(false)
+    }
   }
 
   const reverseGeocode = async (lat, lng) => {
@@ -302,10 +316,11 @@ export default function HomeScreen() {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync()
         if (status === 'granted') {
-          const pos = await Location.getCurrentPositionAsync({})
+          const pos = await Location.getCurrentPositionAsync({ timeout: 5000 })
           orderLat = pos.coords.latitude
           orderLng = pos.coords.longitude
-          set(ref(db, 'custLocation'), { lat: orderLat, lng: orderLng })
+          // Fire-and-forget GPS save (don't block submission)
+          set(ref(db, 'custLocation'), { lat: orderLat, lng: orderLng }).catch(() => {})
         }
       } catch (e) {
         console.warn('GPS location failed (non-blocking):', e)
@@ -318,10 +333,15 @@ export default function HomeScreen() {
         appointmentTime = getAppointmentTime(selectedDate, selectedSlot)
       }
 
-      // ── Limit images to 3 max to prevent Firebase OOM crash ──
-      let safeImages = null
+      // ── Generate order ID FIRST, then upload images to Storage ──
+      const tempOrderRef = push(ref(db, 'orders'))
+      const orderId = tempOrderRef.key
+
+      // Upload images to Firebase Storage (download URLs, no base64!)
+      let imageUrls = null
       if (images.length > 0) {
-        safeImages = images.slice(0, 3)
+        const localUris = images.slice(0, 2).map(img => ({ uri: img.uri }))
+        imageUrls = await uploadImages(localUris, orderId)
       }
 
       const order = {
@@ -333,7 +353,7 @@ export default function HomeScreen() {
         brand:              selectedBrand,
         repair,
         description:        (description || '').trim(),
-        images:             safeImages,
+        images:             imageUrls, // HTTPS download URLs from Firebase Storage
         status:             'pending',
         time:               hasAppt ? selectedSlot : new Date().toLocaleTimeString(),
         custLat:            orderLat,
@@ -355,8 +375,8 @@ export default function HomeScreen() {
       setSelectedDate(null)
       setSelectedSlot(null)
 
-      const newOrderRef = await push(ref(db, 'orders'), order)
-      const orderId = newOrderRef.key
+      // Write the order (now with image download URLs)
+      await set(ref(db, 'orders/' + orderId), order)
       await AsyncStorage.setItem('lastOrderId', orderId)
       await AsyncStorage.setItem('lastBrand',  selectedBrand)
       await AsyncStorage.setItem('lastRepair', repair)
@@ -448,7 +468,7 @@ export default function HomeScreen() {
       )}
 
       {repairs.length > 0 && (
-        <ErrorBoundary errorMessage="Booking form crashed. Please try again." style={{ marginHorizontal: 15 }}>
+        <ErrorBoundary key={selectedBrand || 'brand'} errorMessage="Booking form crashed. Please try again." style={{ marginHorizontal: 15 }}>
           <Text style={s.sectionTitle}>Step 3 — Describe the Issue</Text>
           <View style={s.descBox}>
             <Text style={s.descLabel}>📝 What's the problem? (so technician knows what to bring)</Text>
@@ -464,38 +484,40 @@ export default function HomeScreen() {
           </View>
 
           {/* ── Image Upload Section ── */}
-          <View style={s.sectionTitle}>📸 Upload Photos (so technician sees the issue)</View>
-          <View style={s.imgUploadBox}>
-            <View style={s.imgRow}>
-              <TouchableOpacity style={s.imgPickerBtn} onPress={pickImageFromGallery}>
-                <Text style={s.imgPickerIcon}>🖼️</Text>
-                <Text style={s.imgPickerLabel}>Gallery</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.imgPickerBtn} onPress={takePhoto}>
-                <Text style={s.imgPickerIcon}>📷</Text>
-                <Text style={s.imgPickerLabel}>Camera</Text>
-              </TouchableOpacity>
-            </View>
-            {images.length > 0 && (
-              <View style={s.imgPreviewRow}>
-                {images.map((img, i) => (
-                  <View key={i} style={s.imgThumbWrap}>
-                    <Image source={{ uri: img }} style={s.imgThumb} />
-                    <TouchableOpacity
-                      style={s.imgRemoveBtn}
-                      onPress={() => setImages(prev => prev.filter((_, idx) => idx !== i))}
-                    >
-                      <Text style={s.imgRemoveTxt}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
+          <ErrorBoundary key={`imgs-${images.length}`} errorMessage="Photo upload temporarily unavailable" style={{ marginHorizontal: 0 }}>
+            <View style={s.sectionTitle}>📸 Upload Photos (so technician sees the issue)</View>
+            <View style={s.imgUploadBox}>
+              <View style={s.imgRow}>
+                <TouchableOpacity style={s.imgPickerBtn} onPress={pickImageFromGallery}>
+                  <Text style={s.imgPickerIcon}>🖼️</Text>
+                  <Text style={s.imgPickerLabel}>Gallery</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.imgPickerBtn} onPress={takePhoto}>
+                  <Text style={s.imgPickerIcon}>📷</Text>
+                  <Text style={s.imgPickerLabel}>Camera</Text>
+                </TouchableOpacity>
               </View>
-            )}
-            {images.length > 0 && (
-              <Text style={s.imgCount}>{images.length} photo{images.length > 1 ? 's' : ''} selected</Text>
-            )}
-            {uploadingImg && <Text style={s.uploadingTxt}>⏳ Processing...</Text>}
-          </View>
+              {images.length > 0 && (
+                <View style={s.imgPreviewRow}>
+                  {images.map((img, i) => (
+                    <View key={i} style={s.imgThumbWrap}>
+                      <Image source={{ uri: img.uri || img }} style={s.imgThumb} />
+                      <TouchableOpacity
+                        style={s.imgRemoveBtn}
+                        onPress={() => setImages(prev => prev.filter((_, idx) => idx !== i))}
+                      >
+                        <Text style={s.imgRemoveTxt}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {images.length > 0 && (
+                <Text style={s.imgCount}>{images.length} photo{images.length > 1 ? 's' : ''} selected</Text>
+              )}
+              {uploadingImg && <Text style={s.uploadingTxt}>⏳ Processing...</Text>}
+            </View>
+          </ErrorBoundary>
 
           {/* ── Inline Appointment Toggle ── */}
           <TouchableOpacity style={s.apptToggle} onPress={() => {
@@ -597,12 +619,14 @@ export default function HomeScreen() {
                   Alert.alert('Missing', 'Please describe your issue.')
                   return
                 }
-                bookRepair(desc)
+                if (submitting) return
+                setSubmitting(true)
+                bookRepair(desc).finally(() => setSubmitting(false))
               }}
-              disabled={!description.trim()}
+              disabled={!description.trim() || submitting}
             >
               <Text style={s.submitBtnText}>
-                {wantAppointment && selectedDate && selectedSlot ? '📅 Book Appointment & Submit →' : '📋 Submit Repair Request'}
+                {submitting ? '⏳ Submitting...' : wantAppointment && selectedDate && selectedSlot ? '📅 Book Appointment & Submit →' : '📋 Submit Repair Request'}
               </Text>
             </TouchableOpacity>
           </View>

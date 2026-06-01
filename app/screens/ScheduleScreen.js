@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as ImagePicker from 'expo-image-picker'
 import * as Notifications from 'expo-notifications'
 import { useRouter } from 'expo-router'
-import { push, ref } from 'firebase/database'
+import { push, ref, set } from 'firebase/database'
 import { useEffect, useState } from 'react'
 import {
   Alert,
@@ -15,7 +15,8 @@ import {
   TouchableOpacity,
   View
 } from 'react-native'
-import { db } from '../firebase/config'
+import { db, storage } from '../firebase/config'
+import { uploadImages } from '../utils/uploadImage'
 import { notifyTechsForNewOrder } from '../utils/notifications'
 
 const TIME_SLOTS = [
@@ -50,7 +51,7 @@ export default function ScheduleScreen() {
   const [selectedBrand, setSelectedBrand] = useState(null)
   const [selectedRepair, setSelectedRepair] = useState(null)
   const [description, setDescription] = useState('')
-  const [images, setImages] = useState([])
+  const [images, setImages] = useState([]) // local file URIs { uri: string, local: true }
   const [uploadingImg, setUploadingImg] = useState(false)
   const [showDateTime, setShowDateTime] = useState(false)
 
@@ -108,8 +109,7 @@ export default function ScheduleScreen() {
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
       selectionLimit: 3,
-      quality: 0.5,
-      base64: true,
+      quality: 0.4,
     })
     if (result.canceled) return
     processSelectedImages(result.assets)
@@ -122,8 +122,7 @@ export default function ScheduleScreen() {
       return
     }
     const result = await ImagePicker.launchCameraAsync({
-      quality: 0.5,
-      base64: true,
+      quality: 0.4,
     })
     if (result.canceled) return
     processSelectedImages(result.assets)
@@ -131,12 +130,10 @@ export default function ScheduleScreen() {
 
   const processSelectedImages = (assets) => {
     setUploadingImg(true)
-    const newImages = []
-    assets.forEach(asset => {
-      if (asset.base64) {
-        newImages.push(`data:image/jpeg;base64,${asset.base64}`)
-      }
-    })
+    // Store only local file URIs — upload to Firebase Storage happens at submit time
+    const newImages = assets
+      .filter(a => a && a.uri)
+      .map(a => ({ uri: a.uri, local: true }))
     setImages(prev => {
       const combined = [...prev, ...newImages]
       return combined.slice(0, 5)
@@ -171,15 +168,26 @@ export default function ScheduleScreen() {
       device: selectedDevice,
       repair,
       description: description.trim(),
-      images: images.length > 0 ? images : null,
+      images: null, // will be set after upload
       status: 'pending',
       time: new Date().toLocaleTimeString(),
       fromAppointment: true,
     }
 
     try {
-      const newOrderRef = await push(ref(db, 'orders'), order)
-      const orderId = newOrderRef.key
+      // Generate order ID first, then upload images to Storage
+      const orderRef = push(ref(db, 'orders'))
+      const orderId = orderRef.key
+
+      // Upload images to Firebase Storage (download URLs, no base64!)
+      if (images.length > 0) {
+        const localUris = images.slice(0, 5).map(img => ({ uri: img.uri }))
+        const urls = await uploadImages(localUris, orderId)
+        order.images = urls
+      }
+
+      // Write the complete order (with image URLs from Storage)
+      await set(ref(db, 'orders/' + orderId), order)
       await AsyncStorage.setItem('lastOrderId', orderId)
 
       // Notify technicians
@@ -223,7 +231,7 @@ export default function ScheduleScreen() {
       brand: selectedBrand,
       repair,
       description: description.trim(),
-      images: images.length > 0 ? images : null,
+      images: null, // images are uploaded separately to the order below
       date: formatDate(selectedDate),
       dateLabel: `${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}`,
       timeSlot: selectedSlot,
@@ -247,14 +255,23 @@ export default function ScheduleScreen() {
         device: selectedDevice,
         repair: `Appointment: ${repair}`,
         description: description.trim(),
-        images: images.length > 0 ? images : null,
+        images: null, // will be replaced with Storage URLs after upload
         status: 'pending',
         time: selectedSlot,
         appointmentTime,
         reminderSent: false,
         isAppointment: true,
       }
-      await push(ref(db, 'orders'), order)
+
+      // Upload images to Firebase Storage
+      const orderRef2 = push(ref(db, 'orders'))
+      const orderId2 = orderRef2.key
+      if (images.length > 0) {
+        const localUris = images.slice(0, 5).map(img => ({ uri: img.uri }))
+        const urls = await uploadImages(localUris, orderId2)
+        order.images = urls
+      }
+      await set(ref(db, 'orders/' + orderId2), order)
 
       // Schedule local notification reminders
       try {
@@ -383,10 +400,9 @@ export default function ScheduleScreen() {
               </TouchableOpacity>
             </View>
             {images.length > 0 && (
-              <View style={s.imgPreviewRow}>
-                {images.map((img, i) => (
+              <View style={s.imgPreviewRow}>                  {images.map((img, i) => (
                   <View key={i} style={s.imgThumbWrap}>
-                    <Image source={{ uri: img }} style={s.imgThumb} />
+                    <Image source={{ uri: img.uri || img }} style={s.imgThumb} />
                     <TouchableOpacity
                       style={s.imgRemoveBtn}
                       onPress={() => setImages(prev => prev.filter((_, idx) => idx !== i))}

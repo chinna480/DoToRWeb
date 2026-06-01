@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import { getDatabase } from 'firebase/database'
 import { getAuth } from 'firebase/auth'
+import { getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey: 'AIzaSyDGzlU-qp5Q_ht8xxIrpyeGNPLgbbKexKs',
@@ -23,6 +24,7 @@ export { GOOGLE_PLACES_API_KEY }
 const app = initializeApp(firebaseConfig)
 const db = getDatabase(app)
 const auth = getAuth(app)
+const storage = getStorage(app)
 
-export { db, auth }
+export { db, auth, storage }
 export default app
