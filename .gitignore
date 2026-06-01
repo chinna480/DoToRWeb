@@ -8,6 +8,8 @@ node_modules/
 dist/
 web-build/
 expo-env.d.ts
+autolinking-output.json
+package-lock.json
 
 # Native
 .kotlin/
