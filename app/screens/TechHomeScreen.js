@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { db } from '../firebase/config';
 import { calcDistance } from '../utils/distance';
+import OrderImage from '../../components/OrderImage';
 
 // ── GPS-based matching configuration ─────────────────────────────────────
 // RADIUS_KM:         Maximum distance (km) to show pending jobs to a tech
@@ -614,7 +615,7 @@ export default function TechHomeScreen() {
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
                 {ongoingJob.images.map((img, i) => (
                   <TouchableOpacity key={i} onPress={() => setFullscreenImg(img)}>
-                    <Image source={{ uri: img }} style={s.ongoingImgThumb} />
+                    <OrderImage uri={img} style={s.ongoingImgThumb} />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -750,7 +751,7 @@ export default function TechHomeScreen() {
                 <View style={s.pendingImgRow}>
                   {order.images.map((img, i) => (
                     <TouchableOpacity key={i} onPress={() => setFullscreenImg(img)}>
-                      <Image source={{ uri: img }} style={s.pendingImgThumb} />
+                      <OrderImage uri={img} style={s.pendingImgThumb} />
                     </TouchableOpacity>
                   ))}
                   <Text style={s.pendingImgLabel}>{order.images.length} photo{order.images.length > 1 ? 's' : ''}</Text>
@@ -830,7 +831,7 @@ export default function TechHomeScreen() {
                 <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
                   {order.images.slice(0, 3).map((img, i) => (
                     <TouchableOpacity key={i} onPress={() => setFullscreenImg(img)}>
-                      <Image source={{ uri: img }} style={{ width: 36, height: 36, borderRadius: 6, backgroundColor: '#eee' }} />
+                      <OrderImage uri={img} style={{ width: 36, height: 36, borderRadius: 6, backgroundColor: '#eee' }} />
                     </TouchableOpacity>
                   ))}
                   {order.images.length > 3 && (

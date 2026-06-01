@@ -15,6 +15,7 @@ import {
   View
 } from 'react-native'
 import { db } from '../firebase/config'
+import OrderImage from '../../components/OrderImage'
 
 export default function JobHistoryScreen() {
   const router = useRouter()
@@ -202,7 +203,7 @@ export default function JobHistoryScreen() {
                     <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
                       {job.images.slice(0, 3).map((img, i) => (
                         <TouchableOpacity key={i} onPress={() => setFullscreenImg(img)}>
-                          <Image source={{ uri: img }} style={s.jobHistImgThumb} />
+                          <OrderImage uri={img} style={s.jobHistImgThumb} />
                         </TouchableOpacity>
                       ))}
                       {job.images.length > 3 && (

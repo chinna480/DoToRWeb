@@ -1,0 +1,24 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow read/write for order images
+    match /orders/{orderId}/{allPaths=**} {
+      allow read, write: if true;
+    }
+
+    // Allow read/write for chat images
+    match /chats/{orderId}/{allPaths=**} {
+      allow read, write: if true;
+    }
+
+    // Allow read/write for profile photos
+    match /profiles/{userId}/{allPaths=**} {
+      allow read, write: if true;
+    }
+
+    // Default: deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
