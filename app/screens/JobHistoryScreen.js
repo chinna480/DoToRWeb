@@ -47,8 +47,17 @@ export default function JobHistoryScreen() {
 
       let todayCount = 0, weekCount = 0, monthCount = 0
 
+      // Helper: convert Firebase RTDB object-backed arrays to real arrays
+      const toArr = (v) => {
+        if (!v) return null
+        if (Array.isArray(v)) return v
+        if (typeof v === 'object') return Object.values(v)
+        return null
+      }
+
       snap.forEach(child => {
-        const o = { id: child.key, ...child.val() }
+        const val = child.val()
+        const o = { id: child.key, ...val, images: toArr(val.images) }
         if (o.techPhone === myPhone && (o.status === 'completed' || o.status === 'accepted')) {
           // Try to parse order time for date-based filtering
           let orderTime = 0

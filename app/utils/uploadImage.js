@@ -1,22 +1,33 @@
 // uploadImage.js — Upload images to Firebase Storage, return download URLs
-// Eliminates base64 from the app entirely, preventing OOM crashes on Android
+// Uses expo-file-system to read local file URIs (fixes Android issue where
+// fetch() doesn't support file:// URIs)
 
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
+import * as FileSystem from 'expo-file-system'
+import { getDownloadURL, ref, uploadString } from 'firebase/storage'
 import { storage } from '../firebase/config'
 
 /**
  * Upload an image URI (file:// or content://) to Firebase Storage.
  * Returns the HTTPS download URL.
  *
+ * Uses expo-file-system to read the file as base64 (works on all platforms)
+ * then uploads via Firebase Storage's uploadString.
+ *
  * @param {string} uri  Local file URI from expo-image-picker
  * @param {string} path Storage path (e.g. 'orders/abc123/image-0.jpg')
  * @returns {Promise<string>} Download URL
  */
 export async function uploadImage(uri, path) {
-  const response = await fetch(uri)
-  const blob = await response.blob()
+  // Read the file as base64 — this works reliably on Android where fetch(file://) fails
+  const base64 = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  })
+
   const storageRef = ref(storage, path)
-  await uploadBytes(storageRef, blob)
+  // Upload using base64 format string — no Blob needed
+  await uploadString(storageRef, base64, 'base64', {
+    contentType: 'image/jpeg',
+  })
   return getDownloadURL(storageRef)
 }
 

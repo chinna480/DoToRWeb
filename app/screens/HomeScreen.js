@@ -657,6 +657,26 @@ export default function HomeScreen() {
     </ScrollView>
   )
 
+  // ── Handle tapping on an order card ──
+  const handleOrderPress = (order) => {
+    if (order.status === 'accepted') {
+      // Navigate to tracking screen to see technician's live location
+      router.push('/screens/TrackingScreen')
+    } else if (order.status === 'pending') {
+      Alert.alert(
+        '📋 Order Details',
+        `Device: ${order.brand}\nRepair: ${order.repair}\nLocation: ${order.location || '-'}\nTime: ${order.time || '-'}\nStatus: ⏳ Pending\n\nWaiting for a technician to accept...`,
+        [{ text: 'OK' }]
+      )
+    } else {
+      Alert.alert(
+        '✅ Order Details',
+        `Device: ${order.brand}\nRepair: ${order.repair}\nLocation: ${order.location || '-'}\nTime: ${order.time || '-'}\nStatus: ✅ Completed`,
+        [{ text: 'OK' }]
+      )
+    }
+  }
+
   // ── ORDERS TAB ──
   const renderOrders = () => {
     // Apply filter
@@ -696,7 +716,10 @@ export default function HomeScreen() {
               <Text style={[s.orderSubTabText, ordersFilter === tab.key && s.orderSubTabTextActive]}>{tab.label}</Text>
             </TouchableOpacity>
           ))}
-        </View>          {filtered.length === 0 ? (
+        </View>
+
+        <ErrorBoundary errorMessage="Could not load orders. Try switching tabs." style={{ marginHorizontal: 15 }}>
+          {filtered.length === 0 ? (
           <View style={{ padding: 50, alignItems: 'center' }}>
             <Text style={{ fontSize: 50, marginBottom: 15 }}>📦</Text>
             <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3A6B' }}>No {ordersFilter === 'all' ? '' : ordersFilter} orders yet</Text>
@@ -719,7 +742,7 @@ export default function HomeScreen() {
             }
 
             return (
-              <TouchableOpacity key={i} style={s.orderCard}>
+              <TouchableOpacity key={i} style={s.orderCard} onPress={() => handleOrderPress(order)} activeOpacity={0.75}>
                 <View style={s.orderLeft}>
                   <Text style={s.orderDevice}>📱 {order.brand}</Text>
                   <Text style={s.orderRepair}>🔧 {order.repair}</Text>
@@ -751,6 +774,7 @@ export default function HomeScreen() {
             )
           })
         )}
+        </ErrorBoundary>
 
         <View style={{ height: 90 }} />
       </ScrollView>
