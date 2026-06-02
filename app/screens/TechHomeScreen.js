@@ -256,6 +256,10 @@ export default function TechHomeScreen() {
       snapshot.forEach(child => {
         const val = child.val()
         const order = { id: child.key, ...val }
+        // Normalize images: Firebase stores arrays as objects {0:"url",1:"url"}
+        if (order.images && !Array.isArray(order.images)) {
+          order.images = Object.values(order.images)
+        }
 
         if (order.status === 'pending')   allPending.push(order)
         if (order.status === 'accepted') {
@@ -604,16 +608,16 @@ export default function TechHomeScreen() {
             </View>
           ) : null}
 
-          {/* Ongoing job images */}
-          {ongoingJob.images && Object.values(ongoingJob.images).length > 0 && (
+          {/* Ongoing job images — normalized to array in listenOrders */}
+          {ongoingJob.images && ongoingJob.images.length > 0 && (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-              {Object.values(ongoingJob.images).slice(0, 4).map((url, idx) => (
+              {ongoingJob.images.slice(0, 4).map((url, idx) => (
                 <TouchableOpacity key={idx} onPress={() => { setFullscreenImg(url); setFullscreenOrderId(ongoingJob.id) }}>
                   <Image source={{ uri: url }} style={{ width: 72, height: 72, borderRadius: 10, backgroundColor: '#eee' }} resizeMode="cover" />
                 </TouchableOpacity>
               ))}
-              {Object.values(ongoingJob.images).length > 4 && (
-                <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{Object.values(ongoingJob.images).length - 4}</Text>
+              {ongoingJob.images.length > 4 && (
+                <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{ongoingJob.images.length - 4}</Text>
               )}
             </View>
           )}
@@ -730,16 +734,16 @@ export default function TechHomeScreen() {
                 </View>
               ) : null}
 
-              {/* Order images */}
-              {order.images && Object.values(order.images).length > 0 && (
+              {/* Order images — normalized to array in listenOrders */}
+              {order.images && order.images.length > 0 && (
                 <View style={{ flexDirection: 'row', gap: 4, marginTop: 6 }}>
-                  {Object.values(order.images).slice(0, 3).map((url, idx) => (
+                  {order.images.slice(0, 3).map((url, idx) => (
                     <TouchableOpacity key={idx} onPress={() => { setFullscreenImg(url); setFullscreenOrderId(order.id) }}>
                       <Image source={{ uri: url }} style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: '#eee' }} resizeMode="cover" />
                     </TouchableOpacity>
                   ))}
-                  {Object.values(order.images).length > 3 && (
-                    <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{Object.values(order.images).length - 3}</Text>
+                  {order.images.length > 3 && (
+                    <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{order.images.length - 3}</Text>
                   )}
                 </View>
               )}
@@ -813,16 +817,16 @@ export default function TechHomeScreen() {
                   📝 "{order.description.substring(0, 50)}{order.description.length > 50 ? '...' : ''}"
                 </Text>
               ) : null}
-              {/* Completed job images */}
-              {order.images && Object.values(order.images).length > 0 && (
+              {/* Completed job images — normalized to array in listenOrders */}
+              {order.images && order.images.length > 0 && (
                 <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
-                  {Object.values(order.images).slice(0, 3).map((url, idx) => (
+                  {order.images.slice(0, 3).map((url, idx) => (
                     <TouchableOpacity key={idx} onPress={() => { setFullscreenImg(url); setFullscreenOrderId(order.id) }}>
                       <Image source={{ uri: url }} style={{ width: 36, height: 36, borderRadius: 6, backgroundColor: '#eee' }} resizeMode="cover" />
                     </TouchableOpacity>
                   ))}
-                  {Object.values(order.images).length > 3 && (
-                    <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{Object.values(order.images).length - 3}</Text>
+                  {order.images.length > 3 && (
+                    <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{order.images.length - 3}</Text>
                   )}
                 </View>
               )}

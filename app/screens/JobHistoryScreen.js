@@ -50,6 +50,10 @@ export default function JobHistoryScreen() {
       snap.forEach(child => {
         const val = child.val()
         const o = { id: child.key, ...val }
+        // Normalize images: Firebase stores arrays as objects {0:"url",1:"url"}
+        if (o.images && !Array.isArray(o.images)) {
+          o.images = Object.values(o.images)
+        }
         if (o.techPhone === myPhone && (o.status === 'completed' || o.status === 'accepted')) {
           // Try to parse order time for date-based filtering
           let orderTime = 0
@@ -190,16 +194,16 @@ export default function JobHistoryScreen() {
                     <Text style={s.jobDesc}>📝 "{job.description.substring(0, 60)}{job.description.length > 60 ? '...' : ''}"</Text>
                   ) : null}
 
-                  {/* Job images */}
-                  {job.images && Object.values(job.images).length > 0 && (
+                  {/* Job images — normalized to array in loadJobHistory */}
+                  {job.images && job.images.length > 0 && (
                     <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
-                      {Object.values(job.images).slice(0, 3).map((img, i) => (
+                      {job.images.slice(0, 3).map((img, i) => (
                         <TouchableOpacity key={i} onPress={() => setFullscreenImg(img)}>
                           <Image source={{ uri: img }} style={s.jobHistImgThumb} resizeMode="cover" />
                         </TouchableOpacity>
                       ))}
-                      {Object.values(job.images).length > 3 && (
-                        <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{Object.values(job.images).length - 3}</Text>
+                      {job.images.length > 3 && (
+                        <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{job.images.length - 3}</Text>
                       )}
                     </View>
                   )}

@@ -17,6 +17,7 @@ export async function uploadImage(uri, path) {
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
+      console.log(`📤 Uploading image (attempt ${attempt}/${MAX_RETRIES}): ${path}`)
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       })
@@ -25,15 +26,19 @@ export async function uploadImage(uri, path) {
         throw new Error(`Base64 data too short (${base64?.length || 0} chars)`)
       }
 
+      console.log(`  ✅ Read file: ${(base64.length / 1024).toFixed(1)} KB`)
       const storageRef = ref(storage, path)
       await uploadString(storageRef, base64, 'base64', {
         contentType: 'image/jpeg',
       })
 
+      console.log(`  ✅ Uploaded to Firebase Storage`)
       const downloadUrl = await getDownloadURL(storageRef)
+      console.log(`  ✅ Got download URL`)
       return downloadUrl
     } catch (e) {
       lastError = e
+      console.error(`  ❌ Attempt ${attempt} failed:`, e.message || e)
       if (attempt < MAX_RETRIES) {
         await new Promise(r => setTimeout(r, attempt * 1000))
       }
@@ -54,23 +59,40 @@ export async function uploadImages(assets, orderId) {
   const urls = []
   const errors = []
 
+  console.log(`📸 Uploading ${assets.length} image(s) for order ${orderId}`)
+
   for (let i = 0; i < assets.length; i++) {
     const asset = assets[i]
-    if (!asset || !asset.uri) continue
+    if (!asset || !asset.uri) {
+      console.warn(`  ⚠️ Image ${i}: skipped (no URI)`)
+      continue
+    }
 
     // Skip files over ~5MB
     if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-      errors.push(`Image ${i}: file too large`)
+      errors.push(`Image ${i}: file too large (${(asset.fileSize / 1024 / 1024).toFixed(1)} MB)`)
+      console.warn(`  ⚠️ Image ${i}: skipped (${(asset.fileSize / 1024 / 1024).toFixed(1)} MB > 5 MB limit)`)
       continue
     }
 
     try {
       const path = `orders/${orderId}/${timestamp}-${i}.jpg`
+      console.log(`  📤 Image ${i}: uri=${asset.uri.substring(0, 80)}...`)
       const url = await uploadImage(asset.uri, path)
       urls.push(url)
+      console.log(`  ✅ Image ${i}: uploaded successfully`)
     } catch (e) {
       errors.push(`Image ${i} upload failed: ${e.message || e}`)
+      console.error(`  ❌ Image ${i}: failed -`, e.message || e)
     }
+  }
+
+  if (errors.length > 0) {
+    console.error(`📸 Upload summary: ${urls.length}/${assets.length} succeeded, errors:`, errors)
+  } else if (urls.length > 0) {
+    console.log(`📸 Upload summary: ${urls.length}/${assets.length} succeeded`)
+  } else {
+    console.error(`📸 Upload summary: ALL ${assets.length} image(s) FAILED`)
   }
 
   return urls.length > 0 ? urls : null

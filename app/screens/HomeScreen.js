@@ -3,7 +3,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { onValue, push, ref, set } from 'firebase/database';
+import { onValue, push, ref, set, update } from 'firebase/database';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -152,8 +152,11 @@ export default function HomeScreen() {
       let foundAccepted = false
       snap.forEach(child => {
         const val = child.val()
-        // ✅ FIX: always convert images with toArr() so .map() never runs on a plain object
         const o = { id: child.key, ...val }
+        // ✅ Normalize images: Firebase stores arrays as objects {0:"url",1:"url"}
+        if (o.images && !Array.isArray(o.images)) {
+          o.images = Object.values(o.images)
+        }
         if (o.customerPhone === phone) {
           orders.push(o)
           if (o.status === 'accepted') {
@@ -290,14 +293,24 @@ export default function HomeScreen() {
       const tempOrderRef = push(ref(db, 'orders'))
       const orderId = tempOrderRef.key
 
-      // Upload images first (if any)
-      let imageUrls = null
+      // Upload images first (if any) — always store array so images key exists in Firebase
+      let imageUrls = []
+      let uploadFailed = false
       if (images.length > 0) {
         setUploadingImages(true)
+        console.log('📸 Starting upload of', images.length, 'image(s) for order', orderId)
         try {
-          imageUrls = await uploadImages(images, orderId)
+          const urls = await uploadImages(images, orderId)
+          imageUrls = urls || []
+          if (!urls || urls.length === 0) {
+            uploadFailed = true
+            console.error('📸 ALL image uploads FAILED — no URLs returned')
+          } else {
+            console.log('📸 Got', urls.length, 'image URL(s):', urls)
+          }
         } catch (e) {
-          console.error('Image upload failed:', e)
+          console.error('📸 Image upload threw exception:', e)
+          uploadFailed = true
         } finally {
           setUploadingImages(false)
         }
@@ -350,18 +363,64 @@ export default function HomeScreen() {
         console.error('⚠️ notifyTechsForNewOrder failed:', err)
       )
 
+      const uploadNote = uploadFailed
+        ? `\n\n⚠️ Photos failed to upload. Tap "📸 Retry Upload" below to try again.`
+        : (images.length > 0 ? '\n\n📸 Photos uploaded successfully!' : '')
+
       const alertMsg = hasAppt
-        ? `Brand: ${selectedBrand}\nDate: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}\n\nWe'll send a reminder before your appointment!`
-        : `Brand: ${selectedBrand}\n\nTrack your technician?`
+        ? `Brand: ${selectedBrand}\nDate: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}\n\nWe'll send a reminder before your appointment!${uploadNote}`
+        : `Brand: ${selectedBrand}\n\nTrack your technician?${uploadNote}`
+
+      // ── Retry upload handler for failed image uploads ──
+      const handleRetryUpload = async () => {
+        const pendingImages = images // still available from closure even after setImages([])
+        if (!pendingImages || pendingImages.length === 0) {
+          Alert.alert('No Photos', 'No pending photos to upload. Add photos from the order details later.')
+          return
+        }
+        setUploadingImages(true)
+        try {
+          const urls = await uploadImages(pendingImages, orderId)
+          if (urls && urls.length > 0) {
+            await update(ref(db, 'orders/' + orderId), { images: urls })
+            Alert.alert(
+              '✅ Photos Uploaded!',
+              `${urls.length} photo(s) uploaded successfully. The technician can now see them in the order details.`,
+              [
+                { text: 'OK' }
+              ]
+            )
+          } else {
+            Alert.alert(
+              '⚠️ Upload Failed',
+              'Could not upload photos. Check your connection and try again, or share them in chat with the technician.'
+            )
+          }
+        } catch (e) {
+          console.error('Retry upload failed:', e)
+          Alert.alert(
+            '⚠️ Upload Failed',
+            'Could not upload photos. Check your connection and try again, or share them in chat with the technician.'
+          )
+        } finally {
+          setUploadingImages(false)
+        }
+      }
+
+      const alertButtons = [
+        { text: 'Track Now', onPress: () => router.push('/screens/TrackingScreen') },
+        { text: '💬 Chat', onPress: () => router.push(`/screens/ChatScreen?orderId=${orderId}&role=cust&customerName=${encodeURIComponent(name)}&techName=`) },
+      ]
+      if (uploadFailed) {
+        alertButtons.push({ text: '📸 Retry Upload', onPress: () => handleRetryUpload() })
+      } else {
+        alertButtons.push({ text: 'Later' })
+      }
 
       Alert.alert(
         hasAppt ? '✅ Appointment Booked!' : '✅ Booking Confirmed!',
         alertMsg,
-        [
-          { text: 'Track Now', onPress: () => router.push('/screens/TrackingScreen') },
-          { text: '💬 Chat', onPress: () => router.push(`/screens/ChatScreen?orderId=${orderId}&role=cust&customerName=${encodeURIComponent(name)}&techName=`) },
-          { text: 'Later' }
-        ]
+        alertButtons
       )
     } catch (e) {
       console.error('bookRepair failed:', e)
@@ -681,8 +740,8 @@ export default function HomeScreen() {
                     <Text style={s.orderLoc}>📍 {order.location}</Text>
                     {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
                     <Text style={s.orderTime}>🕐 {order.time}</Text>
-                    {/* Order images */}
-                    {order.images && Array.isArray(order.images) && order.images.length > 0 && (
+                    {/* Order images — already normalized to array in listenOrders */}
+                    {order.images && order.images.length > 0 && (
                       <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
                         {order.images.slice(0, 3).map((url, idx) => (
                           <Image
