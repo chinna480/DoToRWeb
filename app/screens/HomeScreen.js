@@ -107,6 +107,7 @@ export default function HomeScreen() {
   const [uploadingImages, setUploadingImages] = useState(false)
   const [custPhoto, setCustPhoto]       = useState(null)
   const [techProfiles, setTechProfiles] = useState({})
+  const [modelName, setModelName]       = useState('')
 
   useEffect(() => {
     loadUser()
@@ -214,12 +215,14 @@ export default function HomeScreen() {
     setSelectedBrand(null)
     setRepairs([])
     setDescription('')
+    setModelName('')
   }
 
   const selectBrand = (brand) => {
     setSelectedBrand(brand)
     setRepairs(selectedDevice === 'phone' ? ['General'] : ['General'])
     setDescription('')
+    setModelName('')
   }
 
   const reverseGeocode = async (lat, lng) => {
@@ -338,22 +341,19 @@ export default function HomeScreen() {
 
       // Upload images first (if any) — always store array so images key exists in Firebase
       let imageUrls = []
-      let uploadFailed = false
       if (capturedImages.length > 0) {
         setUploadingImages(true)
         console.log('📸 Starting upload of', capturedImages.length, 'image(s) for order', orderId)
         try {
           const urls = await uploadImages(capturedImages, orderId)
           imageUrls = urls || []
-          if (!urls || urls.length === 0) {
-            uploadFailed = true
-            console.error('📸 ALL image uploads FAILED — no URLs returned')
-          } else {
+          if (urls && urls.length > 0) {
             console.log('📸 Got', urls.length, 'image URL(s):', urls)
+          } else {
+            console.error('📸 ALL image uploads FAILED — no URLs returned')
           }
         } catch (e) {
           console.error('📸 Image upload threw exception:', e)
-          uploadFailed = true
         } finally {
           setUploadingImages(false)
         }
@@ -366,6 +366,7 @@ export default function HomeScreen() {
         location:           loc,
         pincode,
         brand:              selectedBrand,
+        modelName:          (modelName || '').trim(),
         repair,
         description:        (description || '').trim(),
         status:             'pending',
@@ -385,6 +386,7 @@ export default function HomeScreen() {
 
       // Clear form
       setDescription('')
+      setModelName('')
       setWantAppointment(false)
       setSelectedDate(null)
       setSelectedSlot(null)
@@ -406,59 +408,17 @@ export default function HomeScreen() {
         console.error('⚠️ notifyTechsForNewOrder failed:', err)
       )
 
-      const uploadNote = uploadFailed
-        ? `\n\n⚠️ Photos failed to upload. Tap "📸 Retry Upload" below to try again.`
-        : (capturedImages.length > 0 ? '\n\n📸 Photos uploaded successfully!' : '')
+      const photoNote = imageUrls.length > 0 ? '\n\n📸 Photos uploaded!' : ''
 
       const alertMsg = hasAppt
-        ? `Brand: ${selectedBrand}\nDate: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}\n\nWe'll send a reminder before your appointment!${uploadNote}`
-        : `Brand: ${selectedBrand}\n\nTrack your technician?${uploadNote}`
-
-      // ── Retry upload handler for failed image uploads ──
-      const handleRetryUpload = async () => {
-        // ── FIX: Use capturedImages (snapshot before clear), NOT `images` state ──
-        // After setImages([]) runs, `images` state is empty. The retry handler
-        // must use the snapshot taken before the form was cleared.
-        if (!capturedImages || capturedImages.length === 0) {
-          Alert.alert('No Photos', 'No pending photos to upload. Add photos from the order details later.')
-          return
-        }
-        setUploadingImages(true)
-        try {
-          const urls = await uploadImages(capturedImages, orderId)
-          if (urls && urls.length > 0) {
-            await update(ref(db, 'orders/' + orderId), { images: urls })
-            Alert.alert(
-              '✅ Photos Uploaded!',
-              `${urls.length} photo(s) uploaded successfully. The technician can now see them in the order details.`,
-              [{ text: 'OK' }]
-            )
-          } else {
-            Alert.alert(
-              '⚠️ Upload Failed',
-              'Could not upload photos. Check your connection and try again, or share them in chat with the technician.'
-            )
-          }
-        } catch (e) {
-          console.error('Retry upload failed:', e)
-          Alert.alert(
-            '⚠️ Upload Failed',
-            'Could not upload photos. Check your connection and try again, or share them in chat with the technician.'
-          )
-        } finally {
-          setUploadingImages(false)
-        }
-      }
+        ? `Brand: ${selectedBrand}\nModel: ${modelName || '-'}\nDate: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}\n\nWe'll send a reminder before your appointment!${photoNote}`
+        : `Brand: ${selectedBrand}\nModel: ${modelName || '-'}\n\nTrack your technician?${photoNote}`
 
       const alertButtons = [
         { text: 'Track Now', onPress: () => router.push('/screens/TrackingScreen') },
         { text: '💬 Chat', onPress: () => router.push(`/screens/ChatScreen?orderId=${orderId}&role=cust&customerName=${encodeURIComponent(name)}&techName=`) },
+        { text: 'Later' },
       ]
-      if (uploadFailed) {
-        alertButtons.push({ text: '📸 Retry Upload', onPress: () => handleRetryUpload() })
-      } else {
-        alertButtons.push({ text: 'Later' })
-      }
 
       Alert.alert(
         hasAppt ? '✅ Appointment Booked!' : '✅ Booking Confirmed!',
@@ -529,7 +489,20 @@ export default function HomeScreen() {
 
       {repairs.length > 0 && (
         <ErrorBoundary key={selectedBrand || 'brand'} errorMessage="Booking form crashed. Please try again." style={{ marginHorizontal: 15 }}>
-          <Text style={s.sectionTitle}>Step 3 — Describe the Issue</Text>
+          {/* ── Step 3 — Model Name ── */}
+          <Text style={s.sectionTitle}>Step 3 — Enter Model Name</Text>
+          <View style={s.descBox}>
+            <Text style={s.descLabel}>📱 What model is your device? (e.g. Realme Narzo 10, iPhone 13 Pro)</Text>
+            <TextInput
+              style={s.modelNameInput}
+              placeholder="Type your device model name..."
+              placeholderTextColor="#aaa"
+              value={modelName}
+              onChangeText={setModelName}
+            />
+          </View>
+
+          <Text style={s.sectionTitle}>Step 4 — Describe the Issue</Text>
           <View style={s.descBox}>
             <Text style={s.descLabel}>📝 What's the problem? (so technician knows what to bring)</Text>
             <TextInput
@@ -620,8 +593,8 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* ── Step 4 — Upload Photos ── */}
-          <Text style={s.sectionTitle}>Step 4 — Add Photos (Optional)</Text>
+          {/* ── Step 5 — Upload Photos ── */}
+          <Text style={s.sectionTitle}>Step 5 — Add Photos (Optional)</Text>
           <View style={s.photoSection}>
             <View style={s.photoBtnRow}>
               <TouchableOpacity style={s.photoBtn} onPress={() => pickImage(false)} disabled={uploadingImages || images.length >= 6}>
@@ -710,13 +683,13 @@ export default function HomeScreen() {
     } else if (order.status === 'pending') {
       Alert.alert(
         '📋 Order Details',
-        `Device: ${order.brand}\nRepair: ${order.repair}\nLocation: ${order.location || '-'}\nTime: ${order.time || '-'}\nStatus: ⏳ Pending\n\nWaiting for a technician to accept...`,
+        `Device: ${order.brand}\nModel: ${order.modelName || '-'}\nRepair: ${order.repair}\nLocation: ${order.location || '-'}\nTime: ${order.time || '-'}\nStatus: ⏳ Pending\n\nWaiting for a technician to accept...`,
         [{ text: 'OK' }]
       )
     } else {
       Alert.alert(
         '✅ Order Details',
-        `Device: ${order.brand}\nRepair: ${order.repair}\nLocation: ${order.location || '-'}\nTime: ${order.time || '-'}\nStatus: ✅ Completed`,
+        `Device: ${order.brand}\nModel: ${order.modelName || '-'}\nRepair: ${order.repair}\nLocation: ${order.location || '-'}\nTime: ${order.time || '-'}\nStatus: ✅ Completed`,
         [{ text: 'OK' }]
       )
     }
@@ -783,6 +756,7 @@ export default function HomeScreen() {
                 <TouchableOpacity key={i} style={s.orderCard} onPress={() => handleOrderPress(order)} activeOpacity={0.75}>
                   <View style={s.orderLeft}>
                     <Text style={s.orderDevice}>📱 {order.brand}</Text>
+                    {order.modelName ? <Text style={s.orderModel}>📲 {order.modelName}</Text> : null}
                     <Text style={s.orderRepair}>🔧 {order.repair}</Text>
                     <Text style={s.orderLoc}>📍 {order.location}</Text>
                     {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
@@ -950,6 +924,7 @@ const s = StyleSheet.create({
   orderCard:        { backgroundColor: '#fff', borderRadius: 14, padding: 15, marginHorizontal: 15, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', elevation: 2, borderLeftWidth: 4, borderLeftColor: '#FF6B00' },
   orderLeft:        { flex: 1 },
   orderDevice:      { fontSize: 14, fontWeight: '800', color: '#1A3A6B' },
+  orderModel:       { fontSize: 12, fontWeight: '600', color: '#FF6B00', marginTop: 2 },
   orderRepair:      { fontSize: 12, color: '#FF6B00', fontWeight: '700', marginTop: 3 },
   orderLoc:         { fontSize: 11, color: '#888', marginTop: 2 },
   orderTime:        { fontSize: 11, color: '#888', marginTop: 2 },
@@ -961,6 +936,7 @@ const s = StyleSheet.create({
   descBox:          { backgroundColor: '#fff', borderRadius: 14, marginHorizontal: 15, marginBottom: 10, padding: 14, elevation: 2 },
   descLabel:        { fontSize: 12, fontWeight: '700', color: '#1A3A6B', marginBottom: 8 },
   descInput:        { backgroundColor: '#f8f8f8', borderRadius: 10, padding: 12, fontSize: 13, color: '#333', minHeight: 80, textAlignVertical: 'top' },
+  modelNameInput:   { backgroundColor: '#f8f8f8', borderRadius: 10, padding: 12, fontSize: 13, color: '#333', minHeight: 48 },
   addressBox:       { backgroundColor: '#fff', borderRadius: 14, marginHorizontal: 15, marginBottom: 10, padding: 14, elevation: 2 },
   mapBtn:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fff5ee', borderWidth: 2, borderColor: '#FF6B00', borderRadius: 12, padding: 12, marginBottom: 12 },
   mapBtnIcon:       { fontSize: 18 },

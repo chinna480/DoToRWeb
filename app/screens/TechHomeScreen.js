@@ -599,6 +599,7 @@ export default function TechHomeScreen() {
         <View style={s.ongoingCard}>
           <Text style={s.jobCust}>👤 {ongoingJob.customerName}</Text>
           <Text style={s.jobType}>📱 {ongoingJob.brand} — {ongoingJob.repair}</Text>
+          {ongoingJob.modelName ? <Text style={s.jobLoc}>📲 {ongoingJob.modelName}</Text> : null}
           <Text style={s.jobLoc}>📍 {ongoingJob.location}</Text>
           {ongoingJob.pincode ? <Text style={s.jobLoc}>📮 {ongoingJob.pincode}</Text> : null}
           {ongoingJob.description ? (
@@ -726,6 +727,7 @@ export default function TechHomeScreen() {
               <View style={s.newBadge}><Text style={s.newBadgeTxt}>NEW</Text></View>
               <Text style={s.jobCust}>👤 {order.customerName}</Text>
               <Text style={s.jobType}>📱 {order.brand} — {order.repair}</Text>
+              {order.modelName ? <Text style={s.jobLoc}>📲 {order.modelName}</Text> : null}
               <Text style={s.jobLoc}>📍 {order.location}</Text>
               {order.pincode ? <Text style={s.jobLoc}>📮 {order.pincode}</Text> : null}
               {order.description ? (
@@ -810,6 +812,7 @@ export default function TechHomeScreen() {
             <View>
               <Text style={s.compCust}>👤 {order.customerName}</Text>
               <Text style={s.compType}>📱 {order.brand} — {order.repair}</Text>
+              {order.modelName ? <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📲 {order.modelName}</Text> : null}
               <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📍 {order.location}</Text>
               {order.pincode ? <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📮 {order.pincode}</Text> : null}
               {order.description ? (
