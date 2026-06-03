@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DoToR - Track Technician</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .tracking-layout { max-width: 600px; margin: 0 auto; }
+    .tech-info-card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .tech-avatar-lg {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: var(--navy-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      margin: 0 auto 12px;
+      overflow: hidden;
+      border: 3px solid var(--primary);
+    }
+    .tech-avatar-lg img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .tech-name-lg { font-size: 18px; font-weight: 800; color: var(--navy); }
+    .tech-status-lg { font-size: 13px; color: var(--green); font-weight: 600; margin-top: 4px; }
+    .verification-badges {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .verification-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .verification-badge.verified { background: var(--green-light); color: var(--green); }
+    .verification-badge.pending { background: var(--gray-light); color: var(--gray); }
+    .verification-badge.premium { background: #fff3e0; color: #e65100; }
+    .eta-display {
+      background: var(--green-light);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+    }
+    .eta-label { font-size: 12px; color: var(--gray); font-weight: 600; }
+    .eta-value { font-size: 22px; font-weight: 800; color: var(--green); }
+    .eta-dist { font-size: 14px; color: var(--navy); font-weight: 700; }
+    .tracking-map-placeholder {
+      background: linear-gradient(135deg, var(--navy), #2a5298);
+      border-radius: var(--radius-lg);
+      padding: 50px 20px;
+      text-align: center;
+      color: var(--white);
+      margin-bottom: 16px;
+    }
+    .tracking-map-placeholder .big-icon { font-size: 56px; margin-bottom: 12px; }
+    .tracking-map-placeholder h3 { font-size: 18px; margin-bottom: 8px; }
+    .tracking-map-placeholder p { font-size: 13px; opacity: 0.9; margin-bottom: 16px; }
+    .action-buttons { display: flex; gap: 10px; margin-top: 16px; }
+    .action-buttons .btn { flex: 1; }
+    .order-id-input {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .order-id-input input { flex: 1; }
+    .tracking-timeline { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a href="/website/" class="nav-brand"><span>🔧</span> DoToR</a>
+    <div class="nav-links">
+      <a href="/website/">Book Repair</a>
+      <a href="/website/tracking.html" class="active">Track</a>
+      <a href="/website/orders.html">My Orders</a>
+      <a href="/website/admin/">Admin Panel</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="header-card navy">
+      <h1>📍 Track Your Technician</h1>
+      <p>See your technician's location in real-time</p>
+    </div>
+
+    <div class="card tracking-layout">
+      <div class="card-title">🔍 Find Your Order</div>
+
+      <!-- Order ID Input -->
+      <p style="font-size:13px;color:var(--gray);margin-bottom:12px;">
+        Enter your Order ID to track your technician. You received this after booking.
+      </p>
+      <div class="order-id-input">
+        <input type="text" id="trackOrderId" class="form-input" placeholder="Paste Order ID here...">
+        <button class="btn btn-primary" onclick="startTracking()">🔍 Track</button>
+      </div>
+
+      <!-- Recent bookings -->
+      <div id="recentBooking" style="display:none;">
+        <p style="font-size:12px;color:var(--gray);margin-bottom:8px;">Your recent booking:</p>
+        <button class="btn btn-outline btn-sm" id="recentBtn" onclick="trackRecent()"></button>
+      </div>
+    </div>
+
+    <!-- Tracking View -->
+    <div id="trackingView" style="display:none;">
+      <!-- Order Status Header -->
+      <div class="card" id="orderStatusCard">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-size:14px;font-weight:800;color:var(--navy);" id="trackBrand">📱 —</div>
+            <div style="font-size:12px;color:var(--gray);" id="trackStatus">⏳ Status: Pending</div>
+          </div>
+          <div style="font-size:32px;" id="trackStatusIcon">⏳</div>
+        </div>
+      </div>
+
+      <!-- Technician Info -->
+      <div id="techInfoSection" style="display:none;">
+        <div class="tech-info-card">
+          <div class="tech-avatar-lg">🔧</div>
+          <div class="tech-name-lg" id="techName">Technician</div>
+          <div class="tech-status-lg" id="techSubStatus">⭐ Verified Expert Technician</div>
+
+          <!-- Verification Badges -->
+          <div id="verificationBadges" style="display:none;" class="verification-badges"></div>
+
+          <!-- Rating Display -->
+          <div id="ratingSection" style="display:none;margin-top:12px;">
+            <div style="background:var(--navy-light);border-radius:var(--radius);padding:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                  <div style="font-size:11px;color:var(--gray);font-weight:600;">Technician Rating</div>
+                  <div style="font-size:14px;font-weight:800;color:var(--navy);margin-top:2px;">
+                    <span id="techRatingStars">⭐ ⭐ ⭐ ⭐ ⭐</span>
+                    <span id="techRatingAvg" style="margin-left:6px;">—</span>
+                  </div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-size:11px;color:var(--gray);font-weight:600;">Reviews</div>
+                  <div style="font-size:14px;font-weight:800;color:var(--navy);margin-top:2px;" id="techReviewCount">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ETA -->
+          <div id="etaSection" style="display:none;">
+            <div class="eta-display">
+              <div>
+                <div class="eta-label">Distance Away</div>
+                <div class="eta-dist" id="techDistance">—</div>
+              </div>
+              <div style="text-align:right;">
+                <div class="eta-label">Estimated Arrival</div>
+                <div class="eta-value" id="techEta">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="action-buttons">
+            <a class="btn btn-primary" id="navigateBtn" href="#" target="_blank">🗺️ Navigate</a>
+            <a class="btn btn-green" id="callBtn" href="#">📞 Call</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map Placeholder -->
+      <div class="tracking-map-placeholder">
+        <div class="big-icon">🗺️</div>
+        <h3 id="mapTitle">Waiting for technician...</h3>
+        <p id="mapDesc">Once a technician accepts your job, their live location will appear here.</p>
+        <a class="btn btn-primary" id="openMapsBtn" href="#" target="_blank" style="display:none;">
+          🗺️ Open in Google Maps
+        </a>
+      </div>
+
+      <!-- Timeline -->
+      <div class="card tracking-timeline">
+        <div class="card-title">📋 Order Timeline</div>
+        <div class="timeline" id="timeline">
+          <div class="timeline-step">
+            <div class="timeline-dot done">✅</div>
+            <div><div class="timeline-label done">Booking Confirmed</div></div>
+          </div>
+          <div class="timeline-step">
+            <div class="timeline-dot pending" id="timelineAccepted">⏳</div>
+            <div><div class="timeline-label pending" id="timelineAcceptedLabel">Technician Assigned</div></div>
+          </div>
+          <div class="timeline-step">
+            <div class="timeline-dot pending" id="timelineArrived">⏳</div>
+            <div><div class="timeline-label pending" id="timelineArrivedLabel">Technician Arrived</div></div>
+          </div>
+          <div class="timeline-step">
+            <div class="timeline-dot pending" id="timelineCompleted">⏳</div>
+            <div><div class="timeline-label pending" id="timelineCompletedLabel">Repair Completed</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="emptyTrackState" class="empty-state">
+      <div class="icon">📍</div>
+      <h3>No Active Tracking</h3>
+      <p>Enter an Order ID above to start tracking your technician.</p>
+      <div style="margin-top:16px;">
+        <a href="/website/" class="btn btn-primary">📱 Book a Repair</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">© 2025 DoToR - Doorstep Repair Service</div>
+
+  <script type="module">
+    import { listenOrder, listenTechLocation, calcDistance, getTechRating, getTechProfile } from './firebase.js';
+
+    let unsubOrder = null;
+    let unsubTechLoc = null;
+    let currentOrderId = null;
+    let currentOrder = null;
+    let techLat = null;
+    let techLng = null;
+    let custLat = null;
+    let custLng = null;
+
+    // ── Init ──────────────────────────────────────────────────────────
+    const savedOrderId = localStorage.getItem('lastOrderId');
+    const savedName = localStorage.getItem('lastCustName');
+
+    if (savedOrderId) {
+      document.getElementById('recentBooking').style.display = 'block';
+      document.getElementById('recentBtn').textContent = `📍 Track: ${savedName || 'Your Order'} (${savedOrderId.substring(0,8)}...)`;
+      document.getElementById('trackOrderId').value = savedOrderId;
+
+      // Auto-start tracking if we have a recent order
+      startTracking(savedOrderId);
+    }
+
+    window.startTracking = function(orderId) {
+      const id = orderId || document.getElementById('trackOrderId').value.trim();
+      if (!id) { showToast('Please enter an Order ID', 'error'); return; }
+
+      currentOrderId = id;
+      localStorage.setItem('lastOrderId', id);
+
+      // Clean up old listeners
+      if (unsubOrder) unsubOrder();
+      if (unsubTechLoc) unsubTechLoc();
+
+      // Show tracking view
+      document.getElementById('emptyTrackState').style.display = 'none';
+      document.getElementById('trackingView').style.display = 'block';
+      document.getElementById('orderStatusCard').style.display = 'block';
+
+      // Listen to order
+      unsubOrder = listenOrder(id, (order) => {
+        if (!order) {
+          showToast('Order not found!', 'error');
+          return;
+        }
+        currentOrder = order;
+        updateOrderDisplay(order);
+
+        // Listen to tech location if accepted
+        if (order.status === 'accepted') {
+          custLat = order.custLat;
+          custLng = order.custLng;
+          if (!unsubTechLoc) {
+            unsubTechLoc = listenTechLocation((loc) => {
+              if (loc) {
+                techLat = loc.lat;
+                techLng = loc.lng;
+                updateTechLocation();
+              }
+            });
+          }
+        } else {
+          if (unsubTechLoc) { unsubTechLoc(); unsubTechLoc = null; }
+          document.getElementById('techInfoSection').style.display = 'none';
+          document.getElementById('etaSection').style.display = 'none';
+        }
+      });
+    };
+
+    function updateOrderDisplay(order) {
+      const brand = `📱 ${order.brand || 'Device'}`;
+      document.getElementById('trackBrand').textContent = brand;
+      document.getElementById('trackStatus').textContent = `Status: ${order.status.charAt(0).toUpperCase() + order.status.slice(1)}`;
+
+      // Status icon
+      const icons = { pending: '⏳', accepted: '🛵', completed: '✅', rejected: '❌' };
+      document.getElementById('trackStatusIcon').textContent = icons[order.status] || '⏳';
+
+      // Timeline
+      updateTimeline(order);
+
+      // Tech info
+      if (order.status === 'accepted' && order.techName) {
+        document.getElementById('techInfoSection').style.display = 'block';
+        document.getElementById('techName').textContent = order.techName || 'Technician';
+
+        // Fetch technician profile (photo, verification, experience) + rating
+        if (order.techPhone) {
+          let techProfile = null;
+
+          getTechProfile(order.techPhone).then(profile => {
+            techProfile = profile;
+            if (profile) {
+              // Update avatar with photo if available
+              const avatarEl = document.querySelector('.tech-avatar-lg');
+              if (profile.photo) {
+                avatarEl.innerHTML = `<img src="${profile.photo}" alt="${profile.name}">`;
+              } else {
+                avatarEl.innerHTML = '🔧';
+              }
+
+              // Show experience
+              if (profile.experience) {
+                document.getElementById('techSubStatus').textContent = `⭐ ${profile.experience} experience`;
+              }
+
+              // Show verification badges
+              renderVerificationBadges(profile);
+            }
+          }).catch(() => {});
+
+          // Fetch & display technician rating
+          getTechRating(order.techPhone).then(rating => {
+            const ratingSection = document.getElementById('ratingSection');
+            if (rating && rating.count > 0) {
+              ratingSection.style.display = 'block';
+              const avg = rating.average;
+              const fullStars = Math.round(avg);
+              const stars = '⭐'.repeat(fullStars) + '☆'.repeat(Math.max(0, 5 - fullStars));
+              document.getElementById('techRatingStars').textContent = stars;
+              document.getElementById('techRatingAvg').textContent = avg.toFixed(1);
+              document.getElementById('techReviewCount').textContent = rating.count + ' reviews';
+              if (!techProfile?.experience) {
+                document.getElementById('techSubStatus').textContent = `⭐ ${avg.toFixed(1)} Rating`;
+              }
+            } else {
+              // No ratings yet — show as "new" technician
+              ratingSection.style.display = 'block';
+              document.getElementById('techRatingStars').textContent = '⭐ ☆ ☆ ☆ ☆';
+              document.getElementById('techRatingAvg').textContent = 'NEW';
+              document.getElementById('techReviewCount').textContent = 'No reviews yet';
+            }
+          }).catch(() => {});
+        }
+
+        // Call button
+        if (order.techPhone) {
+          document.getElementById('callBtn').href = `tel:${order.techPhone}`;
+          document.getElementById('callBtn').style.display = 'flex';
+        } else {
+          document.getElementById('callBtn').style.display = 'none';
+        }
+
+        // Navigate button
+        if (order.custLat && order.custLng) {
+          document.getElementById('navigateBtn').href =
+            `https://www.google.com/maps/dir/?api=1&destination=${order.custLat},${order.custLng}`;
+          document.getElementById('navigateBtn').style.display = 'flex';
+        } else {
+          document.getElementById('navigateBtn').style.display = 'none';
+        }
+
+        // Map
+        document.querySelector('.tracking-map-placeholder .big-icon').textContent = '🛵';
+        document.getElementById('mapTitle').textContent = `🛵 ${order.techName} is on the way!`;
+        document.getElementById('mapDesc').textContent = 'Your technician is heading to your location.';
+        document.getElementById('openMapsBtn').style.display = 'inline-flex';
+        if (order.custLat && order.custLng) {
+          document.getElementById('openMapsBtn').href =
+            `https://www.google.com/maps/dir/?api=1&destination=${order.custLat},${order.custLng}`;
+        }
+
+        // ETA will be updated by tech location listener
+      } else if (order.status === 'pending') {
+        document.getElementById('techInfoSection').style.display = 'none';
+        document.getElementById('ratingSection').style.display = 'none';
+        document.getElementById('etaSection').style.display = 'none';
+        document.querySelector('.tracking-map-placeholder .big-icon').textContent = '⏳';
+        document.getElementById('mapTitle').textContent = 'Waiting for a technician...';
+        document.getElementById('mapDesc').textContent = 'Once a technician accepts your job, their live location will appear here.';
+        document.getElementById('openMapsBtn').style.display = 'none';
+      } else if (order.status === 'completed') {
+        document.getElementById('techInfoSection').style.display = 'none';
+        document.getElementById('ratingSection').style.display = 'none';
+        document.getElementById('etaSection').style.display = 'none';
+        document.querySelector('.tracking-map-placeholder .big-icon').textContent = '✅';
+        document.getElementById('mapTitle').textContent = '✅ Repair Completed!';
+        document.getElementById('mapDesc').textContent = 'Your device has been repaired. Thank you for choosing DoToR!';
+        document.getElementById('openMapsBtn').style.display = 'none';
+      }
+    }
+
+    function renderVerificationBadges(profile) {
+      const container = document.getElementById('verificationBadges');
+      if (!container) return;
+
+      const badges = [];
+
+      if (profile.aadharVerified) {
+        badges.push('<span class="verification-badge verified">🏛️ Aadhar Verified</span>');
+      }
+      if (profile.certificateUploaded) {
+        badges.push('<span class="verification-badge verified">📄 Certificate On File</span>');
+      }
+      if (profile.verifiedBadge) {
+        badges.push('<span class="verification-badge premium">✅ Verified Professional</span>');
+      }
+      if (profile.experience) {
+        badges.push(`<span class="verification-badge pending">⭐ ${profile.experience}</span>`);
+      }
+      if (profile.skills && profile.skills.length > 0) {
+        profile.skills.slice(0, 2).forEach(skill => {
+          badges.push(`<span class="verification-badge pending">${skill}</span>`);
+        });
+        if (profile.skills.length > 2) {
+          badges.push(`<span class="verification-badge pending">+${profile.skills.length - 2} more</span>`);
+        }
+      }
+
+      // If no badges at all, show a default
+      if (badges.length === 0) {
+        badges.push('<span class="verification-badge pending">🔧 Registered Technician</span>');
+      }
+
+      container.innerHTML = badges.join('');
+      container.style.display = 'flex';
+    }
+
+    function updateTechLocation() {
+      if (!techLat || !techLng || !currentOrder) return;
+
+      document.getElementById('techInfoSection').style.display = 'block';
+      document.getElementById('etaSection').style.display = 'block';
+
+      if (currentOrder.custLat && currentOrder.custLng) {
+        const d = parseFloat(calcDistance(techLat, techLng, currentOrder.custLat, currentOrder.custLng));
+        const SPEED = 0.3;
+        const etaMins = Math.round(d / SPEED);
+        document.getElementById('techDistance').textContent = d.toFixed(1) + ' km';
+        document.getElementById('techEta').textContent = '~' + Math.max(1, etaMins) + ' mins';
+      }
+
+      // Update map info
+      document.querySelector('.tracking-map-placeholder .big-icon').textContent = '🛵';
+      document.getElementById('mapTitle').textContent = `🛵 Technician is moving towards you!`;
+      document.getElementById('mapDesc').textContent = `Live tracking active`;
+    }
+
+    function updateTimeline(order) {
+      const updateStep = (id, labelId, done, text) => {
+        const dot = document.getElementById(id);
+        const label = document.getElementById(labelId);
+        if (done) {
+          dot.innerHTML = '✅';
+          dot.className = 'timeline-dot done';
+          label.className = 'timeline-label done';
+        } else {
+          dot.innerHTML = '⏳';
+          dot.className = 'timeline-dot pending';
+          label.className = 'timeline-label pending';
+        }
+        if (text) label.textContent = text;
+      };
+
+      updateStep('timelineAccepted', 'timelineAcceptedLabel',
+        order.status === 'accepted' || order.status === 'completed',
+        order.techName ? `Technician Assigned (${order.techName})` : 'Technician Assigned');
+
+      updateStep('timelineArrived', 'timelineArrivedLabel',
+        order.status === 'completed',
+        order.status === 'completed' ? 'Technician Visited' : 'Technician Arrived');
+
+      updateStep('timelineCompleted', 'timelineCompletedLabel',
+        order.status === 'completed',
+        order.status === 'completed' ? '✅ Repair Completed' : 'Repair Completed');
+    }
+
+    window.trackRecent = function() {
+      window.startTracking();
+    };
+
+    function showToast(msg, type = 'success') {
+      const existing = document.querySelector('.toast');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+  </script>
+</body>
+</html>

@@ -3,8 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { onValue, push, ref, set, update } from 'firebase/database';
-import { useEffect, useState } from 'react';
+import { get, onValue, push, ref, set, update } from 'firebase/database';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -52,6 +52,9 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export default function HomeScreen() {
+
+  // ── Fetched tech profiles cache (photo, rating) ──────────────────────
+  const fetchedPhones = useRef(new Set());
 
   const generateDates = () => {
     const days = []
@@ -102,6 +105,8 @@ export default function HomeScreen() {
   const [trackingOrderId, setTrackingOrderId] = useState(null)
   const [images, setImages]             = useState([])
   const [uploadingImages, setUploadingImages] = useState(false)
+  const [custPhoto, setCustPhoto]       = useState(null)
+  const [techProfiles, setTechProfiles] = useState({})
 
   useEffect(() => {
     loadUser()
@@ -131,11 +136,45 @@ export default function HomeScreen() {
     return () => { techUnsub() }
   }, [trackingOrderId])
 
+  // ── Fetch tech profiles (photo + rating) for accepted orders ────────
+  useEffect(() => {
+    const fetchTechProfiles = async () => {
+      const acceptedOrders = myOrders.filter(o => o.status === 'accepted' && o.techPhone)
+      const profiles = {}
+      for (const order of acceptedOrders) {
+        if (!fetchedPhones.current.has(order.techPhone)) {
+          fetchedPhones.current.add(order.techPhone)
+          try {
+            const [ratingSnap, userSnap] = await Promise.all([
+              get(ref(db, 'techRatings/' + order.techPhone)),
+              get(ref(db, 'techUsers/' + order.techPhone.replace('+91', '').replace(/^0+/, ''))),
+            ])
+            const rating = ratingSnap.exists() ? ratingSnap.val() : null
+            const userData = userSnap.exists() ? userSnap.val() : {}
+            profiles[order.techPhone] = {
+              photo: userData.photo || null,
+              rating: rating ? rating.average : null,
+              reviewCount: rating ? rating.count : 0,
+            }
+          } catch (e) {
+            console.warn('Failed to fetch tech profile:', e.message)
+          }
+        }
+      }
+      if (Object.keys(profiles).length > 0) {
+        setTechProfiles(prev => ({ ...prev, ...profiles }))
+      }
+    }
+    fetchTechProfiles()
+  }, [myOrders])
+
   const loadUser = async () => {
     const n  = await AsyncStorage.getItem('custName')
     const l  = await AsyncStorage.getItem('custLocation')
     const p  = await AsyncStorage.getItem('custPhone')
     const pi = await AsyncStorage.getItem('custPincode')
+    const ph = await AsyncStorage.getItem('custPhoto')
+    if (ph) setCustPhoto(ph)
     setCustName(n || 'Customer')
     setCustLocation(l || 'Your Location')
     setCustPhone(p || '')
@@ -455,7 +494,11 @@ export default function HomeScreen() {
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <TouchableOpacity style={s.avatar} onPress={() => router.push('/screens/CustomerProfileScreen')}>
-            <Text style={{ fontSize: 24 }}>👤</Text>
+            {custPhoto ? (
+              <Image source={{ uri: custPhoto }} style={{ width: 50, height: 50, borderRadius: 25 }} />
+            ) : (
+              <Text style={{ fontSize: 24 }}>👤</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -761,7 +804,27 @@ export default function HomeScreen() {
                       </View>
                     )}
                     {order.status === 'accepted' && order.techName && (
-                      <Text style={s.orderTech}>🛵 {order.techName} is coming!</Text>
+                      <View style={s.techInfoRow}>
+                        {/* Tech photo */}
+                        <View style={s.techAvatarSmall}>
+                          {techProfiles[order.techPhone]?.photo ? (
+                            <Image source={{ uri: techProfiles[order.techPhone].photo }} style={{ width: 32, height: 32, borderRadius: 16 }} />
+                          ) : (
+                            <Text style={{ fontSize: 16 }}>🔧</Text>
+                          )}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.orderTech}>🛵 {order.techName}</Text>
+                          {/* Before-repair rating */}
+                          {techProfiles[order.techPhone]?.rating != null ? (
+                            <Text style={s.techRatingText}>
+                              ⭐ {techProfiles[order.techPhone].rating.toFixed(1)} ({techProfiles[order.techPhone].reviewCount} reviews)
+                            </Text>
+                          ) : (
+                            <Text style={[s.techRatingText, { color: '#FF6B00' }]}>🆕 New Technician</Text>
+                          )}
+                        </View>
+                      </View>
                     )}
                     {order.status === 'accepted' && customerDist && (
                       <View style={s.custEtaRow}>
@@ -917,7 +980,10 @@ const s = StyleSheet.create({
   mapModalConfirmBtn:   { backgroundColor: '#FF6B00', padding: 16, borderRadius: 14, alignItems: 'center', elevation: 3 },
   mapModalConfirmText:  { color: '#fff', fontSize: 16, fontWeight: '800' },
 
-  orderTech:        { fontSize: 12, fontWeight: '700', color: '#FF6B00', marginTop: 4 },
+  orderTech:        { fontSize: 13, fontWeight: '800', color: '#FF6B00' },
+  techInfoRow:      { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff5ee', padding: 8, borderRadius: 10, marginTop: 6 },
+  techAvatarSmall:  { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center' },
+  techRatingText:   { fontSize: 11, fontWeight: '700', color: '#888', marginTop: 2 },
   custEtaRow:       { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, backgroundColor: '#e8f5e9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, alignSelf: 'flex-start' },
   custEtaText:      { fontSize: 11, fontWeight: '700', color: '#2e7d32' },
   custEtaBadge:     { fontSize: 10, fontWeight: '800', color: '#fff', backgroundColor: '#FF6B00', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
