@@ -1,43 +1,25 @@
-// uploadImage.js — Upload images to Cloudinary (free, no credit card)
-// Replaces Firebase Storage entirely.
-// Free tier: 25 GB storage + 25 GB bandwidth/month
-//
-// SETUP (one-time):
-//  1. Sign up free at https://cloudinary.com
-//  2. Settings → Upload → Upload Presets → Add upload preset
-//  3. Set Signing Mode to "Unsigned" → Save
-//  4. Fill in CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET below
+// uploadImage.js — Cloudinary image upload (no Firebase Storage needed)
 
 import * as FileSystem from 'expo-file-system'
 
-// ── CLOUDINARY CREDENTIALS (from .env file) ────────────────────────────
-// Set EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME and EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET
-// in your project root .env file (already listed in .gitignore).
-// Expo automatically inlines EXPO_PUBLIC_* vars at build time.
-const CLOUDINARY_CLOUD_NAME    = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME    || 'dxyp1sblk'
-const CLOUDINARY_UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'dotor_orders'
-if (!process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || !process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET) {
-  console.warn('⚠️ Cloudinary credentials not found in .env — using fallback hardcoded values.')
-  console.warn('   Create a .env file in the project root with:')
-  console.warn('   EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME=your_cloud_name')
-  console.warn('   EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET=your_upload_preset')
-}
-// ────────────────────────────────────────────────────────────────────────
+// ── Cloudinary credentials (hardcoded — cloud name is not a secret) ──────
+const CLOUDINARY_CLOUD_NAME    = 'dxyp1sblk'
+const CLOUDINARY_UPLOAD_PRESET = 'dotor_orders'
+// ─────────────────────────────────────────────────────────────────────────
 
 const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`
 const MAX_RETRIES    = 3
 const MAX_FILE_SIZE  = 5 * 1024 * 1024 // 5 MB
 
-/**
- * Upload a single image to Cloudinary.
- * Returns the secure HTTPS URL of the uploaded image.
- */
 export async function uploadImage(uri, folder) {
   let lastError = null
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      console.log(`📤 Uploading to Cloudinary (attempt ${attempt}/${MAX_RETRIES})`)
+      console.log(`📤 Cloudinary upload attempt ${attempt}/${MAX_RETRIES}`)
+      console.log(`   URL: ${CLOUDINARY_URL}`)
+      console.log(`   Preset: ${CLOUDINARY_UPLOAD_PRESET}`)
+      console.log(`   Folder: ${folder}`)
 
       const base64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
@@ -47,41 +29,47 @@ export async function uploadImage(uri, folder) {
         throw new Error(`File read failed — base64 too short (${base64?.length || 0} chars)`)
       }
 
-      console.log(`  ✅ Read file: ${(base64.length / 1024).toFixed(1)} KB`)
+      console.log(`   ✅ File read: ${(base64.length / 1024).toFixed(1)} KB`)
 
       const lower    = uri.toLowerCase()
       const mimeType = lower.endsWith('.png')  ? 'image/png'
                      : lower.endsWith('.webp') ? 'image/webp'
                      : 'image/jpeg'
 
-      const dataUri  = `data:${mimeType};base64,${base64}`
+      const dataUri = `data:${mimeType};base64,${base64}`
 
       const formData = new FormData()
       formData.append('file', dataUri)
       formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET)
       formData.append('folder', folder)
 
+      console.log(`   📡 Sending to Cloudinary...`)
+
       const response = await fetch(CLOUDINARY_URL, {
         method: 'POST',
         body: formData,
       })
 
+      const responseText = await response.text()
+      console.log(`   📡 Response status: ${response.status}`)
+      console.log(`   📡 Response body: ${responseText.substring(0, 300)}`)
+
       if (!response.ok) {
-        const errText = await response.text()
-        throw new Error(`Cloudinary ${response.status}: ${errText}`)
+        throw new Error(`Cloudinary ${response.status}: ${responseText}`)
       }
 
-      const data = await response.json()
+      const data = JSON.parse(responseText)
+
       if (!data.secure_url) {
-        throw new Error(`No secure_url in response: ${JSON.stringify(data)}`)
+        throw new Error(`No secure_url in response: ${responseText}`)
       }
 
-      console.log(`  ✅ Uploaded: ${data.secure_url.substring(0, 60)}...`)
+      console.log(`   ✅ Upload success: ${data.secure_url.substring(0, 80)}`)
       return data.secure_url
 
     } catch (e) {
       lastError = e
-      console.error(`  ❌ Attempt ${attempt} failed:`, e.message || e)
+      console.error(`   ❌ Attempt ${attempt} failed: ${e.message || e}`)
       if (attempt < MAX_RETRIES) {
         await new Promise(r => setTimeout(r, attempt * 1000))
       }
@@ -91,10 +79,6 @@ export async function uploadImage(uri, folder) {
   throw lastError
 }
 
-/**
- * Upload multiple images to Cloudinary.
- * Returns array of secure URLs, or null if all fail.
- */
 export async function uploadImages(assets, orderId) {
   if (!assets || assets.length === 0) return null
 
@@ -102,16 +86,15 @@ export async function uploadImages(assets, orderId) {
   const urls   = []
   const errors = []
 
-  console.log(`📸 Uploading ${assets.length} image(s) → Cloudinary folder: ${folder}`)
+  console.log(`📸 Uploading ${assets.length} image(s) → folder: ${folder}`)
 
   for (let i = 0; i < assets.length; i++) {
     const asset = assets[i]
     if (!asset?.uri) {
-      console.warn(`  ⚠️ Image ${i}: skipped (no URI)`)
+      console.warn(`   ⚠️ Image ${i}: skipped (no URI)`)
       continue
     }
 
-    // File size — use FileSystem as fallback (Android often omits fileSize)
     let fileSize = asset.fileSize || 0
     if (!fileSize) {
       try {
@@ -119,29 +102,28 @@ export async function uploadImages(assets, orderId) {
         fileSize = info.size || 0
       } catch (_) {}
     }
+
     if (fileSize > MAX_FILE_SIZE) {
       const mb = (fileSize / 1024 / 1024).toFixed(1)
       errors.push(`Image ${i}: too large (${mb} MB)`)
-      console.warn(`  ⚠️ Image ${i}: skipped — ${mb} MB > 5 MB limit`)
+      console.warn(`   ⚠️ Image ${i}: skipped — ${mb} MB > 5 MB`)
       continue
     }
 
     try {
       const url = await uploadImage(asset.uri, folder)
       urls.push(url)
-      console.log(`  ✅ Image ${i}: success`)
+      console.log(`   ✅ Image ${i}: done`)
     } catch (e) {
       errors.push(`Image ${i}: ${e.message || e}`)
-      console.error(`  ❌ Image ${i}: failed —`, e.message || e)
+      console.error(`   ❌ Image ${i}: failed — ${e.message || e}`)
     }
   }
 
   if (urls.length === 0) {
     console.error(`📸 ALL ${assets.length} upload(s) FAILED:`, errors)
-  } else if (errors.length > 0) {
-    console.warn(`📸 ${urls.length}/${assets.length} succeeded. Errors:`, errors)
   } else {
-    console.log(`📸 All ${urls.length} uploaded successfully ✅`)
+    console.log(`📸 ${urls.length}/${assets.length} uploaded ✅`)
   }
 
   return urls.length > 0 ? urls : null
