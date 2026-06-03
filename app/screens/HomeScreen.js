@@ -1,6 +1,6 @@
-
 // HomeScreen.js — Fixed stale data + Profile button + Image display fix
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { onValue, push, ref, set, update } from 'firebase/database';
@@ -27,7 +27,6 @@ import {
   notifyTechsForNewOrder,
   registerForNotifications,
 } from '../utils/notifications';
-import * as ImagePicker from 'expo-image-picker'
 import { uploadImages } from '../utils/uploadImage';
 
 const PHONE_BRANDS   = ['iPhone','Samsung','OnePlus','Redmi','Vivo','Oppo','Realme','Nokia']
@@ -293,14 +292,19 @@ export default function HomeScreen() {
       const tempOrderRef = push(ref(db, 'orders'))
       const orderId = tempOrderRef.key
 
+      // ── FIX: Capture images NOW before any state.clear calls ─────────────
+      // React's setImages([]) queues a state update — the closure below
+      // (handleRetryUpload) would see stale [] if we don't snapshot first.
+      const capturedImages = [...images]
+
       // Upload images first (if any) — always store array so images key exists in Firebase
       let imageUrls = []
       let uploadFailed = false
-      if (images.length > 0) {
+      if (capturedImages.length > 0) {
         setUploadingImages(true)
-        console.log('📸 Starting upload of', images.length, 'image(s) for order', orderId)
+        console.log('📸 Starting upload of', capturedImages.length, 'image(s) for order', orderId)
         try {
-          const urls = await uploadImages(images, orderId)
+          const urls = await uploadImages(capturedImages, orderId)
           imageUrls = urls || []
           if (!urls || urls.length === 0) {
             uploadFailed = true
@@ -365,7 +369,7 @@ export default function HomeScreen() {
 
       const uploadNote = uploadFailed
         ? `\n\n⚠️ Photos failed to upload. Tap "📸 Retry Upload" below to try again.`
-        : (images.length > 0 ? '\n\n📸 Photos uploaded successfully!' : '')
+        : (capturedImages.length > 0 ? '\n\n📸 Photos uploaded successfully!' : '')
 
       const alertMsg = hasAppt
         ? `Brand: ${selectedBrand}\nDate: ${DAYS[selectedDate.getDay()]}, ${selectedDate.getDate()} ${MONTHS[selectedDate.getMonth()]}\nTime: ${selectedSlot}\n\nWe'll send a reminder before your appointment!${uploadNote}`
@@ -373,22 +377,22 @@ export default function HomeScreen() {
 
       // ── Retry upload handler for failed image uploads ──
       const handleRetryUpload = async () => {
-        const pendingImages = images // still available from closure even after setImages([])
-        if (!pendingImages || pendingImages.length === 0) {
+        // ── FIX: Use capturedImages (snapshot before clear), NOT `images` state ──
+        // After setImages([]) runs, `images` state is empty. The retry handler
+        // must use the snapshot taken before the form was cleared.
+        if (!capturedImages || capturedImages.length === 0) {
           Alert.alert('No Photos', 'No pending photos to upload. Add photos from the order details later.')
           return
         }
         setUploadingImages(true)
         try {
-          const urls = await uploadImages(pendingImages, orderId)
+          const urls = await uploadImages(capturedImages, orderId)
           if (urls && urls.length > 0) {
             await update(ref(db, 'orders/' + orderId), { images: urls })
             Alert.alert(
               '✅ Photos Uploaded!',
               `${urls.length} photo(s) uploaded successfully. The technician can now see them in the order details.`,
-              [
-                { text: 'OK' }
-              ]
+              [{ text: 'OK' }]
             )
           } else {
             Alert.alert(
