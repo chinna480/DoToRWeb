@@ -103,6 +103,7 @@ export default function HomeScreen() {
   const [custLat, setCustLat]           = useState(null)
   const [custLng, setCustLng]           = useState(null)
   const [trackingOrderId, setTrackingOrderId] = useState(null)
+  const [trackingTechPhone, setTrackingTechPhone] = useState(null)
   const [images, setImages]             = useState([])
   const [uploadingImages, setUploadingImages] = useState(false)
   const [custPhoto, setCustPhoto]       = useState(null)
@@ -117,13 +118,17 @@ export default function HomeScreen() {
   }, [])
 
   useEffect(() => {
-    if (!trackingOrderId) return
-    const techUnsub = onValue(ref(db, 'techLocation'), snap => {
+    if (!trackingOrderId || !trackingTechPhone) return
+
+    const cleanPhone = trackingTechPhone.replace('+91', '').replace(/^0+/, '')
+    const techUnsub = onValue(ref(db, 'techsOnline/' + cleanPhone), snap => {
       if (snap.exists()) {
-        setTechLat(snap.val().lat)
-        setTechLng(snap.val().lng)
+        const val = snap.val()
+        setTechLat(val.lat)
+        setTechLng(val.lng)
       }
     })
+
     ;(async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync()
@@ -134,8 +139,8 @@ export default function HomeScreen() {
         }
       } catch (e) {}
     })()
-    return () => { techUnsub() }
-  }, [trackingOrderId])
+    return () => techUnsub()
+  }, [trackingOrderId, trackingTechPhone])
 
   // ── Fetch tech profiles (photo + rating) for accepted orders ────────
   useEffect(() => {
@@ -201,10 +206,11 @@ export default function HomeScreen() {
           if (o.status === 'accepted') {
             foundAccepted = true
             setTrackingOrderId(o.id)
+            setTrackingTechPhone(o.techPhone || null)
           }
         }
       })
-      if (!foundAccepted) setTrackingOrderId(null)
+      if (!foundAccepted) { setTrackingOrderId(null); setTrackingTechPhone(null) }
       setMyOrders(orders.reverse())
     })
   }

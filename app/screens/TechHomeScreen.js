@@ -69,7 +69,8 @@ export default function TechHomeScreen() {
   const [distance, setDistance]          = useState('--')
   const [eta, setEta]                    = useState('--')
   const [currentCustPhone, setCustPhone] = useState('')
-  const [fullscreenImg, setFullscreenImg] = useState(null)
+  const [fullscreenImgIndex, setFullscreenImgIndex] = useState(-1)
+  const [fullscreenImages, setFullscreenImages] = useState([])
   const [fullscreenOrderId, setFullscreenOrderId] = useState(null)
 
   const watchRef          = useRef(null)
@@ -613,7 +614,7 @@ export default function TechHomeScreen() {
           {ongoingJob.images && ongoingJob.images.length > 0 && (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
               {ongoingJob.images.slice(0, 4).map((url, idx) => (
-                <TouchableOpacity key={idx} onPress={() => { setFullscreenImg(url); setFullscreenOrderId(ongoingJob.id) }}>
+                <TouchableOpacity key={idx} onPress={() => { setFullscreenImgIndex(idx); setFullscreenImages(ongoingJob.images); setFullscreenOrderId(ongoingJob.id) }}>
                   <Image source={{ uri: url }} style={{ width: 72, height: 72, borderRadius: 10, backgroundColor: '#eee' }} resizeMode="cover" />
                 </TouchableOpacity>
               ))}
@@ -740,7 +741,7 @@ export default function TechHomeScreen() {
               {order.images && order.images.length > 0 && (
                 <View style={{ flexDirection: 'row', gap: 4, marginTop: 6 }}>
                   {order.images.slice(0, 3).map((url, idx) => (
-                    <TouchableOpacity key={idx} onPress={() => { setFullscreenImg(url); setFullscreenOrderId(order.id) }}>
+                    <TouchableOpacity key={idx} onPress={() => { setFullscreenImgIndex(idx); setFullscreenImages(order.images); setFullscreenOrderId(order.id) }}>
                       <Image source={{ uri: url }} style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: '#eee' }} resizeMode="cover" />
                     </TouchableOpacity>
                   ))}
@@ -824,7 +825,7 @@ export default function TechHomeScreen() {
               {order.images && order.images.length > 0 && (
                 <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
                   {order.images.slice(0, 3).map((url, idx) => (
-                    <TouchableOpacity key={idx} onPress={() => { setFullscreenImg(url); setFullscreenOrderId(order.id) }}>
+                    <TouchableOpacity key={idx} onPress={() => { setFullscreenImgIndex(idx); setFullscreenImages(order.images); setFullscreenOrderId(order.id) }}>
                       <Image source={{ uri: url }} style={{ width: 36, height: 36, borderRadius: 6, backgroundColor: '#eee' }} resizeMode="cover" />
                     </TouchableOpacity>
                   ))}
@@ -846,19 +847,66 @@ export default function TechHomeScreen() {
     </ScrollView>
   )
 
-  {/* FULLSCREEN IMAGE VIEWER */}
-  const renderFullscreenImage = () => (
-    <Modal visible={!!fullscreenImg} transparent onRequestClose={() => setFullscreenImg(null)}>
-      <View style={s.modalOverlay}>
-        <TouchableOpacity style={s.modalClose} onPress={() => setFullscreenImg(null)}>
-          <Text style={s.modalCloseTxt}>✕</Text>
-        </TouchableOpacity>
-        {fullscreenImg && (
-          <Image source={{ uri: fullscreenImg }} style={s.modalImage} resizeMode="contain" />
-        )}
-      </View>
-    </Modal>
-  )
+  {/* FULLSCREEN IMAGE VIEWER with navigation */}
+  const renderFullscreenImage = () => {
+    const isOpen = fullscreenImgIndex >= 0 && fullscreenImages.length > 0
+    const currentUrl = isOpen ? fullscreenImages[fullscreenImgIndex] : null
+    const total = fullscreenImages.length
+
+    const goNext = () => {
+      if (fullscreenImgIndex < total - 1) {
+        setFullscreenImgIndex(fullscreenImgIndex + 1)
+      }
+    }
+
+    const goPrev = () => {
+      if (fullscreenImgIndex > 0) {
+        setFullscreenImgIndex(fullscreenImgIndex - 1)
+      }
+    }
+
+    const close = () => {
+      setFullscreenImgIndex(-1)
+      setFullscreenImages([])
+    }
+
+    return (
+      <Modal visible={isOpen} transparent onRequestClose={close}>
+        <View style={s.modalOverlay}>
+          {/* Close button */}
+          <TouchableOpacity style={s.modalClose} onPress={close}>
+            <Text style={s.modalCloseTxt}>✕</Text>
+          </TouchableOpacity>
+
+          {/* Image counter */}
+          {total > 1 && (
+            <View style={s.modalCounter}>
+              <Text style={s.modalCounterTxt}>{fullscreenImgIndex + 1} / {total}</Text>
+            </View>
+          )}
+
+          {/* Previous arrow */}
+          {total > 1 && fullscreenImgIndex > 0 && (
+            <TouchableOpacity style={[s.modalArrow, s.modalArrowLeft]} onPress={goPrev}>
+              <Text style={s.modalArrowTxt}>‹</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Image — key forces remount on navigation */}
+          {currentUrl && (
+            <Image key={fullscreenImgIndex} source={{ uri: currentUrl }} style={s.modalImage} resizeMode="contain" />
+          )}
+
+          {/* Next arrow */}
+          {total > 1 && fullscreenImgIndex < total - 1 && (
+            <TouchableOpacity style={[s.modalArrow, s.modalArrowRight]} onPress={goNext}>
+              <Text style={s.modalArrowTxt}>›</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </Modal>
+    )
+  }
 
   // Show loading while navigating to profile
   if (activeTab === 'profile') {
@@ -987,5 +1035,11 @@ const s = StyleSheet.create({
   modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
   modalClose:     { position: 'absolute', top: 55, right: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
   modalCloseTxt:  { color: '#fff', fontSize: 18, fontWeight: '800' },
+  modalCounter:   { position: 'absolute', top: 55, left: 20, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, zIndex: 10 },
+  modalCounterTxt:{ color: '#fff', fontSize: 14, fontWeight: '700' },
+  modalArrow:     { position: 'absolute', top: 0, bottom: 0, width: 60, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+  modalArrowLeft: { left: 0 },
+  modalArrowRight:{ right: 0 },
+  modalArrowTxt:  { color: 'rgba(255,255,255,0.8)', fontSize: 48, fontWeight: '300' },
   modalImage:     { width: '90%', height: '70%' },
 })

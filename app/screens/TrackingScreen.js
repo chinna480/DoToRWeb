@@ -111,27 +111,33 @@ export default function TrackingScreen() {
     }
   }
 
-  const startListeners = () => {
-    const u1 = onValue(ref(db, 'techLocation'), snap => {
-      if (!mounted.current || !snap.exists()) return
-      const { lat, lng } = snap.val()
-      techPosRef.current = { lat, lng }
-      setTechLat(lat)
-      setTechLng(lng)
-      setStatusMsg('🛵 Technician is on the way!')
-      // Distance is recalculated automatically by the useEffect below
-    })
-    unsubsRef.current.push(u1)
+  let techLocUnsub = null
 
+  const startListeners = () => {
     const u2 = onValue(ref(db, 'orders'), snap => {
       if (!mounted.current || !snap.exists()) return
       snap.forEach(child => {
         const o = child.val()
-        // Read tech name/phone from this customer's specific order (not from shared techInfo)
         if (child.key === orderIdRef.current) {
           if (o.techName) {
             setTechName(o.techName)
-            if (o.techPhone) setTechPhone(o.techPhone)
+          }
+          if (o.techPhone) {
+            setTechPhone(o.techPhone)
+            // Listen to per-tech location instead of global techLocation
+            const cleanPhone = o.techPhone.replace('+91', '').replace(/^0+/, '')
+            if (techLocUnsub) techLocUnsub()
+            techLocUnsub = onValue(ref(db, 'techsOnline/' + cleanPhone), snap => {
+              if (!mounted.current) return
+              if (snap.exists()) {
+                const { lat, lng } = snap.val()
+                techPosRef.current = { lat, lng }
+                setTechLat(lat)
+                setTechLng(lng)
+                setStatusMsg('🛵 Technician is on the way!')
+              }
+            })
+            unsubsRef.current.push(techLocUnsub)
           }
           if (o.status === 'completed') {
             setJobDone(true)
