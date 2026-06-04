@@ -48,6 +48,10 @@ app-example
 # generated native folders
 /ios
 
+# separate website projects
+admin/
+website/
+
 # stray files
 nul
 null
