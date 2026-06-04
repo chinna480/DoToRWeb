@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Location from 'expo-location'
 import { useRouter } from 'expo-router'
 import { onValue, ref, set } from 'firebase/database'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Linking,
@@ -27,7 +27,7 @@ if (Platform.OS !== 'web') {
     Marker   = Maps.Marker
     Polyline = Maps.Polyline
   } catch (e) {
-    MapView = null
+    MapView = null; Marker = null; Polyline = null
   }
 }
 
@@ -61,26 +61,30 @@ function TrackingScreenContent() {
   const [custName, setCustName]   = useState('Customer')
   const [mapError, setMapError]   = useState(false)
 
-  const watchRef    = useRef(null)
-  const unsubsRef   = useRef([])
-  const mounted     = useRef(true)
-  const custPosRef  = useRef({ lat: 17.3850, lng: 78.4867 })
-  const techPosRef  = useRef(null)
-  const orderIdRef    = useRef('')
+  const watchRef       = useRef(null)
+  const unsubsRef      = useRef([])
+  const mounted        = useRef(true)
+  const custPosRef     = useRef({ lat: 17.3850, lng: 78.4867 })
+  const techPosRef     = useRef(null)
+  const orderIdRef     = useRef('')
   const techLocUnsubRef = useRef(null)
 
+  // ── Safe init ──────────────────────────────────────────────────────────
   useEffect(() => {
     mounted.current = true
     init()
     return () => {
       mounted.current = false
       if (watchRef.current) {
-        watchRef.current.remove()
+        try { watchRef.current.remove() } catch(e) {}
         watchRef.current = null
       }
       unsubsRef.current.forEach(fn => { try { fn() } catch(e) {} })
       unsubsRef.current = []
-      techLocUnsubRef.current = null
+      if (techLocUnsubRef.current) {
+        try { techLocUnsubRef.current() } catch(e) {}
+        techLocUnsubRef.current = null
+      }
     }
   }, [])
 
@@ -102,12 +106,13 @@ function TrackingScreenContent() {
       await startGPS()
       startListeners()
     } catch (e) {
-      console.log('TrackingScreen init error:', e)
+      console.log('TrackingScreen init error:', e?.message || e)
     } finally {
       if (mounted.current) setLoading(false)
     }
   }
 
+  // ── GPS ────────────────────────────────────────────────────────────────
   const startGPS = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync()
@@ -116,12 +121,17 @@ function TrackingScreenContent() {
         { accuracy: Location.Accuracy.Balanced, timeInterval: 6000, distanceInterval: 10 },
         pos => {
           if (!mounted.current) return
-          const lat = pos.coords.latitude
-          const lng = pos.coords.longitude
-          custPosRef.current = { lat, lng }
-          setCustLat(lat)
-          setCustLng(lng)
-          set(ref(db, 'custLocation'), { lat, lng }).catch(() => {})
+          try {
+            const lat = pos?.coords?.latitude
+            const lng = pos?.coords?.longitude
+            if (lat == null || lng == null || !isFinite(lat) || !isFinite(lng)) return
+            custPosRef.current = { lat, lng }
+            setCustLat(lat)
+            setCustLng(lng)
+            set(ref(db, 'custLocation'), { lat, lng }).catch(() => {})
+          } catch (gpsErr) {
+            console.log('GPS position error:', gpsErr)
+          }
         }
       )
     } catch (e) {
@@ -129,50 +139,87 @@ function TrackingScreenContent() {
     }
   }
 
+  // ── Safe tech-phone string extraction ──────────────────────────────────
+  const cleanTechPhone = useCallback((phone) => {
+    if (typeof phone !== 'string') return ''
+    return phone.replace('+91', '').replace(/^0+/, '')
+  }, [])
+
+  // ── Firebase Listeners ─────────────────────────────────────────────────
   const startListeners = () => {
-    const u2 = onValue(ref(db, 'orders'), snap => {
-      if (!mounted.current || !snap.exists()) return
+    const ordersRef = ref(db, 'orders')
+    const u2 = onValue(ordersRef, snap => {
+      if (!mounted.current) return
+      if (!snap || !snap.exists()) return
       snap.forEach(child => {
-        const o = child.val()
-        if (child.key === orderIdRef.current) {
+        try {
+          const o = child.val()
+          if (!o || child.key !== orderIdRef.current) return
+
           if (o.techName) {
             setTechName(o.techName)
           }
-          if (o.techPhone) {
+
+          if (o.techPhone && typeof o.techPhone === 'string') {
             setTechPhone(o.techPhone)
-            // Listen to per-tech location instead of global techLocation
-            const cleanPhone = o.techPhone.replace('+91', '').replace(/^0+/, '')
+            const cleanPhone = cleanTechPhone(o.techPhone)
+            if (!cleanPhone) return
+
+            // Unsubscribe previous tech-location listener
             if (techLocUnsubRef.current) {
               try { techLocUnsubRef.current() } catch(e) {}
+              techLocUnsubRef.current = null
             }
-            techLocUnsubRef.current = onValue(ref(db, 'techsOnline/' + cleanPhone), snap => {
+
+            const techRef = ref(db, 'techsOnline/' + cleanPhone)
+            techLocUnsubRef.current = onValue(techRef, tSnap => {
               if (!mounted.current) return
-              if (snap.exists()) {
-                const { lat, lng } = snap.val()
-                techPosRef.current = { lat, lng }
-                setTechLat(lat)
-                setTechLng(lng)
-                setStatusMsg('🛵 Technician is on the way!')
+              try {
+                if (tSnap && tSnap.exists()) {
+                  const val = tSnap.val()
+                  const lat = val?.lat
+                  const lng = val?.lng
+                  if (lat != null && lng != null && isFinite(lat) && isFinite(lng)) {
+                    techPosRef.current = { lat, lng }
+                    setTechLat(lat)
+                    setTechLng(lng)
+                    setStatusMsg('🛵 Technician is on the way!')
+                  }
+                }
+              } catch (techErr) {
+                console.log('techLocation listener error:', techErr)
               }
+            }, techErr => {
+              console.log('techLocation onValue error:', techErr?.message || techErr)
             })
-            unsubsRef.current.push(techLocUnsubRef.current)
+
+            if (techLocUnsubRef.current) {
+              unsubsRef.current.push(techLocUnsubRef.current)
+            }
           }
+
           if (o.status === 'completed') {
             setJobDone(true)
             setStatusMsg('✅ Repair Completed!')
           }
+        } catch (childErr) {
+          console.log('Order child processing error:', childErr)
         }
       })
+    }, err => {
+      console.log('Orders onValue error:', err?.message || err)
     })
     unsubsRef.current.push(u2)
   }
 
   const recalcDistance = (custPos, techPos) => {
     if (!custPos || !techPos) return
-    const d = parseFloat(calcDistance(custPos.lat, custPos.lng, techPos.lat, techPos.lng))
-    setDistance(d + ' km')
+    const raw = parseFloat(calcDistance(custPos.lat, custPos.lng, techPos.lat, techPos.lng))
+    // Guard against NaN from floating-point edge cases
+    if (!isFinite(raw)) { setDistance('--'); setEta('--'); return }
+    setDistance(raw + ' km')
     const SPEED = 0.3 // km/min (~18 km/h — realistic city speed)
-    const etaMins = Math.round(d / SPEED)
+    const etaMins = Math.round(raw / SPEED)
     setEta('~' + Math.max(1, etaMins) + ' mins')
   }
 
