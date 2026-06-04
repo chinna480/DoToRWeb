@@ -109,12 +109,19 @@ export default function HomeScreen() {
   const [custPhoto, setCustPhoto]       = useState(null)
   const [techProfiles, setTechProfiles] = useState({})
   const [modelName, setModelName]       = useState('')
+  const ordersUnsubRef                  = useRef(null)
 
   useEffect(() => {
     loadUser()
     registerForNotifications().then(token => {
       if (token) AsyncStorage.setItem('pushToken', token)
     })
+    return () => {
+      if (ordersUnsubRef.current) {
+        try { ordersUnsubRef.current() } catch(e) {}
+        ordersUnsubRef.current = null
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -190,27 +197,42 @@ export default function HomeScreen() {
   }
 
   const listenOrders = (phone) => {
-    onValue(ref(db, 'orders'), snap => {
+    // Clean up any previous listener first
+    if (ordersUnsubRef.current) {
+      try { ordersUnsubRef.current() } catch(e) {}
+    }
+    ordersUnsubRef.current = onValue(ref(db, 'orders'), snap => {
       if (!snap.exists()) { setMyOrders([]); return }
       const orders = []
       let foundAccepted = false
+      let latestAcceptedId = null
+      let latestAcceptedTechPhone = null
+
       snap.forEach(child => {
         const val = child.val()
         const o = { id: child.key, ...val }
         // ✅ Normalize images: Firebase stores arrays as objects {0:"url",1:"url"}
-        if (o.images && !Array.isArray(o.images)) {
-          o.images = Object.values(o.images)
+        if (o.images) {
+          if (typeof o.images === 'string') {
+            o.images = [o.images]
+          } else if (!Array.isArray(o.images)) {
+            o.images = Object.values(o.images).filter(v => typeof v === 'string')
+          }
+        } else {
+          o.images = []
         }
         if (o.customerPhone === phone) {
           orders.push(o)
           if (o.status === 'accepted') {
             foundAccepted = true
-            setTrackingOrderId(o.id)
-            setTrackingTechPhone(o.techPhone || null)
+            latestAcceptedId = o.id
+            latestAcceptedTechPhone = o.techPhone || null
           }
         }
       })
-      if (!foundAccepted) { setTrackingOrderId(null); setTrackingTechPhone(null) }
+      // Batch state updates to avoid cascading re-renders
+      setTrackingOrderId(foundAccepted ? latestAcceptedId : null)
+      setTrackingTechPhone(foundAccepted ? latestAcceptedTechPhone : null)
       setMyOrders(orders.reverse())
     })
   }
@@ -307,6 +329,15 @@ export default function HomeScreen() {
     setShowMapModal(true)
   }
 
+  const goToTracking = () => {
+    try {
+      router.push('/screens/TrackingScreen')
+    } catch (e) {
+      console.error('Navigation to TrackingScreen failed:', e)
+      Alert.alert('Error', 'Could not open tracking. Please try again.')
+    }
+  }
+
   const bookRepair = async (repair) => {
     try {
       const name              = await AsyncStorage.getItem('custName')  || 'Customer'
@@ -380,6 +411,7 @@ export default function HomeScreen() {
         custLat:            orderLat,
         custLng:            orderLng,
         images:             imageUrls, // store uploaded image URLs
+        createdAt:          Date.now(), // for date-based filtering
         ...(hasAppt && {
           isAppointment:    true,
           appointmentTime,
@@ -421,7 +453,7 @@ export default function HomeScreen() {
         : `Brand: ${selectedBrand}\nModel: ${modelName || '-'}\n\nTrack your technician?${photoNote}`
 
       const alertButtons = [
-        { text: 'Track Now', onPress: () => router.push('/screens/TrackingScreen') },
+        { text: 'Track Now', onPress: () => goToTracking() },
         { text: '💬 Chat', onPress: () => router.push(`/screens/ChatScreen?orderId=${orderId}&role=cust&customerName=${encodeURIComponent(name)}&techName=`) },
         { text: 'Later' },
       ]
@@ -685,7 +717,7 @@ export default function HomeScreen() {
 
   const handleOrderPress = (order) => {
     if (order.status === 'accepted') {
-      router.push('/screens/TrackingScreen')
+      goToTracking()
     } else if (order.status === 'pending') {
       Alert.alert(
         '📋 Order Details',
@@ -702,17 +734,29 @@ export default function HomeScreen() {
   }
 
   const renderOrders = () => {
+    const isOrderFromToday = (o) => {
+      if (!o.createdAt) return false
+      const now = new Date()
+      const d = new Date(o.createdAt)
+      return d.getFullYear() === now.getFullYear() &&
+             d.getMonth() === now.getMonth() &&
+             d.getDate() === now.getDate()
+    }
+
     let filtered = myOrders
+    if (ordersFilter === 'today')     filtered = myOrders.filter(isOrderFromToday)
     if (ordersFilter === 'active')    filtered = myOrders.filter(o => o.status === 'pending' || o.status === 'accepted')
     if (ordersFilter === 'completed') filtered = myOrders.filter(o => o.status === 'completed')
 
+    const todayCount     = myOrders.filter(isOrderFromToday).length
     const activeCount    = myOrders.filter(o => o.status === 'pending' || o.status === 'accepted').length
     const completedCount = myOrders.filter(o => o.status === 'completed').length
 
     const SUB_TABS = [
-      { key: 'all',       label: `All (${myOrders.length})` },
+      { key: 'today',     label: `Today (${todayCount})` },
       { key: 'active',    label: `Active (${activeCount})` },
       { key: 'completed', label: `Completed (${completedCount})` },
+      { key: 'all',       label: `All (${myOrders.length})` },
     ]
 
     return (

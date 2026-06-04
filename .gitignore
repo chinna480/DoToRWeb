@@ -52,3 +52,6 @@ app-example
 nul
 null
 exclude.txt
+
+# Firebase cloud functions (not part of the app)
+functions/

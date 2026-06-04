@@ -51,8 +51,14 @@ export default function JobHistoryScreen() {
         const val = child.val()
         const o = { id: child.key, ...val }
         // Normalize images: Firebase stores arrays as objects {0:"url",1:"url"}
-        if (o.images && !Array.isArray(o.images)) {
-          o.images = Object.values(o.images)
+        if (o.images) {
+          if (typeof o.images === 'string') {
+            o.images = [o.images]
+          } else if (!Array.isArray(o.images)) {
+            o.images = Object.values(o.images).filter(v => typeof v === 'string')
+          }
+        } else {
+          o.images = []
         }
         if (o.techPhone === myPhone && (o.status === 'completed' || o.status === 'accepted')) {
           // Try to parse order time for date-based filtering

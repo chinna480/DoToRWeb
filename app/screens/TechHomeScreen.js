@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { get, onValue, ref, remove, set, update } from 'firebase/database';
+import { onValue, ref, remove, set, update } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert, Image, Linking,
@@ -17,11 +17,11 @@ import { db } from '../firebase/config';
 import { calcDistance } from '../utils/distance';
 
 // ── GPS-based matching configuration ─────────────────────────────────────
-// RADIUS_KM:         Maximum distance (km) to show pending jobs to a tech
-// AUTO_ASSIGN_RADIUS: Distance (km) within which a job is auto-assigned
-// If GPS is unavailable, falls back to text-based location/pincode matching
+// RADIUS_KM:          Maximum distance (km) to show pending jobs to a tech.
+// AUTO_ASSIGN_RADIUS: Distance (km) within which a job is eligible for auto-assign.
+// If GPS is unavailable, falls back to text-based location/pincode matching.
 const RADIUS_KM = 10          // Show jobs within 10km
-const AUTO_ASSIGN_RADIUS = 5  // Auto-assign jobs within 5km
+const AUTO_ASSIGN_RADIUS = 5  // Auto-assign eligible within 5km
 // ─────────────────────────────────────────────────────────────────────────
 
 import * as Notifications from 'expo-notifications'
@@ -85,7 +85,6 @@ export default function TechHomeScreen() {
   const sentArrived       = useRef(false)
   const prevPendingIds    = useRef(new Set())
   const areaAssignments   = useRef({})
-  const autoAssignRunning = useRef(false) // prevent double auto-assign attempts
 
   useEffect(() => {
     loadTech()
@@ -153,7 +152,7 @@ export default function TechHomeScreen() {
         setMyLng(lng)
         myLatRef.current = lat
         myLngRef.current = lng
-        // Save to techsOnline so the auto-assign system can find nearby techs
+        // Save to techsOnline for GPS-based proximity matching
         if (p) {
           set(ref(db, 'techsOnline/' + p), {
             lat,
@@ -207,33 +206,18 @@ export default function TechHomeScreen() {
     )
   }
 
-  // ── L2RF: GPS-based Proximity Matching + Auto-assign ─────────────────────
+  // ── GPS-based Proximity Matching ────────────────────────────────────────
   //
   // FILTERING LOGIC (two-tier approach):
   //
   // 1. GPS-BASED (preferred):
-  //    - When a tech's GPS is available, we calculate the Haversine distance
-  //      from the tech's current location to each order's saved GPS coords
-  //      (custLat/custLng, saved when the customer booked).
-  //    - Only orders within RADIUS_KM (10km) are shown.
-  //    - Orders within AUTO_ASSIGN_RADIUS (5km) are auto-assigned.
+  //    - When a tech's GPS is available, calculate Haversine distance from
+  //      the tech's current location to each order's saved GPS coords.
+  //    - Only orders within RADIUS_KM (10km) are shown, sorted by distance.
   //
   // 2. TEXT-BASED (fallback):
-  //    - If GPS is not available for either the tech or the order, we fall
-  //      back to matching by location text (area name) and pincode.
-  //    - Uses substring matching: checks if order location contains the tech's
-  //      area string OR vice versa (handles formatting differences).
-  //    - "Kukatpally" matches "Kukatpally, Hyderabad" and vice versa.
-  //    - Pincode must match exactly, unless the order has no pincode.
-  //
-  // AUTO-ASSIGN LOGIC:
-  //  - When a NEW pending order appears (not seen before) and the tech has no
-  //    ongoing job, the tech calculates their distance to the order.
-  //  - If distance <= AUTO_ASSIGN_RADIUS, the tech attempts to claim the job
-  //    by updating the order atomically.
-  //  - The first tech to write wins — subsequent techs will see the order is
-  //    already accepted and skip it.
-  //  - A small random delay (0-2s) is added to reduce race conditions.
+  //    - If GPS is unavailable, fall back to matching by location text and
+  //      pincode (substring matching handles formatting differences).
   // ─────────────────────────────────────────────────────────────────────────
   const listenOrders = () => {
     // Listen for area-to-technician assignments
@@ -258,8 +242,15 @@ export default function TechHomeScreen() {
         const val = child.val()
         const order = { id: child.key, ...val }
         // Normalize images: Firebase stores arrays as objects {0:"url",1:"url"}
-        if (order.images && !Array.isArray(order.images)) {
-          order.images = Object.values(order.images)
+        // Also handle edge cases: string, null, or malformed objects
+        if (order.images) {
+          if (typeof order.images === 'string') {
+            order.images = [order.images]
+          } else if (!Array.isArray(order.images)) {
+            order.images = Object.values(order.images).filter(v => typeof v === 'string')
+          }
+        } else {
+          order.images = []
         }
 
         if (order.status === 'pending')   allPending.push(order)
@@ -269,7 +260,16 @@ export default function TechHomeScreen() {
         }
         if (order.status === 'completed') {
           completed.push(order); count++
-          dailyCount++
+          // ✅ FIX: Only count completed jobs from today for the "Today's Jobs" stat
+          if (order.completedTime) {
+            const completedDate = new Date(order.completedTime)
+            const today = new Date()
+            if (completedDate.getFullYear() === today.getFullYear() &&
+                completedDate.getMonth() === today.getMonth() &&
+                completedDate.getDate() === today.getDate()) {
+              dailyCount++
+            }
+          }
         }
       })
 
@@ -302,25 +302,6 @@ export default function TechHomeScreen() {
         // This handles Google Places formatting differences
         // (e.g. "Kukatpally" vs "Kukatpally, Hyderabad")
         pending = pending.filter(o => textMatchOrder(o))
-      }
-
-      // ── STEP 3: Auto-assign nearest tech for close-by jobs ────────────────
-      // Only if tech has no ongoing job and we have GPS
-      if (!ongoing && (techLat !== 17.3850 || techLng !== 78.4867)) {
-        pending.forEach(order => {
-          // Only auto-assign brand-new orders (not previously seen)
-          if (!prevPendingIds.current.has(order.id) && order.custLat && order.custLng) {
-            const d = parseFloat(calcDistance(techLat, techLng, order.custLat, order.custLng))
-            if (!isNaN(d) && d <= AUTO_ASSIGN_RADIUS && !autoAssignRunning.current) {
-              autoAssignRunning.current = true
-              // Add small random delay to reduce race conditions between techs
-              const delay = Math.random() * 2000 // 0-2 seconds
-              setTimeout(() => {
-                autoAcceptOrder(order)
-              }, delay)
-            }
-          }
-        })
       }
 
       // Send notifications AND play sound for new pending jobs
@@ -382,57 +363,6 @@ export default function TechHomeScreen() {
       }
     }
     return true
-  }
-
-  // ── Auto-accept order (called by auto-assign) ────────────────────────────
-  // Each tech checks if the order is still pending, then atomically claims it.
-  // The first tech to update wins — subsequent techs see it's already claimed.
-  async function autoAcceptOrder(order) {
-    try {
-      const name = techName
-      const phone = techPhoneRef.current || ''
-      const loc = techLoc
-
-      // Double-check the order is still pending by reading current value
-      const currentSnap = await get(ref(db, 'orders/' + order.id))
-      if (!currentSnap.exists()) { autoAssignRunning.current = false; return }
-      const current = currentSnap.val()
-      if (current.status !== 'pending' || current.autoAssignedBy) {
-        autoAssignRunning.current = false
-        return // Another tech already claimed it
-      }
-
-      // Try to claim — atomic update, first write wins
-      await update(ref(db, 'orders/' + order.id), {
-        status: 'accepted',
-        techPhone: phone,
-        techName: name,
-        autoAssignedBy: phone,
-        autoAssignTime: Date.now()
-      })
-
-      await AsyncStorage.setItem('currentOrderId', order.id)
-      set(ref(db, 'techInfo'), { name, location: loc, phone })
-
-      // Claim area
-      const area = (order.location || '').toLowerCase().trim()
-      if (area) {
-        set(ref(db, 'areaAssignments/' + area), { name, phone, location: loc })
-      }
-
-      // ── If appointment, schedule local notification reminder ──
-      if (order.isAppointment && order.appointmentTime) {
-        scheduleTechAppointmentReminder(order)
-      }
-      Alert.alert('✅ Auto-Assigned!', `${order.customerName}'s job (${order.brand} ${order.repair}) was auto-assigned to you as the nearest technician!`)
-      if (order.customerPushToken) {
-        await notifyCustomerTechAccepted(order.customerPushToken, name)
-      }
-    } catch (e) {
-      // Another tech likely got it first — that's fine
-      console.log('Auto-assign failed (another tech may have claimed it):', e.message)
-    }
-    autoAssignRunning.current = false
   }
 
   const acceptJob = async (orderId, order) => {
@@ -718,9 +648,7 @@ export default function TechHomeScreen() {
         pendingJobs.map(order => {
           // Show GPS distance if available
           const distDisplay = order.gpsDistance != null
-            ? (order.gpsDistance <= AUTO_ASSIGN_RADIUS
-                ? `📍 ${order.gpsDistance.toFixed(1)} km (auto-assign range 🎯)`
-                : `📍 ${order.gpsDistance.toFixed(1)} km away`)
+            ? `📍 ${order.gpsDistance.toFixed(1)} km away`
             : null
 
           return (
@@ -755,7 +683,9 @@ export default function TechHomeScreen() {
               {/* GPS distance display — shows how far the customer is */}
               {distDisplay && (
                 <Text style={[s.jobLoc, order.gpsDistance <= AUTO_ASSIGN_RADIUS && s.jobAutoRange]}>
-                  {distDisplay}
+                  {order.gpsDistance <= AUTO_ASSIGN_RADIUS
+                    ? `📍 ${order.gpsDistance.toFixed(1)} km (auto-assign range 🎯)`
+                    : distDisplay}
                 </Text>
               )}
               <View style={s.jobActions}>
@@ -888,7 +818,7 @@ export default function TechHomeScreen() {
           {/* Previous arrow */}
           {total > 1 && fullscreenImgIndex > 0 && (
             <TouchableOpacity style={[s.modalArrow, s.modalArrowLeft]} onPress={goPrev}>
-              <Text style={s.modalArrowTxt}>‹</Text>
+              <Text style={s.modalArrowTxt}>←</Text>
             </TouchableOpacity>
           )}
 
@@ -900,7 +830,7 @@ export default function TechHomeScreen() {
           {/* Next arrow */}
           {total > 1 && fullscreenImgIndex < total - 1 && (
             <TouchableOpacity style={[s.modalArrow, s.modalArrowRight]} onPress={goNext}>
-              <Text style={s.modalArrowTxt}>›</Text>
+              <Text style={s.modalArrowTxt}>→</Text>
             </TouchableOpacity>
           )}
         </View>

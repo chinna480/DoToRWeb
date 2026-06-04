@@ -33,6 +33,7 @@ if (Platform.OS !== 'web') {
 export default function TrackingScreen() {
   const router = useRouter()
   const [activeTab, setActiveTab]   = useState('home')
+  const [loading, setLoading]       = useState(true)
 
   const [custLat, setCustLat]     = useState(17.3850)
   const [custLng, setCustLng]     = useState(78.4867)
@@ -49,13 +50,15 @@ export default function TrackingScreen() {
   const [jobDone, setJobDone]     = useState(false)
   const [orderId, setOrderId]     = useState('')
   const [custName, setCustName]   = useState('Customer')
+  const [mapError, setMapError]   = useState(false)
 
   const watchRef    = useRef(null)
   const unsubsRef   = useRef([])
   const mounted     = useRef(true)
   const custPosRef  = useRef({ lat: 17.3850, lng: 78.4867 })
   const techPosRef  = useRef(null)
-  const orderIdRef  = useRef('')
+  const orderIdRef    = useRef('')
+  const techLocUnsubRef = useRef(null)
 
   useEffect(() => {
     mounted.current = true
@@ -68,25 +71,31 @@ export default function TrackingScreen() {
       }
       unsubsRef.current.forEach(fn => { try { fn() } catch(e) {} })
       unsubsRef.current = []
+      techLocUnsubRef.current = null
     }
   }, [])
 
   const init = async () => {
     try {
-      const o  = await AsyncStorage.getItem('lastOrderId')
-      const b  = await AsyncStorage.getItem('lastBrand')
-      const r  = await AsyncStorage.getItem('lastRepair')
-      const l  = await AsyncStorage.getItem('custLocation')
-      const n  = await AsyncStorage.getItem('lastCustName') || await AsyncStorage.getItem('custName') || 'Customer'
+      const [o, b, r, l, n] = await Promise.all([
+        AsyncStorage.getItem('lastOrderId'),
+        AsyncStorage.getItem('lastBrand'),
+        AsyncStorage.getItem('lastRepair'),
+        AsyncStorage.getItem('custLocation'),
+        AsyncStorage.getItem('lastCustName').then(v => v || AsyncStorage.getItem('custName') || 'Customer'),
+      ])
       if (o) { setOrderId(o); orderIdRef.current = o }
       if (b)  setBrand(b)
       if (r)  setRepair(r)
       if (l)  setLocation(l)
       if (n)  setCustName(n)
+
       await startGPS()
       startListeners()
     } catch (e) {
       console.log('TrackingScreen init error:', e)
+    } finally {
+      if (mounted.current) setLoading(false)
     }
   }
 
@@ -111,8 +120,6 @@ export default function TrackingScreen() {
     }
   }
 
-  let techLocUnsub = null
-
   const startListeners = () => {
     const u2 = onValue(ref(db, 'orders'), snap => {
       if (!mounted.current || !snap.exists()) return
@@ -126,8 +133,10 @@ export default function TrackingScreen() {
             setTechPhone(o.techPhone)
             // Listen to per-tech location instead of global techLocation
             const cleanPhone = o.techPhone.replace('+91', '').replace(/^0+/, '')
-            if (techLocUnsub) techLocUnsub()
-            techLocUnsub = onValue(ref(db, 'techsOnline/' + cleanPhone), snap => {
+            if (techLocUnsubRef.current) {
+              try { techLocUnsubRef.current() } catch(e) {}
+            }
+            techLocUnsubRef.current = onValue(ref(db, 'techsOnline/' + cleanPhone), snap => {
               if (!mounted.current) return
               if (snap.exists()) {
                 const { lat, lng } = snap.val()
@@ -137,7 +146,7 @@ export default function TrackingScreen() {
                 setStatusMsg('🛵 Technician is on the way!')
               }
             })
-            unsubsRef.current.push(techLocUnsub)
+            unsubsRef.current.push(techLocUnsubRef.current)
           }
           if (o.status === 'completed') {
             setJobDone(true)
@@ -160,7 +169,7 @@ export default function TrackingScreen() {
 
   // Recalculate distance whenever GPS or tech location changes
   useEffect(() => {
-    if (custLat && techLat) {
+    if (custLat && techLat && isFinite(custLat) && isFinite(techLat)) {
       recalcDistance({ lat: custLat, lng: custLng }, { lat: techLat, lng: techLng })
     }
   }, [custLat, custLng, techLat, techLng])
@@ -192,6 +201,17 @@ export default function TrackingScreen() {
     if (key === 'profile') { router.push('/screens/CustomerProfileScreen'); return }
   }
 
+  // ── Show loading spinner while initializing ───────────────────────
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 50, marginBottom: 20 }}>🗺️</Text>
+        <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3A6B' }}>Loading tracking...</Text>
+        <Text style={{ fontSize: 12, color: '#888', marginTop: 5 }}>Getting things ready</Text>
+      </View>
+    )
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
       <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
@@ -207,37 +227,40 @@ export default function TrackingScreen() {
           </View>
         </View>
 
-        {/* MAP or PLACEHOLDER */}
-        {MapView && Marker ? (
-          <MapView
-            style={s.map}
-            region={{
-              latitude:       (custLat + (techLat || custLat)) / 2,
-              longitude:      (custLng + (techLng || custLng)) / 2,
-              latitudeDelta:  0.05,
-              longitudeDelta: 0.05,
-            }}
-          >
-            <Marker coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Your Location" />
-            {techLat && <Marker coordinate={{ latitude: techLat, longitude: techLng }} title="🛵 Technician" pinColor="#FF6B00" />}
-            {techLat && Polyline && (
-              <Polyline
-                coordinates={[
-                  { latitude: custLat, longitude: custLng },
-                  { latitude: techLat, longitude: techLng },
-                ]}
-                strokeColor="#FF6B00"
-                strokeWidth={3}
-                lineDashPattern={[8, 8]}
-              />
-            )}
-          </MapView>
-        ) : (
-          <View style={s.mapPlaceholder}>
-            <Text style={s.mapIcon}>🗺️</Text>
-            <Text style={s.mapTxt}>{techLat ? '🛵 Technician is moving towards you!' : '⏳ Waiting for technician...'}</Text>
-          </View>
-        )}
+        {/* MAP or PLACEHOLDER */}          {/* MAP with coordinate validation — prevents native crashes from NaN/invalid coords */}
+          {!mapError && MapView && Marker && isFinite(custLat) && isFinite(custLng) ? (
+            <MapView
+              style={s.map}
+              initialRegion={{
+                latitude:       parseFloat(custLat) || 17.3850,
+                longitude:      parseFloat(custLng) || 78.4867,
+                latitudeDelta:  0.05,
+                longitudeDelta: 0.05,
+              }}
+              onError={() => setMapError(true)}
+            >
+              <Marker coordinate={{ latitude: parseFloat(custLat), longitude: parseFloat(custLng) }} title="🏠 Your Location" />
+              {techLat && isFinite(techLat) && isFinite(techLng) && (
+                <Marker coordinate={{ latitude: parseFloat(techLat), longitude: parseFloat(techLng) }} title="🛵 Technician" pinColor="#FF6B00" />
+              )}
+              {techLat && isFinite(techLat) && isFinite(techLng) && Polyline && (
+                <Polyline
+                  coordinates={[
+                    { latitude: parseFloat(custLat), longitude: parseFloat(custLng) },
+                    { latitude: parseFloat(techLat), longitude: parseFloat(techLng) },
+                  ]}
+                  strokeColor="#FF6B00"
+                  strokeWidth={3}
+                  lineDashPattern={[8, 8]}
+                />
+              )}
+            </MapView>
+          ) : (
+            <View style={s.mapPlaceholder}>
+              <Text style={s.mapIcon}>🗺️</Text>
+              <Text style={s.mapTxt}>{mapError ? '⚠️ Map unavailable' : techLat ? '🛵 Technician is moving towards you!' : '⏳ Waiting for technician...'}</Text>
+            </View>
+          )}
 
         <View style={s.content}>
 
