@@ -1,4 +1,7 @@
-// uploadImage.js — Cloudinary image upload (no Firebase Storage needed)
+// uploadImage.js — Cloudinary image upload via native multipart (no base64)
+// Fix: Uses React Native's native file upload instead of base64 + data URI.
+// Reading entire images as base64 caused memory issues and FormData failures
+// when uploading multiple files — only the first image would succeed.
 
 import * as FileSystem from 'expo-file-system'
 
@@ -11,57 +14,68 @@ const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}
 const MAX_RETRIES    = 3
 const MAX_FILE_SIZE  = 5 * 1024 * 1024 // 5 MB
 
+/**
+ * Upload a single image to Cloudinary using React Native's native file upload.
+ * Instead of reading the entire file as base64, this passes the file URI
+ * with type/name metadata so the native networking layer streams it directly.
+ */
 export async function uploadImage(uri, folder) {
   let lastError = null
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       console.log(`📤 Cloudinary upload attempt ${attempt}/${MAX_RETRIES}`)
-      console.log(`   URL: ${CLOUDINARY_URL}`)
-      console.log(`   Preset: ${CLOUDINARY_UPLOAD_PRESET}`)
       console.log(`   Folder: ${folder}`)
 
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      })
+      // Check file size before uploading
+      let fileSize = 0
+      try {
+        const info = await FileSystem.getInfoAsync(uri, { size: true })
+        fileSize = info.size || 0
+      } catch (_) {}
 
-      if (!base64 || base64.length < 100) {
-        throw new Error(`File read failed — base64 too short (${base64?.length || 0} chars)`)
+      if (fileSize > MAX_FILE_SIZE) {
+        throw new Error(`File too large (${(fileSize / 1024 / 1024).toFixed(1)} MB > 5 MB)`)
       }
 
-      console.log(`   ✅ File read: ${(base64.length / 1024).toFixed(1)} KB`)
-
+      // Determine mime type from extension
       const lower    = uri.toLowerCase()
       const mimeType = lower.endsWith('.png')  ? 'image/png'
                      : lower.endsWith('.webp') ? 'image/webp'
                      : 'image/jpeg'
 
-      const dataUri = `data:${mimeType};base64,${base64}`
-
+      // ⭐ Use React Native native file upload — NOT base64 data URI.
+      // React Native's FormData handles { uri, type, name } objects natively,
+      // streaming the file directly without loading it all into memory.
       const formData = new FormData()
-      formData.append('file', dataUri)
+      formData.append('file', {
+        uri,
+        type: mimeType,
+        name: `photo_${Date.now()}.${mimeType.split('/')[1]}`,
+      })
       formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET)
       formData.append('folder', folder)
 
-      console.log(`   📡 Sending to Cloudinary...`)
+      console.log(`   📡 Sending to Cloudinary (native file upload)...`)
 
       const response = await fetch(CLOUDINARY_URL, {
         method: 'POST',
         body: formData,
+        // ⚠️ No Content-Type header — React Native sets it automatically
+        // with the correct boundary when body is FormData.
       })
 
       const responseText = await response.text()
       console.log(`   📡 Response status: ${response.status}`)
-      console.log(`   📡 Response body: ${responseText.substring(0, 300)}`)
 
       if (!response.ok) {
-        throw new Error(`Cloudinary ${response.status}: ${responseText}`)
+        throw new Error(`Cloudinary ${response.status}: ${responseText.substring(0, 200)}`)
       }
 
       const data = JSON.parse(responseText)
 
       if (!data.secure_url) {
-        throw new Error(`No secure_url in response: ${responseText}`)
+        throw new Error(`No secure_url in response`)
       }
 
       console.log(`   ✅ Upload success: ${data.secure_url.substring(0, 80)}`)
@@ -79,6 +93,10 @@ export async function uploadImage(uri, folder) {
   throw lastError
 }
 
+/**
+ * Upload multiple images sequentially. Each image is uploaded independently
+ * so a single failure doesn't block the rest. Returns array of URLs or null.
+ */
 export async function uploadImages(assets, orderId) {
   if (!assets || assets.length === 0) return null
 
@@ -92,21 +110,6 @@ export async function uploadImages(assets, orderId) {
     const asset = assets[i]
     if (!asset?.uri) {
       console.warn(`   ⚠️ Image ${i}: skipped (no URI)`)
-      continue
-    }
-
-    let fileSize = asset.fileSize || 0
-    if (!fileSize) {
-      try {
-        const info = await FileSystem.getInfoAsync(asset.uri, { size: true })
-        fileSize = info.size || 0
-      } catch (_) {}
-    }
-
-    if (fileSize > MAX_FILE_SIZE) {
-      const mb = (fileSize / 1024 / 1024).toFixed(1)
-      errors.push(`Image ${i}: too large (${mb} MB)`)
-      console.warn(`   ⚠️ Image ${i}: skipped — ${mb} MB > 5 MB`)
       continue
     }
 
