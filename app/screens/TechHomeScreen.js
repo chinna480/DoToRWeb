@@ -84,7 +84,6 @@ export default function TechHomeScreen() {
   const sentNearby        = useRef(false)
   const sentArrived       = useRef(false)
   const prevPendingIds    = useRef(new Set())
-  const areaAssignments   = useRef({})
 
   useEffect(() => {
     loadTech()
@@ -220,15 +219,6 @@ export default function TechHomeScreen() {
   //      pincode (substring matching handles formatting differences).
   // ─────────────────────────────────────────────────────────────────────────
   const listenOrders = () => {
-    // Listen for area-to-technician assignments
-    const unsubArea = onValue(ref(db, 'areaAssignments'), snap => {
-      if (snap.exists()) {
-        areaAssignments.current = snap.val()
-      } else {
-        areaAssignments.current = {}
-      }
-    })
-
     const unsub = onValue(ref(db, 'orders'), snapshot => {
       if (!snapshot.exists()) {
         setPending([]); setOngoing(null); setCompleted([]); setTotal(0); setDailyCompleted(0)
@@ -272,8 +262,6 @@ export default function TechHomeScreen() {
           }
         }
       })
-
-      const myPhone = techPhoneRef.current
 
       // ── STEP 1: Filter pending jobs by GPS distance (preferred) ───────────
       // Use refs to avoid stale closures — refs always hold the latest GPS values
@@ -333,13 +321,13 @@ export default function TechHomeScreen() {
       if (ongoing) setCustPhone(ongoing.customerPhone || '')
     })
 
-    onValue(ref(db, 'custLocation'), snap => {
+    const unsubCustLoc = onValue(ref(db, 'custLocation'), snap => {
       if (!snap.exists()) return
       setCustLat(snap.val().lat)
       setCustLng(snap.val().lng)
     })
 
-    return () => { unsub(); unsubArea() }
+    return () => { unsub(); unsubCustLoc() }
   }
 
   // ── Text-based order matching (fallback when GPS is unavailable) ─────────
@@ -373,11 +361,6 @@ export default function TechHomeScreen() {
     set(ref(db, 'techInfo'), { name, location: loc, phone })
     update(ref(db, 'orders/' + orderId), { status: 'accepted', techPhone: phone, techName: name })
       .then(async () => {
-        // Claim this area for this technician so future jobs here come to them
-        const area = (order.location || '').toLowerCase().trim()
-        if (area) {
-          set(ref(db, 'areaAssignments/' + area), { name, phone, location: loc })
-        }
         // ── If appointment, schedule local notification reminder ──
       if (order.isAppointment && order.appointmentTime) {
         scheduleTechAppointmentReminder(order)
@@ -406,7 +389,7 @@ export default function TechHomeScreen() {
       { text: 'Cancel' },
       {
         text: 'Complete ✅', onPress: async () => {
-          update(ref(db, 'orders/' + orderId), { status: 'completed', completedTime: Date.now() })
+          await update(ref(db, 'orders/' + orderId), { status: 'completed', completedTime: Date.now() })
           remove(ref(db, 'techLocation'))
           remove(ref(db, 'techInfo'))
           remove(ref(db, 'custLocation'))

@@ -180,7 +180,6 @@ export default function ChatScreen() {
 
   const switchTab = (key) => {
     if (key === 'chat') { setActiveTab('chat'); return }
-    setActiveTab(key)
     if (key === 'home') {
       router.replace(isCust ? '/' : '/screens/TechHomeScreen')
     } else if (key === 'orders') {

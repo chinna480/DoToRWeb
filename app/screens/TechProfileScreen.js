@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as ImagePicker from 'expo-image-picker'
 import { useRouter } from 'expo-router'
 import { onValue, ref } from 'firebase/database'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Image,
@@ -28,8 +28,14 @@ export default function TechProfileScreen() {
   const [totalJobs, setTotal]     = useState(0)
   const [notifications, setNotifications] = useState(true)
   const [isOnline, setIsOnline]   = useState(true)
+  const ordersUnsub = useRef(null)
 
-  useEffect(() => { loadProfile() }, [])
+  useEffect(() => {
+    loadProfile()
+    return () => {
+      if (ordersUnsub.current) ordersUnsub.current()
+    }
+  }, [])
 
   const loadProfile = async () => {
     const n  = await AsyncStorage.getItem('techName')
@@ -51,7 +57,7 @@ export default function TechProfileScreen() {
 
   // ── FIXED: filter jobs by THIS tech's phone number only ─────────────────────
   const loadJobs = (myPhone) => {
-    onValue(ref(db, 'orders'), snap => {
+    ordersUnsub.current = onValue(ref(db, 'orders'), snap => {
       if (!snap.exists()) {
         setTotal(0)
         return

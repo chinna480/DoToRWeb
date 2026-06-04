@@ -231,7 +231,7 @@ export default function TrackingScreen() {
           {!mapError && MapView && Marker && isFinite(custLat) && isFinite(custLng) ? (
             <MapView
               style={s.map}
-              initialRegion={{
+              region={{
                 latitude:       parseFloat(custLat) || 17.3850,
                 longitude:      parseFloat(custLng) || 78.4867,
                 latitudeDelta:  0.05,

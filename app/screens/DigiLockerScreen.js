@@ -118,14 +118,17 @@ export default function DigiLockerScreen() {
   const verifyAadharWithAI = async (pageText, pageUrl, pageTitle) => {
     // 1) Try backend proxy first (API key stays server-side, much more reliable)
     if (BACKEND_API_URL) {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000)
       try {
         const response = await fetch(BACKEND_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pageText, pageUrl, pageTitle }),
           // 10 second timeout so the user isn't stuck waiting
-          signal: AbortSignal.timeout(10000),
+          signal: controller.signal,
         })
+        clearTimeout(timeoutId)
         if (response.ok) {
           const result = await response.json()
           if (result && typeof result.isValid === 'boolean') {
