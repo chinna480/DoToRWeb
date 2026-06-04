@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DoToR - Admin Orders</title>
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    if (localStorage.getItem('dotorAdmin') !== 'true') {
+      window.location.href = 'login.html?redirect=orders.html';
+    }
+  </script>
+  <style>
+    .admin-orders { max-width: 900px; margin: 0 auto; }
+    .order-admin-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+      border-left: 4px solid var(--gray);
+    }
+    .order-admin-card.pending { border-left-color: var(--gray); }
+    .order-admin-card.accepted { border-left-color: var(--primary); }
+    .order-admin-card.completed { border-left-color: var(--green); }
+    .order-admin-card.rejected { border-left-color: var(--red); }
+    .admin-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+    .admin-card-body { font-size: 13px; }
+    .admin-card-body .row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+    .admin-card-body .label { color: var(--gray); font-weight: 600; min-width: 80px; }
+    .admin-card-body .value { color: var(--navy); font-weight: 700; }
+    .admin-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .admin-actions select {
+      padding: 6px 10px;
+      border: 2px solid var(--gray-border);
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status-update-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--gray-border);
+    }
+    .status-update-row select { flex: 1; }
+    .search-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .search-row input { flex: 1; }
+    .export-btn { margin-left: auto; }
+    .filter-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .filter-row select {
+      padding: 8px 12px;
+      border: 2px solid var(--gray-border);
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--navy);
+      background: var(--white);
+      cursor: pointer;
+      min-width: 130px;
+      flex: 1;
+    }
+    .filter-row select:focus { outline: none; border-color: var(--primary); }
+    .filter-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--primary-light);
+      color: var(--primary);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .filter-row input[type="date"] {
+      padding: 7px 10px;
+      border: 2px solid var(--gray-border);
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--navy);
+      background: var(--white);
+      cursor: pointer;
+      min-width: 120px;
+      flex: 1;
+    }
+    .filter-row input[type="date"]:focus { outline: none; border-color: var(--primary); }
+    .date-range-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex: 1;
+      min-width: 180px;
+    }
+    .date-range-group label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--gray);
+      white-space: nowrap;
+    }
+    .clear-filters {
+      font-size: 12px;
+      color: var(--gray);
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 6px 12px;
+      border: none;
+      background: none;
+    }
+    .clear-filters:hover { color: var(--red); }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a href="/" class="nav-brand"><span>🔧</span> DoToR Admin</a>
+    <div class="nav-links">
+      <a href="/">Dashboard</a>
+      <a href="orders.html" class="active">Orders</a>
+      <a href="completed.html">Completed</a>
+      <a href="technicians.html">Technicians</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="header-card navy">
+      <h1>📋 Manage Orders</h1>
+      <p>View, filter, update status, and manage all repair orders</p>
+    </div>
+
+    <div class="card admin-orders">
+      <!-- Search & Filter -->
+      <div class="search-row">
+        <input type="text" id="searchInput" class="form-input" placeholder="Search by name, phone, brand, model, location..." oninput="applyFilters()">
+        <button class="btn btn-outline btn-sm" onclick="exportOrders()">📥 Export</button>
+      </div>
+
+      <!-- Advanced Filters Row -->
+      <div class="filter-row" id="filterRow">
+        <select id="statusFilter" onchange="applyFilters()">
+          <option value="all">📋 All Status</option>
+          <option value="pending">⏳ Pending</option>
+          <option value="accepted">🛵 Accepted</option>
+          <option value="completed">✅ Completed</option>
+          <option value="rejected">❌ Rejected</option>
+        </select>
+        <select id="brandFilter" onchange="onBrandFilterChange()">
+          <option value="all">📱 All Brands</option>
+        </select>
+        <select id="modelFilter" onchange="applyFilters()">
+          <option value="all">🔧 All Models</option>
+        </select>
+        <select id="locationFilter" onchange="applyFilters()">
+          <option value="all">📍 All Locations</option>
+        </select>
+        <select id="phoneFilter" onchange="applyFilters()">
+          <option value="all">📞 All Phones</option>
+        </select>
+        <select id="techFilter" onchange="applyFilters()">
+          <option value="all">🛵 All Technicians</option>
+        </select>
+        <select id="pincodeFilter" onchange="applyFilters()">
+          <option value="all">📮 All Pincodes</option>
+        </select>
+        <select id="repairFilter" onchange="applyFilters()">
+          <option value="all">🔧 All Repair Types</option>
+        </select>
+        <div class="date-range-group">
+          <label for="dateFrom">From</label>
+          <input type="date" id="dateFrom" onchange="applyFilters()">
+          <label for="dateTo">To</label>
+          <input type="date" id="dateTo" onchange="applyFilters()">
+        </div>
+        <button class="clear-filters" onclick="clearAllFilters()">✕ Clear all</button>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span style="font-size:13px;color:var(--gray);" id="orderCount">Loading orders...</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span id="activeFilterBadges"></span>
+          <button class="btn btn-sm btn-navy" onclick="refreshOrders()">🔄 Refresh</button>
+        </div>
+      </div>
+
+      <!-- Orders Container -->
+      <div id="ordersContainer">
+        <div class="loading"><div class="spinner"></div><p>Loading orders...</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">© 2025 DoToR - Admin Dashboard</div>
+
+  <script type="module">
+    import { listenOrders, updateOrderStatus, get } from './firebase.js';
+
+    let allOrders = [];
+    let unsubOrders = null;
+
+    // ── Init ──────────────────────────────────────────────────────────
+    const urlParams = new URLSearchParams(window.location.search);
+    const presetFilter = urlParams.get('filter');
+    if (presetFilter) {
+      document.getElementById('statusFilter').value = presetFilter;
+    }
+
+    unsubOrders = listenOrders((orders) => {
+      allOrders = orders;
+      populateFilters();
+      applyFilters();
+    });
+
+    // ── Populate filter dropdowns from orders ────────────────────────
+    function populateFilters() {
+      const brandSet = new Set();
+      const modelSet = new Set();
+      const locationSet = new Set();
+      const phoneSet = new Set();
+      const techSet = new Set();
+      const pincodeSet = new Set();
+      const repairSet = new Set();
+
+      allOrders.forEach(o => {
+        if (o.brand) brandSet.add(o.brand);
+        if (o.model) modelSet.add(o.model);
+        if (o.location) locationSet.add(o.location);
+        if (o.customerPhone) phoneSet.add(o.customerPhone);
+        if (o.techName) techSet.add(o.techName);
+        if (o.pincode) pincodeSet.add(o.pincode);
+        if (o.repair) repairSet.add(o.repair);
+      });
+
+      populateSelect('brandFilter', [...brandSet].sort());
+      populateSelect('modelFilter', [...modelSet].sort());
+      populateSelect('locationFilter', [...locationSet].sort());
+      populateSelect('phoneFilter', [...phoneSet].sort());
+      populateSelect('techFilter', [...techSet].sort());
+      populateSelect('pincodeFilter', [...pincodeSet].sort());
+      populateSelect('repairFilter', [...repairSet].sort());
+    }
+
+    function populateSelect(id, items) {
+      const sel = document.getElementById(id);
+      const currentVal = sel.value;
+      // Keep the "all" option
+      sel.innerHTML = `<option value="all">${sel.options[0].text}</option>`;
+      items.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item;
+        opt.textContent = item;
+        sel.appendChild(opt);
+      });
+      // Restore selection if still valid
+      if ([...sel.options].some(o => o.value === currentVal)) {
+        sel.value = currentVal;
+      }
+    }
+
+    // ── When brand changes, filter models to match ───────────────────
+    window.onBrandFilterChange = function() {
+      const selectedBrand = document.getElementById('brandFilter').value;
+      const modelSel = document.getElementById('modelFilter');
+
+      if (selectedBrand === 'all') {
+        // Show all models
+        const allModels = new Set();
+        allOrders.forEach(o => { if (o.model) allModels.add(o.model); });
+        populateSelect('modelFilter', [...allModels].sort());
+      } else {
+        // Only show models for this brand
+        const models = new Set();
+        allOrders.forEach(o => {
+          if (o.brand === selectedBrand && o.model) models.add(o.model);
+        });
+        populateSelect('modelFilter', [...models].sort());
+      }
+
+      modelSel.value = 'all';
+      applyFilters();
+    };
+
+    // ── Clear all filters ────────────────────────────────────────────
+    window.clearAllFilters = function() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('statusFilter').value = 'all';
+      document.getElementById('brandFilter').value = 'all';
+      document.getElementById('locationFilter').value = 'all';
+      document.getElementById('techFilter').value = 'all';
+      document.getElementById('phoneFilter').value = 'all';
+      document.getElementById('pincodeFilter').value = 'all';
+      document.getElementById('repairFilter').value = 'all';
+      document.getElementById('dateFrom').value = '';
+      document.getElementById('dateTo').value = '';
+      // Reset model dropdown to all models
+      const allModels = new Set();
+      allOrders.forEach(o => { if (o.model) allModels.add(o.model); });
+      populateSelect('modelFilter', [...allModels].sort());
+      document.getElementById('modelFilter').value = 'all';
+      applyFilters();
+    };
+
+    window.applyFilters = function() {
+      const search = document.getElementById('searchInput').value.toLowerCase().trim();
+      const status = document.getElementById('statusFilter').value;
+      const brand = document.getElementById('brandFilter').value;
+      const model = document.getElementById('modelFilter').value;
+      const location = document.getElementById('locationFilter').value;
+      const phone = document.getElementById('phoneFilter').value;
+      const tech = document.getElementById('techFilter').value;
+      const pincode = document.getElementById('pincodeFilter').value;
+      const repair = document.getElementById('repairFilter').value;
+      const dateFrom = document.getElementById('dateFrom').value;
+      const dateTo = document.getElementById('dateTo').value;
+
+      let filtered = allOrders;
+
+      if (status !== 'all') {
+        filtered = filtered.filter(o => o.status === status);
+      }
+
+      if (brand !== 'all') {
+        filtered = filtered.filter(o => (o.brand || '') === brand);
+      }
+
+      if (model !== 'all') {
+        filtered = filtered.filter(o => (o.model || '') === model);
+      }
+
+      if (location !== 'all') {
+        filtered = filtered.filter(o => (o.location || '') === location);
+      }
+
+      if (phone !== 'all') {
+        filtered = filtered.filter(o => (o.customerPhone || '') === phone);
+      }
+
+      if (tech !== 'all') {
+        filtered = filtered.filter(o => (o.techName || '') === tech);
+      }
+
+      if (pincode !== 'all') {
+        filtered = filtered.filter(o => (o.pincode || '') === pincode);
+      }
+
+      if (repair !== 'all') {
+        filtered = filtered.filter(o => (o.repair || '') === repair);
+      }
+
+      // Date range: uses the appointment order's `date` field (YYYY-MM-DD)
+      // Non-appointment orders without a date field are excluded when date filter is active
+      if (dateFrom || dateTo) {
+        filtered = filtered.filter(o => {
+          if (!o.date) return false; // no usable date, exclude
+          const d = new Date(o.date + 'T00:00:00');
+          if (isNaN(d.getTime())) return false;
+          if (dateFrom && d < new Date(dateFrom + 'T00:00:00')) return false;
+          if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false;
+          return true;
+        });
+      }
+
+      if (search) {
+        filtered = filtered.filter(o =>
+          (o.customerName || '').toLowerCase().includes(search) ||
+          (o.customerPhone || '').includes(search) ||
+          (o.brand || '').toLowerCase().includes(search) ||
+          (o.model || '').toLowerCase().includes(search) ||
+          (o.location || '').toLowerCase().includes(search) ||
+          (o.description || '').toLowerCase().includes(search) ||
+          (o.id || '').toLowerCase().includes(search) ||
+          (o.techName || '').toLowerCase().includes(search)
+        );
+      }
+
+      document.getElementById('orderCount').textContent = `${filtered.length} orders`;
+      updateFilterBadges(status, brand, model, location, phone, tech, pincode, repair, search, dateFrom, dateTo);
+      renderOrders(filtered);
+    };
+
+    function updateFilterBadges(status, brand, model, location, phone, tech, pincode, repair, search, dateFrom, dateTo) {
+      const container = document.getElementById('activeFilterBadges');
+      const badges = [];
+      if (status !== 'all') badges.push(`<span class="filter-badge">📋 ${status}</span>`);
+      if (brand !== 'all') badges.push(`<span class="filter-badge">📱 ${brand}</span>`);
+      if (model !== 'all') badges.push(`<span class="filter-badge">🔧 ${model}</span>`);
+      if (location !== 'all') badges.push(`<span class="filter-badge">📍 ${location}</span>`);
+      if (phone !== 'all') badges.push(`<span class="filter-badge">📞 ${phone}</span>`);
+      if (tech !== 'all') badges.push(`<span class="filter-badge">🛵 ${tech}</span>`);
+      if (pincode !== 'all') badges.push(`<span class="filter-badge">📮 ${pincode}</span>`);
+      if (repair !== 'all') badges.push(`<span class="filter-badge">🔧 ${repair}</span>`);
+      if (dateFrom || dateTo) {
+        const range = `${dateFrom || '...'} → ${dateTo || '...'}`;
+        badges.push(`<span class="filter-badge">📅 ${range}</span>`);
+      }
+      if (search) badges.push(`<span class="filter-badge">🔍 "${search}"</span>`);
+      container.innerHTML = badges.join(' ');
+    }
+
+    function renderOrders(orders) {
+      const container = document.getElementById('ordersContainer');
+
+      if (orders.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">📭</div>
+            <h3>No Orders Found</h3>
+            <p>Try changing your search or filter criteria.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = orders.map(order => `
+        <div class="order-admin-card ${order.status}">
+          <div class="admin-card-header">
+            <div>
+              <div style="font-size:15px;font-weight:800;color:var(--navy);">
+                👤 ${order.customerName || 'Unknown'} — 📱 ${order.brand || 'Device'} ${order.model ? '· ' + order.model : ''}
+              </div>
+              <div style="font-size:11px;color:var(--gray);margin-top:2px;">
+                🆔 ${order.id}
+              </div>
+            </div>
+            <span class="order-status ${order.status}">${order.status}</span>
+          </div>
+
+          <div class="admin-card-body">
+            <div class="row"><span class="label">Phone</span><span class="value">${order.customerPhone || '—'}</span></div>
+            <div class="row"><span class="label">Model</span><span class="value">${order.model || '—'}</span></div>
+            <div class="row"><span class="label">Repair</span><span class="value">${order.repair || 'Service'}</span></div>
+            ${order.description ? `<div class="row"><span class="label">Issue</span><span class="value">${order.description.substring(0, 100)}${order.description.length > 100 ? '...' : ''}</span></div>` : ''}
+            <div class="row"><span class="label">Location</span><span class="value">📍 ${order.location || '—'} ${order.pincode ? '📮 ' + order.pincode : ''}</span></div>
+            <div class="row"><span class="label">Time</span><span class="value">🕐 ${order.time || '—'}</span></div>
+            ${order.techName ? `<div class="row"><span class="label">Technician</span><span class="value">🛵 ${order.techName} (${order.techPhone || ''})</span></div>` : ''}
+            ${order.isAppointment ? `<div class="row"><span class="label">Appt</span><span class="value">📅 ${order.dateLabel || ''} ${order.timeSlot || ''}</span></div>` : ''}
+          </div>
+
+          ${order.images && order.images.length > 0 ? `
+            <div style="display:flex;gap:4px;margin-top:6px;">
+              ${order.images.slice(0, 4).map(url => `<img src="${url}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;background:var(--gray-light);">`).join('')}
+              ${order.images.length > 4 ? `<span style="font-size:10px;color:var(--gray);align-self:center;">+${order.images.length - 4}</span>` : ''}
+            </div>
+          ` : ''}
+
+          <!-- Status Update -->
+          <div class="status-update-row">
+            <select id="statusSelect_${order.id}">
+              <option value="pending" ${order.status === 'pending' ? 'selected' : ''}>⏳ Pending</option>
+              <option value="accepted" ${order.status === 'accepted' ? 'selected' : ''}>🛵 Accepted</option>
+              <option value="completed" ${order.status === 'completed' ? 'selected' : ''}>✅ Completed</option>
+              <option value="rejected" ${order.status === 'rejected' ? 'selected' : ''}>❌ Rejected</option>
+            </select>
+            <button class="btn btn-sm btn-primary" onclick="updateStatus('${order.id}')">Update</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    window.updateStatus = async function(orderId) {
+      const select = document.getElementById('statusSelect_' + orderId);
+      const newStatus = select.value;
+
+      try {
+        // If accepting, generate a simulated tech name
+        const extra = newStatus === 'accepted' ? {
+          techName: 'Admin Assigned',
+          techPhone: 'Admin',
+          autoAssignTime: Date.now()
+        } : newStatus === 'completed' ? {
+          completedTime: Date.now()
+        } : {};
+
+        await updateOrderStatus(orderId, newStatus, extra);
+        showToast(`✅ Order ${newStatus}!`, 'success');
+      } catch(err) {
+        console.error('Failed to update:', err);
+        showToast('❌ Update failed', 'error');
+      }
+    };
+
+    window.refreshOrders = function() {
+      if (unsubOrders) unsubOrders();
+      unsubOrders = listenOrders((orders) => {
+        allOrders = orders;
+        populateFilters();
+        applyFilters();
+      });
+      showToast('🔄 Orders refreshed', 'success');
+    };
+
+    window.exportOrders = function() {
+      const filtered = allOrders;
+      let csv = 'Order ID,Customer,Phone,Brand,Model,Repair,Status,Location,Pincode,Technician,Time\n';
+      filtered.forEach(o => {
+        csv += `"${o.id}","${o.customerName || ''}","${o.customerPhone || ''}","${o.brand || ''}","${(o.model || '').replace(/"/g,'""')}","${o.repair || ''}","${o.status}","${(o.location || '').replace(/"/g,'""')}","${o.pincode || ''}","${o.techName || ''}","${o.time || ''}"\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dotor-orders-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('📥 Orders exported!', 'success');
+    };
+
+    function showToast(msg, type) {
+      const existing = document.querySelector('.toast');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+  </script>
+</body>
+</html>

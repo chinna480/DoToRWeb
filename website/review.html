@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DoToR - Rate Technician</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .review-page { max-width: 500px; margin: 0 auto; }
+    .review-card { text-align: center; }
+    .review-card .tech-avatar {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      background: var(--navy-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      margin: 0 auto 12px;
+      border: 3px solid var(--primary);
+    }
+    .review-card .tech-name { font-size: 18px; font-weight: 800; color: var(--navy); }
+    .review-card .tech-brand { font-size: 13px; color: var(--gray); margin-bottom: 16px; }
+    .stars-container {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin: 20px 0;
+    }
+    .star-btn {
+      font-size: 42px;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: none;
+      border: none;
+      padding: 0 4px;
+      filter: grayscale(1);
+      opacity: 0.3;
+    }
+    .star-btn.active {
+      filter: grayscale(0);
+      opacity: 1;
+      transform: scale(1.1);
+    }
+    .star-btn:hover {
+      transform: scale(1.2);
+      filter: grayscale(0);
+      opacity: 0.7;
+    }
+    .rating-label {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--navy);
+      margin-bottom: 4px;
+    }
+    .rating-emoji { font-size: 32px; margin-bottom: 12px; }
+    .review-comment {
+      margin: 16px 0;
+    }
+    .review-comment textarea {
+      width: 100%;
+      padding: 14px;
+      border: 2px solid var(--gray-border);
+      border-radius: var(--radius);
+      font-size: 14px;
+      min-height: 80px;
+      resize: vertical;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    .review-comment textarea:focus { outline: none; border-color: var(--primary); }
+    .review-comment textarea::placeholder { color: #bbb; }
+    .review-success {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .review-success .icon { font-size: 64px; margin-bottom: 16px; }
+    .review-success h2 { font-size: 22px; color: var(--green); margin-bottom: 8px; }
+    .review-success p { color: var(--gray); font-size: 14px; margin-bottom: 20px; }
+    .order-select-grid {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .completed-order-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px;
+      background: var(--white);
+      border-radius: var(--radius);
+      border: 2px solid var(--gray-border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .completed-order-card:hover { border-color: var(--primary); }
+    .completed-order-card .icon { font-size: 24px; }
+    .completed-order-card .info { flex: 1; }
+    .completed-order-card .brand { font-size: 14px; font-weight: 800; color: var(--navy); }
+    .completed-order-card .tech { font-size: 12px; color: var(--gray); }
+    .completed-order-card .action { color: var(--primary); font-weight: 700; font-size: 12px; }
+    .rating-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--gray);
+      font-weight: 600;
+      max-width: 300px;
+      margin: -8px auto 8px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">
+    <a href="/" class="nav-brand"><span>🔧</span> DoToR</a>
+    <div class="nav-links">
+      <a href="/">Book Repair</a>
+      <a href="/tracking.html">Track</a>
+      <a href="/orders.html">My Orders</a>
+      <a href="/profile.html">Profile</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="header-card navy">
+      <h1>⭐ Rate Your Technician</h1>
+      <p>Share your feedback and help others choose the best service</p>
+    </div>
+
+    <!-- Not logged in -->
+    <div id="notLoggedIn" class="card" style="display:none;">
+      <div style="text-align:center;padding:30px 20px;">
+        <div style="font-size:50px;margin-bottom:12px;">🔒</div>
+        <h3 style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:6px;">Not Signed In</h3>
+        <p style="font-size:13px;color:var(--gray);margin-bottom:20px;">Sign in to rate your technician.</p>
+        <a href="login.html" class="btn btn-primary">📱 Sign In</a>
+      </div>
+    </div>
+
+    <!-- Step 1: Select completed order -->
+    <div id="stepSelectOrder" class="card" style="display:none;">
+      <div class="card-title">📋 Completed Orders</div>
+      <p style="font-size:13px;color:var(--gray);margin-bottom:12px;">
+        Select a completed order to rate the technician who serviced it.
+      </p>
+      <div id="completedOrdersList" class="order-select-grid"></div>
+      <div id="noCompletedOrders" style="display:none;text-align:center;padding:30px;">
+        <div style="font-size:40px;margin-bottom:10px;">📭</div>
+        <p style="font-size:13px;color:var(--gray);">No completed orders to review yet.</p>
+        <a href="/" class="btn btn-primary btn-sm" style="margin-top:12px;">📱 Book a Repair</a>
+      </div>
+      <div id="alreadyReviewed" style="display:none;text-align:center;padding:20px;">
+        <div style="font-size:40px;margin-bottom:10px;">✅</div>
+        <p style="font-size:13px;color:var(--gray);">You've already reviewed this technician for this order.</p>
+      </div>
+    </div>
+
+    <!-- Step 2: Rating form -->
+    <div id="stepReviewForm" class="card review-page" style="display:none;">
+      <div class="card-title" id="reviewFormTitle">⭐ Review Technician</div>
+      <div class="review-card">
+        <div class="tech-avatar" id="reviewTechAvatar">🔧</div>
+        <div class="tech-name" id="reviewTechName">Technician</div>
+        <div class="tech-brand" id="reviewTechBrand">Service for your device</div>
+
+        <div class="rating-emoji" id="ratingEmoji">😐</div>
+        <div class="rating-label" id="ratingLabel">Tap to rate your experience</div>
+
+        <div class="stars-container" id="starsContainer">
+          <button class="star-btn" data-rating="1" onclick="selectRating(1)">⭐</button>
+          <button class="star-btn" data-rating="2" onclick="selectRating(2)">⭐</button>
+          <button class="star-btn" data-rating="3" onclick="selectRating(3)">⭐</button>
+          <button class="star-btn" data-rating="4" onclick="selectRating(4)">⭐</button>
+          <button class="star-btn" data-rating="5" onclick="selectRating(5)">⭐</button>
+        </div>
+        <div class="rating-labels">
+          <span>Poor</span>
+          <span>Fair</span>
+          <span>Good</span>
+          <span>Great</span>
+          <span>Excellent</span>
+        </div>
+
+        <div class="review-comment">
+          <textarea id="reviewComment" placeholder="Tell us about your experience... (optional)"></textarea>
+        </div>
+
+        <button class="btn btn-primary btn-lg" onclick="submitReview()" id="submitReviewBtn" disabled>
+          ⭐ Submit Review
+        </button>
+
+        <button class="btn btn-outline btn-block" onclick="goBackToOrders()" style="margin-top:12px;">
+          ← Back to Orders
+        </button>
+      </div>
+    </div>
+
+    <!-- Success State -->
+    <div id="reviewSuccess" class="card" style="display:none;">
+      <div class="review-success">
+        <div class="icon">🎉</div>
+        <h2>Thank You!</h2>
+        <p>Your review helps other customers find great technicians.</p>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+          <a href="orders.html" class="btn btn-primary">📋 My Orders</a>
+          <a href="/" class="btn btn-outline">📱 Book Another Repair</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">© 2025 DoToR - Doorstep Repair Service</div>
+
+  <script type="module">
+    import { listenOrders, submitTechReview, getTechProfile } from './firebase.js';
+
+    let currentPhone = '';
+    let selectedRating = 0;
+    let selectedOrder = null;
+    let allCompletedOrders = [];
+    let unsubOrders = null;
+
+    // ── Init ──────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+      currentPhone = localStorage.getItem('customerPhone');
+      if (!currentPhone) {
+        document.getElementById('notLoggedIn').style.display = 'block';
+        return;
+      }
+
+      // Check if orderId passed in URL
+      const params = new URLSearchParams(window.location.search);
+      const orderParam = params.get('orderId');
+      if (orderParam) {
+        loadAndOpenReview(orderParam);
+        return;
+      }
+
+      loadCompletedOrders();
+    });
+
+    // Clean up listeners on page unload
+    window.addEventListener('beforeunload', () => {
+      if (unsubOrders) unsubOrders();
+    });
+
+    function loadCompletedOrders() {
+      document.getElementById('stepSelectOrder').style.display = 'block';
+
+      if (unsubOrders) unsubOrders();
+
+      unsubOrders = listenOrders((orders) => {
+        const completed = orders.filter(o =>
+          o.customerPhone === currentPhone &&
+          o.status === 'completed' &&
+          o.techName
+        );
+        allCompletedOrders = completed;
+
+        const container = document.getElementById('completedOrdersList');
+        const empty = document.getElementById('noCompletedOrders');
+
+        if (completed.length === 0) {
+          container.innerHTML = '';
+          empty.style.display = 'block';
+          return;
+        }
+
+        empty.style.display = 'none';
+        container.innerHTML = completed.map(order => `
+          <div class="completed-order-card" onclick="openReviewForm('${order.id}')">
+            <div class="icon">✅</div>
+            <div class="info">
+              <div class="brand">${order.brand || 'Device'}</div>
+              <div class="tech">🛵 ${order.techName || 'Technician'} ${order.model ? '· ' + order.model : ''}</div>
+            </div>
+            <div class="action">Rate →</div>
+          </div>
+        `).join('');
+      });
+    }
+
+    async function loadAndOpenReview(orderId) {
+      if (unsubOrders) unsubOrders();
+      unsubOrders = listenOrders((orders) => {
+        const order = orders.find(o => o.id === orderId && o.customerPhone === currentPhone);
+        if (order && order.status === 'completed' && order.techName) {
+          document.getElementById('stepSelectOrder').style.display = 'none';
+          openReviewForm(order.id);
+        }
+      });
+    }
+
+    // ── Open Review Form ─────────────────────────────────────────────
+    window.openReviewForm = async function(orderId) {
+      if (unsubOrders) unsubOrders();
+      unsubOrders = listenOrders((orders) => {
+        const order = orders.find(o => o.id === orderId);
+        if (!order) return;
+
+        selectedOrder = order;
+        selectedRating = 0;
+
+        document.getElementById('stepSelectOrder').style.display = 'none';
+        document.getElementById('stepReviewForm').style.display = 'block';
+        document.getElementById('reviewSuccess').style.display = 'none';
+
+        document.getElementById('reviewTechName').textContent = order.techName || 'Technician';
+        document.getElementById('reviewTechBrand').textContent =
+          `📱 ${order.brand || 'Device'} service` +
+          (order.model ? ` (${order.model})` : '') +
+          ` · ${order.dateLabel || ''}`;
+
+        // Reset form
+        document.getElementById('reviewComment').value = '';
+        document.querySelectorAll('.star-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('submitReviewBtn').disabled = true;
+        document.getElementById('ratingEmoji').textContent = '😐';
+        document.getElementById('ratingLabel').textContent = 'Tap to rate your experience';
+
+        // Fetch tech profile for avatar
+        if (order.techPhone) {
+          getTechProfile(order.techPhone).then(profile => {
+            const avatar = document.getElementById('reviewTechAvatar');
+            if (profile?.photo) {
+              avatar.innerHTML = `<img src="${profile.photo}" alt="${profile.name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+            } else {
+              avatar.innerHTML = '🔧';
+            }
+          }).catch(() => {});
+        }
+      });
+    };
+
+    // ── Star Rating ──────────────────────────────────────────────────
+    window.selectRating = function(rating) {
+      selectedRating = rating;
+      document.querySelectorAll('.star-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', i < rating);
+      });
+
+      document.getElementById('submitReviewBtn').disabled = false;
+
+      const emojis = ['😞', '😕', '😐', '😊', '🤩'];
+      const labels = ['Poor', 'Fair', 'Good', 'Great', 'Excellent!'];
+      document.getElementById('ratingEmoji').textContent = emojis[rating - 1];
+      document.getElementById('ratingLabel').textContent = labels[rating - 1];
+    };
+
+    // ── Submit Review ────────────────────────────────────────────────
+    window.submitReview = async function() {
+      if (!selectedRating || !selectedOrder) return;
+
+      const comment = document.getElementById('reviewComment').value.trim();
+      const btn = document.getElementById('submitReviewBtn');
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Submitting...';
+
+      try {
+        await submitTechReview(
+          selectedOrder.techPhone,
+          selectedOrder.techName,
+          localStorage.getItem('customerName') || 'Customer',
+          selectedRating,
+          comment
+        );
+
+        document.getElementById('stepReviewForm').style.display = 'none';
+        document.getElementById('reviewSuccess').style.display = 'block';
+        showToast('⭐ Review submitted! Thank you!', 'success');
+      } catch(err) {
+        showToast('❌ Failed to submit review. Please try again.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '⭐ Submit Review';
+      }
+    };
+
+    window.goBackToOrders = function() {
+      document.getElementById('stepReviewForm').style.display = 'none';
+      document.getElementById('stepSelectOrder').style.display = 'block';
+      selectedOrder = null;
+      selectedRating = 0;
+    };
+
+    function showToast(msg, type = 'success') {
+      const existing = document.querySelector('.toast');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+  </script>
+</body>
+</html>

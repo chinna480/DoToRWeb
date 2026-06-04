@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DoToR - Completed Repairs</title>
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    if (localStorage.getItem('dotorAdmin') !== 'true') {
+      window.location.href = 'login.html?redirect=completed.html';
+    }
+  </script>
+  <style>
+    .admin-completed { max-width: 900px; margin: 0 auto; }
+    .completed-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+      border-left: 4px solid var(--green);
+    }
+    .completed-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+    .completed-card-body { font-size: 13px; }
+    .completed-card-body .row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+    .completed-card-body .label { color: var(--gray); font-weight: 600; min-width: 80px; }
+    .completed-card-body .value { color: var(--navy); font-weight: 700; }
+    .completed-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #e8f5e9;
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+    }
+    .search-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .search-row input { flex: 1; }
+    .completed-count {
+      font-size: 13px;
+      color: var(--gray);
+      margin-bottom: 12px;
+    }
+    .completed-time {
+      font-size: 11px;
+      color: var(--gray);
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--gray-border);
+    }
+    .completed-stats-bar {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .completed-stat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--navy);
+      font-weight: 700;
+      background: var(--white);
+      padding: 8px 14px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .completed-stat .num { font-size: 18px; color: var(--green); }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a href="/" class="nav-brand"><span>🔧</span> DoToR Admin</a>
+    <div class="nav-links">
+      <a href="/">Dashboard</a>
+      <a href="orders.html">Orders</a>
+      <a href="completed.html" class="active">Completed</a>
+      <a href="technicians.html">Technicians</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="header-card navy" style="background:linear-gradient(135deg,#2e7d32,#1b5e20);">
+      <h1>✅ Completed Repairs</h1>
+      <p>View all successfully completed repairs with customer details, devices, and completion timestamps</p>
+    </div>
+
+    <div class="card admin-completed">
+      <!-- Stats -->
+      <div class="completed-stats-bar" id="completedStats">
+        <div class="completed-stat">✅ <span class="num" id="statCompletedCount">—</span> Total Repairs</div>
+        <div class="completed-stat">📅 <span class="num" id="statTodayCount">—</span> Completed Today</div>
+        <div class="completed-stat">🔧 <span class="num" id="statUniqueDevices">—</span> Unique Devices</div>
+      </div>
+
+      <!-- Search -->
+      <div class="search-row">
+        <input type="text" id="searchInput" class="form-input" placeholder="Search by customer name, phone, brand, model, location, technician..." oninput="applyFilters()">
+        <button class="btn btn-outline btn-sm" onclick="exportCompleted()">📥 Export</button>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span class="completed-count" id="completedCount">Loading completed repairs...</span>
+        <button class="btn btn-sm btn-navy" onclick="refreshData()">🔄 Refresh</button>
+      </div>
+
+      <!-- Completed Orders Container -->
+      <div id="completedContainer">
+        <div class="loading"><div class="spinner"></div><p>Loading completed repairs...</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">© 2025 DoToR - Admin Dashboard</div>
+
+  <script type="module">
+    import { listenOrders } from './firebase.js';
+
+    let allOrders = [];
+    let unsubOrders = null;
+    let completedOrders = [];
+
+    // ── Init ──────────────────────────────────────────────────────────
+    unsubOrders = listenOrders((orders) => {
+      allOrders = orders;
+      completedOrders = orders
+        .filter(o => o.status === 'completed')
+        .sort((a, b) => (b.completedTime || 0) - (a.completedTime || 0));
+      applyFilters();
+    });
+
+    // ── Format helpers ────────────────────────────────────────────────
+    function formatDate(ts) {
+      if (!ts) return '—';
+      return new Date(ts).toLocaleDateString('en-IN', {
+        year: 'numeric', month: 'short', day: 'numeric'
+      });
+    }
+
+    function formatTime(ts) {
+      if (!ts) return '';
+      return new Date(ts).toLocaleTimeString('en-IN', {
+        hour: '2-digit', minute: '2-digit'
+      });
+    }
+
+    function formatFullDateTime(ts) {
+      if (!ts) return '—';
+      return `${formatDate(ts)} at ${formatTime(ts)}`;
+    }
+
+    function isToday(ts) {
+      if (!ts) return false;
+      const today = new Date();
+      const date = new Date(ts);
+      return date.getDate() === today.getDate() &&
+        date.getMonth() === today.getMonth() &&
+        date.getFullYear() === today.getFullYear();
+    }
+
+    function getDeviceLabel(order) {
+      let label = order.brand || 'Device';
+      if (order.model) label += ' · ' + order.model;
+      return label;
+    }
+
+    // ── Stats ──────────────────────────────────────────────────────────
+    function updateStats(orders) {
+      document.getElementById('statCompletedCount').textContent = orders.length;
+
+      const todayCount = orders.filter(o => isToday(o.completedTime)).length;
+      document.getElementById('statTodayCount').textContent = todayCount;
+
+      const uniqueDevices = new Set(orders.map(o => `${o.brand || ''}|${o.model || ''}`).filter(x => x !== '|'));
+      document.getElementById('statUniqueDevices').textContent = uniqueDevices.size;
+    }
+
+    // ── Filters ────────────────────────────────────────────────────────
+    window.applyFilters = function() {
+      const search = document.getElementById('searchInput').value.toLowerCase().trim();
+
+      let filtered = completedOrders;
+
+      if (search) {
+        filtered = filtered.filter(o =>
+          (o.customerName || '').toLowerCase().includes(search) ||
+          (o.customerPhone || '').includes(search) ||
+          (o.brand || '').toLowerCase().includes(search) ||
+          (o.model || '').toLowerCase().includes(search) ||
+          (o.location || '').toLowerCase().includes(search) ||
+          (o.techName || '').toLowerCase().includes(search) ||
+          (o.repair || '').toLowerCase().includes(search) ||
+          (o.id || '').toLowerCase().includes(search)
+        );
+      }
+
+      document.getElementById('completedCount').textContent = `${filtered.length} completed repairs`;
+      updateStats(completedOrders);
+      renderCompleted(filtered);
+    };
+
+    // ── Render ─────────────────────────────────────────────────────────
+    function renderCompleted(orders) {
+      const container = document.getElementById('completedContainer');
+
+      if (orders.length === 0) {
+        const msg = completedOrders.length === 0
+          ? { icon: '✅', title: 'No Completed Repairs Yet', desc: 'Completed repairs will appear here once orders are marked as done.' }
+          : { icon: '🔍', title: 'No Matches Found', desc: 'Try a different search term.' };
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">${msg.icon}</div>
+            <h3>${msg.title}</h3>
+            <p>${msg.desc}</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = orders.map(order => {
+        const completedAt = formatFullDateTime(order.completedTime);
+        const completedDate = formatDate(order.completedTime);
+        const deviceStr = getDeviceLabel(order);
+        return `
+          <div class="completed-card">
+            <div class="completed-card-header">
+              <div>
+                <div style="font-size:15px;font-weight:800;color:var(--navy);">
+                  👤 ${order.customerName || 'Unknown'} — 📱 ${deviceStr}
+                </div>
+                <div style="font-size:11px;color:var(--gray);margin-top:2px;">
+                  🆔 ${order.id}
+                </div>
+              </div>
+              <span class="completed-badge">✅ Completed</span>
+            </div>
+
+            <div class="completed-card-body">
+              <div class="row"><span class="label">Phone</span><span class="value">${order.customerPhone || '—'}</span></div>
+              <div class="row"><span class="label">Location</span><span class="value">📍 ${order.location || '—'} ${order.pincode ? '📮 ' + order.pincode : ''}</span></div>
+              <div class="row"><span class="label">Repair</span><span class="value">${order.repair || 'Service'}</span></div>
+              ${order.description ? `<div class="row"><span class="label">Issue</span><span class="value">${order.description.substring(0, 100)}${order.description.length > 100 ? '...' : ''}</span></div>` : ''}
+              ${order.techName ? `<div class="row"><span class="label">Technician</span><span class="value">🛵 ${order.techName}${order.techPhone ? ' (' + order.techPhone + ')' : ''}</span></div>` : ''}
+            </div>
+
+            <div class="completed-time">
+              ✅ Completed: ${completedAt}
+              ${order.time ? `&nbsp;·&nbsp;📅 Booked: ${order.time}` : ''}
+            </div>
+
+            ${order.images && order.images.length > 0 ? `
+              <div style="display:flex;gap:4px;margin-top:6px;">
+                ${order.images.slice(0, 4).map(url => `<img src="${url}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;background:var(--gray-light);">`).join('')}
+                ${order.images.length > 4 ? `<span style="font-size:10px;color:var(--gray);align-self:center;">+${order.images.length - 4}</span>` : ''}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ── Export ─────────────────────────────────────────────────────────
+    window.exportCompleted = function() {
+      const data = completedOrders;
+      let csv = 'Order ID,Customer Name,Phone,Brand,Model,Repair,Issue,Location,Pincode,Technician,Completed Date,Completed Time,Booked Date\n';
+      data.forEach(o => {
+        const compDate = o.completedTime ? formatDate(o.completedTime) : '';
+        const compTime = o.completedTime ? formatTime(o.completedTime) : '';
+        csv += `"${o.id}","${(o.customerName || '').replace(/"/g,'""')}","${o.customerPhone || ''}","${(o.brand || '').replace(/"/g,'""')}","${(o.model || '').replace(/"/g,'""')}","${(o.repair || '').replace(/"/g,'""')}","${(o.description || '').replace(/"/g,'""')}","${(o.location || '').replace(/"/g,'""')}","${o.pincode || ''}","${(o.techName || '').replace(/"/g,'""')}","${compDate}","${compTime}","${(o.time || '').replace(/"/g,'""')}"\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dotor-completed-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('📥 Completed repairs exported!', 'success');
+    };
+
+    window.refreshData = function() {
+      if (unsubOrders) unsubOrders();
+      unsubOrders = listenOrders((orders) => {
+        allOrders = orders;
+        completedOrders = orders
+          .filter(o => o.status === 'completed')
+          .sort((a, b) => (b.completedTime || 0) - (a.completedTime || 0));
+        applyFilters();
+      });
+      showToast('🔄 Data refreshed', 'success');
+    };
+
+    function showToast(msg, type) {
+      const existing = document.querySelector('.toast');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+  </script>
+</body>
+</html>
