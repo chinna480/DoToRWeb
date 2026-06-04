@@ -15,6 +15,7 @@ import {
 } from 'react-native'
 import { db } from '../firebase/config'
 import { calcDistance } from '../utils/distance'
+import ErrorBoundary from '../../components/ErrorBoundary'
 
 // MapView is optional — only load if available
 // Platform guard prevents Metro from resolving native-only module on web bundles
@@ -31,6 +32,14 @@ if (Platform.OS !== 'web') {
 }
 
 export default function TrackingScreen() {
+  return (
+    <ErrorBoundary errorMessage="Live tracking crashed. Please go back and try again.">
+      <TrackingScreenContent />
+    </ErrorBoundary>
+  )
+}
+
+function TrackingScreenContent() {
   const router = useRouter()
   const [activeTab, setActiveTab]   = useState('home')
   const [loading, setLoading]       = useState(true)
