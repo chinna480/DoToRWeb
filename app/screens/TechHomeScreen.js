@@ -51,7 +51,6 @@ export default function TechHomeScreen() {
   const [distance, setDistance]          = useState('--')
   const [eta, setEta]                    = useState('--')
   const [currentCustPhone, setCustPhone] = useState('')
-
   const watchRef          = useRef(null)
   const mapRef            = useRef(null)
   const techPushToken     = useRef(null)
@@ -62,31 +61,27 @@ export default function TechHomeScreen() {
   const sentArrived       = useRef(false)
   const prevPendingIds    = useRef(new Set())
   const areaAssignments   = useRef({})
-  const custLocUnsubRef   = useRef(null)   // ✅ FIX: track custLocation unsub separately
-  const ongoingJobRef     = useRef(null)   // ✅ FIX: mirror ongoingJob for use inside callbacks
 
   useEffect(() => {
     loadTech()
     const unsub = listenOrders()
-    return () => {
-      unsub()
-      if (watchRef.current) watchRef.current.remove()
-      // ✅ FIX: also clean up the customer location listener on unmount
-      if (custLocUnsubRef.current) custLocUnsubRef.current()
-    }
+    return () => { unsub(); if (watchRef.current) watchRef.current.remove() }
   }, [])
 
+  const custLocUnsubRef = useRef(null)
+
   useEffect(() => {
-    ongoingJobRef.current = ongoingJob
     if (ongoingJob) {
       startLocationSharing(ongoingJob.id)
+      // ✅ FIX: Listen to custLocation under this specific order
+      if (custLocUnsubRef.current) custLocUnsubRef.current()
+      custLocUnsubRef.current = onValue(ref(db, 'orders/' + ongoingJob.id + '/custLocation'), snap => {
+        if (snap.exists()) { setCustLat(snap.val().lat); setCustLng(snap.val().lng) }
+      })
       sentNearby.current  = false
       sentArrived.current = false
-      // ✅ FIX: Listen to custLocation under this specific order, not a shared global path
-      startCustLocationListener(ongoingJob.id)
     } else {
       if (watchRef.current) { watchRef.current.remove(); watchRef.current = null }
-      // ✅ FIX: Stop listening to customer location when no ongoing job
       if (custLocUnsubRef.current) { custLocUnsubRef.current(); custLocUnsubRef.current = null }
     }
   }, [ongoingJob])
@@ -110,16 +105,16 @@ export default function TechHomeScreen() {
   }, [custLat, myLat, ongoingJob])
 
   const loadTech = async () => {
-    const n  = await AsyncStorage.getItem('techName')
-    const l  = await AsyncStorage.getItem('techLocation')
+    const n = await AsyncStorage.getItem('techName')
+    const l = await AsyncStorage.getItem('techLocation')
     const pi = await AsyncStorage.getItem('techPincode')
-    const t  = await AsyncStorage.getItem('pushToken')
-    const p  = await AsyncStorage.getItem('techPhone')
+    const t = await AsyncStorage.getItem('pushToken')
+    const p = await AsyncStorage.getItem('techPhone')
     setTechName(n || 'Technician')
     setTechLoc(l || 'Your Location')
-    techLocRef.current     = (l  || '').toLowerCase().trim()
+    techLocRef.current = (l || '').toLowerCase().trim()
     techPincodeRef.current = (pi || '').toLowerCase().trim()
-    techPhoneRef.current   = p || ''
+    techPhoneRef.current = p || ''
     if (t) techPushToken.current = t
   }
 
@@ -135,8 +130,6 @@ export default function TechHomeScreen() {
     ])
   }
 
-  // ✅ FIX: startLocationSharing now takes orderId and writes to orders/{orderId}/techLocation
-  // Previously wrote to global 'techLocation' — all technicians overwrote each other!
   const startLocationSharing = async (orderId) => {
     if (watchRef.current) return
     const { status } = await Location.requestForegroundPermissionsAsync()
@@ -146,28 +139,20 @@ export default function TechHomeScreen() {
       pos => {
         const lat = pos.coords.latitude, lng = pos.coords.longitude
         setMyLat(lat); setMyLng(lng)
-        // ✅ FIX: Write under this specific order, not a global shared path
-        set(ref(db, `orders/${orderId}/techLocation`), { lat, lng })
+        // ✅ FIX: Write under this specific order, not global techLocation
+        if (orderId) set(ref(db, 'orders/' + orderId + '/techLocation'), { lat, lng })
       }
     )
-  }
-
-  // ✅ FIX: New function — listens to custLocation under the specific order
-  // Previously listened to global 'custLocation' — showed wrong customer if multiple orders exist!
-  const startCustLocationListener = (orderId) => {
-    if (custLocUnsubRef.current) custLocUnsubRef.current() // clean up old listener first
-    const unsub = onValue(ref(db, `orders/${orderId}/custLocation`), snap => {
-      if (!snap.exists()) return
-      setCustLat(snap.val().lat)
-      setCustLng(snap.val().lng)
-    })
-    custLocUnsubRef.current = unsub
   }
 
   const listenOrders = () => {
     // Listen for area-to-technician assignments
     const unsubArea = onValue(ref(db, 'areaAssignments'), snap => {
-      areaAssignments.current = snap.exists() ? snap.val() : {}
+      if (snap.exists()) {
+        areaAssignments.current = snap.val()
+      } else {
+        areaAssignments.current = {}
+      }
     })
 
     const unsub = onValue(ref(db, 'orders'), snapshot => {
@@ -207,10 +192,12 @@ export default function TechHomeScreen() {
       }
 
       // If an area is already assigned to a different technician, exclude those jobs
+      // so only the assigned technician sees them
       pending = pending.filter(o => {
         const area = (o.location || '').toLowerCase().trim()
         const assignedTech = assignments[area]
         if (!area || !assignedTech) return true // No assignment → anyone can take it
+        // If assigned to this tech → show it
         return assignedTech.phone === myPhone
       })
 
@@ -229,9 +216,8 @@ export default function TechHomeScreen() {
       if (ongoing) setCustPhone(ongoing.customerPhone || '')
     })
 
-    // ✅ FIX REMOVED: No longer listening to global 'custLocation' here.
-    // Customer location is now fetched per-order in startCustLocationListener()
-    // which is triggered when ongoingJob changes (see useEffect above).
+    // ✅ FIX: custLocation is now per-order — listened when ongoingJob changes (see useEffect)
+    // Global custLocation listener removed to prevent wrong customer data
 
     return () => { unsub(); unsubArea() }
   }
@@ -241,9 +227,7 @@ export default function TechHomeScreen() {
     const loc   = await AsyncStorage.getItem('techLocation') || ''
     const phone = await AsyncStorage.getItem('techPhone')    || ''
     await AsyncStorage.setItem('currentOrderId', orderId)
-
-    // ✅ FIX: Removed set(ref(db, 'techInfo'), ...) — was a shared global node.
-    // Tech info is now stored directly on the order itself via the update below.
+    // ✅ FIX: Removed global techInfo — tech details stored on order directly
     update(ref(db, 'orders/' + orderId), { status: 'accepted', techPhone: phone, techName: name })
       .then(async () => {
         // Claim this area for this technician so future jobs here come to them
@@ -276,18 +260,13 @@ export default function TechHomeScreen() {
       {
         text: 'Complete ✅', onPress: async () => {
           update(ref(db, 'orders/' + orderId), { status: 'completed' })
-
-          // ✅ FIX: Remove techLocation and custLocation under the specific order only.
-          // Previously removed global 'techLocation', 'techInfo', 'custLocation' —
-          // which would wipe data for ALL active technicians!
-          remove(ref(db, `orders/${orderId}/techLocation`))
-          remove(ref(db, `orders/${orderId}/custLocation`))
-
-          if (watchRef.current) { watchRef.current.remove(); watchRef.current = null }
+          // ✅ FIX: Remove only this order's location data, not global paths
+          remove(ref(db, 'orders/' + orderId + '/techLocation'))
+          remove(ref(db, 'orders/' + orderId + '/custLocation'))
           if (custLocUnsubRef.current) { custLocUnsubRef.current(); custLocUnsubRef.current = null }
-
-          if (ongoingJobRef.current?.customerPushToken) {
-            await notifyCustomerJobDone(ongoingJobRef.current.customerPushToken)
+          if (watchRef.current) { watchRef.current.remove(); watchRef.current = null }
+          if (ongoingJob?.customerPushToken) {
+            await notifyCustomerJobDone(ongoingJob.customerPushToken)
           }
           await notifyTechJobDone()
           Alert.alert('🎉 Job Complete!', 'Great work! Customer will be asked to review.')
@@ -310,10 +289,10 @@ export default function TechHomeScreen() {
   }
 
   const TABS = [
-    { key: 'home',      icon: '🏠', label: 'Home' },
-    { key: 'pending',   icon: '📋', label: 'Pending' },
+    { key: 'home',     icon: '🏠', label: 'Home' },
+    { key: 'pending',  icon: '📋', label: 'Pending' },
     { key: 'completed', icon: '✅', label: 'Completed' },
-    { key: 'profile',   icon: '👤', label: 'Profile' },
+    { key: 'profile',  icon: '👤', label: 'Profile' },
   ]
 
   // ── HOME TAB ──
@@ -395,7 +374,7 @@ export default function TechHomeScreen() {
             </View>
           </View>
 
-          {/* Safe MapView */}
+          {/* ✅ Safe MapView */}
           {MapView && (custLat || myLat) && (
             <MapView
               ref={mapRef}
@@ -559,6 +538,7 @@ export default function TechHomeScreen() {
 
   // Show loading while navigating to profile
   if (activeTab === 'profile') {
+    // Navigate to profile screen when tab is selected
     setTimeout(() => {
       router.push('/screens/TechProfileScreen')
       setActiveTab('home')
@@ -568,8 +548,8 @@ export default function TechHomeScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-      {activeTab === 'home'      && renderHomeTab()}
-      {activeTab === 'pending'   && renderPendingTab()}
+      {activeTab === 'home' && renderHomeTab()}
+      {activeTab === 'pending' && renderPendingTab()}
       {activeTab === 'completed' && renderCompletedTab()}
 
       {/* BOTTOM TAB BAR */}
