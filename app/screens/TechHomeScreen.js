@@ -4,9 +4,7 @@ import { useRouter } from 'expo-router';
 import { onValue, ref, remove, set, update } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Image, Linking,
-  Modal,
-  Platform,
+  Alert, Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,17 +13,6 @@ import {
 } from 'react-native';
 import { db } from '../firebase/config';
 import { calcDistance } from '../utils/distance';
-
-// ── GPS-based matching configuration ─────────────────────────────────────
-// RADIUS_KM:          Maximum distance (km) to show pending jobs to a tech.
-// AUTO_ASSIGN_RADIUS: Distance (km) within which a job is eligible for auto-assign.
-// If GPS is unavailable, falls back to text-based location/pincode matching.
-const RADIUS_KM = 10          // Show jobs within 10km
-const AUTO_ASSIGN_RADIUS = 5  // Auto-assign eligible within 5km
-// ─────────────────────────────────────────────────────────────────────────
-
-import * as Notifications from 'expo-notifications'
-
 import {
   notifyCustomerJobDone,
   notifyCustomerTechAccepted,
@@ -33,22 +20,17 @@ import {
   notifyCustomerTechNearby,
   notifyTechJobDone,
   notifyTechNewJob,
-  playJobCompleteSound,
-  playNewJobSound,
 } from '../utils/notifications';
 
 // ✅ Safe import — won't crash if react-native-maps is not installed
-// Platform guard prevents Metro from resolving native-only module on web bundles
-let MapView = null, Marker = null, Polyline = null
-if (Platform.OS !== 'web') {
-  try {
-    const Maps = require('react-native-maps')
-    MapView  = Maps.default
-    Marker   = Maps.Marker
-    Polyline = Maps.Polyline
-  } catch (e) {
-    MapView = null
-  }
+let MapView, Marker, Polyline
+try {
+  const Maps = require('react-native-maps')
+  MapView  = Maps.default
+  Marker   = Maps.Marker
+  Polyline = Maps.Polyline
+} catch (e) {
+  MapView = null
 }
 
 export default function TechHomeScreen() {
@@ -69,9 +51,6 @@ export default function TechHomeScreen() {
   const [distance, setDistance]          = useState('--')
   const [eta, setEta]                    = useState('--')
   const [currentCustPhone, setCustPhone] = useState('')
-  const [fullscreenImgIndex, setFullscreenImgIndex] = useState(-1)
-  const [fullscreenImages, setFullscreenImages] = useState([])
-  const [fullscreenOrderId, setFullscreenOrderId] = useState(null)
 
   const watchRef          = useRef(null)
   const mapRef            = useRef(null)
@@ -79,11 +58,12 @@ export default function TechHomeScreen() {
   const techLocRef        = useRef('')
   const techPincodeRef    = useRef('')
   const techPhoneRef      = useRef('')
-  const myLatRef          = useRef(17.3850) // ref to avoid stale closures in onValue
-  const myLngRef          = useRef(78.4867) // ref to avoid stale closures in onValue
   const sentNearby        = useRef(false)
   const sentArrived       = useRef(false)
   const prevPendingIds    = useRef(new Set())
+  const areaAssignments   = useRef({})
+  const custLocUnsubRef   = useRef(null)   // ✅ FIX: track custLocation unsub separately
+  const ongoingJobRef     = useRef(null)   // ✅ FIX: mirror ongoingJob for use inside callbacks
 
   useEffect(() => {
     loadTech()
@@ -91,19 +71,23 @@ export default function TechHomeScreen() {
     return () => {
       unsub()
       if (watchRef.current) watchRef.current.remove()
-      // Remove tech from online tracking on unmount
-      const phone = techPhoneRef.current
-      if (phone) remove(ref(db, 'techsOnline/' + phone))
+      // ✅ FIX: also clean up the customer location listener on unmount
+      if (custLocUnsubRef.current) custLocUnsubRef.current()
     }
   }, [])
 
   useEffect(() => {
+    ongoingJobRef.current = ongoingJob
     if (ongoingJob) {
-      startLocationSharing()
+      startLocationSharing(ongoingJob.id)
       sentNearby.current  = false
       sentArrived.current = false
+      // ✅ FIX: Listen to custLocation under this specific order, not a shared global path
+      startCustLocationListener(ongoingJob.id)
     } else {
       if (watchRef.current) { watchRef.current.remove(); watchRef.current = null }
+      // ✅ FIX: Stop listening to customer location when no ongoing job
+      if (custLocUnsubRef.current) { custLocUnsubRef.current(); custLocUnsubRef.current = null }
     }
   }, [ongoingJob])
 
@@ -126,44 +110,17 @@ export default function TechHomeScreen() {
   }, [custLat, myLat, ongoingJob])
 
   const loadTech = async () => {
-    const n = await AsyncStorage.getItem('techName')
-    const l = await AsyncStorage.getItem('techLocation')
+    const n  = await AsyncStorage.getItem('techName')
+    const l  = await AsyncStorage.getItem('techLocation')
     const pi = await AsyncStorage.getItem('techPincode')
-    const t = await AsyncStorage.getItem('pushToken')
-    const p = await AsyncStorage.getItem('techPhone')
+    const t  = await AsyncStorage.getItem('pushToken')
+    const p  = await AsyncStorage.getItem('techPhone')
     setTechName(n || 'Technician')
     setTechLoc(l || 'Your Location')
-    techLocRef.current = (l || '').toLowerCase().trim()
+    techLocRef.current     = (l  || '').toLowerCase().trim()
     techPincodeRef.current = (pi || '').toLowerCase().trim()
-    techPhoneRef.current = p || ''
+    techPhoneRef.current   = p || ''
     if (t) techPushToken.current = t
-
-    // ── GPS-based matching: fetch current location for distance calculations ──
-    // This one-time position is used to filter pending jobs by actual geo-distance
-    // instead of relying purely on text-based area/pincode matching.
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status === 'granted') {
-        const pos = await Location.getCurrentPositionAsync({})
-        const lat = pos.coords.latitude
-        const lng = pos.coords.longitude
-        setMyLat(lat)
-        setMyLng(lng)
-        myLatRef.current = lat
-        myLngRef.current = lng
-        // Save to techsOnline for GPS-based proximity matching
-        if (p) {
-          set(ref(db, 'techsOnline/' + p), {
-            lat,
-            lng,
-            name: n || 'Technician',
-            lastSeen: Date.now()
-          })
-        }
-      }
-    } catch (e) {
-      console.warn('GPS not available, falling back to text-based matching')
-    }
   }
 
   const logout = () => {
@@ -171,8 +128,6 @@ export default function TechHomeScreen() {
       { text: 'Cancel' },
       {
         text: 'Logout', style: 'destructive', onPress: async () => {
-          const phone = techPhoneRef.current
-          if (phone) remove(ref(db, 'techsOnline/' + phone))
           await AsyncStorage.clear()
           router.replace('/screens/RoleScreen')
         }
@@ -180,45 +135,41 @@ export default function TechHomeScreen() {
     ])
   }
 
-  const startLocationSharing = async () => {
+  // ✅ FIX: startLocationSharing now takes orderId and writes to orders/{orderId}/techLocation
+  // Previously wrote to global 'techLocation' — all technicians overwrote each other!
+  const startLocationSharing = async (orderId) => {
     if (watchRef.current) return
     const { status } = await Location.requestForegroundPermissionsAsync()
-    if (status !== 'granted') return      watchRef.current = await Location.watchPositionAsync(
+    if (status !== 'granted') return
+    watchRef.current = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.High, timeInterval: 4000 },
       pos => {
         const lat = pos.coords.latitude, lng = pos.coords.longitude
         setMyLat(lat); setMyLng(lng)
-        myLatRef.current = lat
-        myLngRef.current = lng
-        set(ref(db, 'techLocation'), { lat, lng })
-        // Also keep techsOnline updated for GPS matching
-        const phone = techPhoneRef.current
-        if (phone) {
-          set(ref(db, 'techsOnline/' + phone), {
-            lat,
-            lng,
-            name: techName,
-            lastSeen: Date.now()
-          })
-        }
+        // ✅ FIX: Write under this specific order, not a global shared path
+        set(ref(db, `orders/${orderId}/techLocation`), { lat, lng })
       }
     )
   }
 
-  // ── GPS-based Proximity Matching ────────────────────────────────────────
-  //
-  // FILTERING LOGIC (two-tier approach):
-  //
-  // 1. GPS-BASED (preferred):
-  //    - When a tech's GPS is available, calculate Haversine distance from
-  //      the tech's current location to each order's saved GPS coords.
-  //    - Only orders within RADIUS_KM (10km) are shown, sorted by distance.
-  //
-  // 2. TEXT-BASED (fallback):
-  //    - If GPS is unavailable, fall back to matching by location text and
-  //      pincode (substring matching handles formatting differences).
-  // ─────────────────────────────────────────────────────────────────────────
+  // ✅ FIX: New function — listens to custLocation under the specific order
+  // Previously listened to global 'custLocation' — showed wrong customer if multiple orders exist!
+  const startCustLocationListener = (orderId) => {
+    if (custLocUnsubRef.current) custLocUnsubRef.current() // clean up old listener first
+    const unsub = onValue(ref(db, `orders/${orderId}/custLocation`), snap => {
+      if (!snap.exists()) return
+      setCustLat(snap.val().lat)
+      setCustLng(snap.val().lng)
+    })
+    custLocUnsubRef.current = unsub
+  }
+
   const listenOrders = () => {
+    // Listen for area-to-technician assignments
+    const unsubArea = onValue(ref(db, 'areaAssignments'), snap => {
+      areaAssignments.current = snap.exists() ? snap.val() : {}
+    })
+
     const unsub = onValue(ref(db, 'orders'), snapshot => {
       if (!snapshot.exists()) {
         setPending([]); setOngoing(null); setCompleted([]); setTotal(0); setDailyCompleted(0)
@@ -229,20 +180,7 @@ export default function TechHomeScreen() {
       let ongoing = null, count = 0, dailyCount = 0
 
       snapshot.forEach(child => {
-        const val = child.val()
-        const order = { id: child.key, ...val }
-        // Normalize images: Firebase stores arrays as objects {0:"url",1:"url"}
-        // Also handle edge cases: string, null, or malformed objects
-        if (order.images) {
-          if (typeof order.images === 'string') {
-            order.images = [order.images]
-          } else if (!Array.isArray(order.images)) {
-            order.images = Object.values(order.images).filter(v => typeof v === 'string')
-          }
-        } else {
-          order.images = []
-        }
-
+        const order = { id: child.key, ...child.val() }
         if (order.status === 'pending')   allPending.push(order)
         if (order.status === 'accepted') {
           // Only mark as ongoing if THIS tech accepted the job
@@ -250,68 +188,38 @@ export default function TechHomeScreen() {
         }
         if (order.status === 'completed') {
           completed.push(order); count++
-          // ✅ FIX: Only count completed jobs from today for the "Today's Jobs" stat
-          if (order.completedTime) {
-            const completedDate = new Date(order.completedTime)
-            const today = new Date()
-            if (completedDate.getFullYear() === today.getFullYear() &&
-                completedDate.getMonth() === today.getMonth() &&
-                completedDate.getDate() === today.getDate()) {
-              dailyCount++
-            }
-          }
+          dailyCount++
         }
       })
 
-      // ── STEP 1: Filter pending jobs by GPS distance (preferred) ───────────
-      // Use refs to avoid stale closures — refs always hold the latest GPS values
-      let pending = allPending
-      const techLat = myLatRef.current
-      const techLng = myLngRef.current
+      // Filter pending jobs by technician's location area, pincode, AND area assignments
+      const filterLoc     = techLocRef.current
+      const filterPincode = techPincodeRef.current
+      const myPhone       = techPhoneRef.current
+      const assignments   = areaAssignments.current
 
-      if (techLat !== 17.3850 || techLng !== 78.4867) {
-        // GPS is available — filter by actual geo-distance
-        pending = pending.filter(o => {
-          if (o.custLat && o.custLng) {
-            const d = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
-            return !isNaN(d) && d <= RADIUS_KM
-          }
-          // Fallback: if order has no GPS coords, use text matching
-          return textMatchOrder(o)
-        })
-        // Sort by distance (closest first) — like Rapido shows nearest rides first
-        pending.sort((a, b) => {
-          const dA = a.custLat ? parseFloat(calcDistance(techLat, techLng, a.custLat, a.custLng)) : Infinity
-          const dB = b.custLat ? parseFloat(calcDistance(techLat, techLng, b.custLat, b.custLng)) : Infinity
-          return dA - dB
-        })
-      } else {
-        // ── STEP 2: Fallback — text-based location/pincode matching ─────────
-        // This handles Google Places formatting differences
-        // (e.g. "Kukatpally" vs "Kukatpally, Hyderabad")
-        pending = pending.filter(o => textMatchOrder(o))
+      let pending = allPending
+      if (filterLoc) {
+        pending = pending.filter(o => (o.location || '').toLowerCase().trim() === filterLoc)
+      }
+      if (filterPincode) {
+        pending = pending.filter(o => (o.pincode || '').toLowerCase().trim() === filterPincode)
       }
 
-      // Send notifications AND play sound for new pending jobs
+      // If an area is already assigned to a different technician, exclude those jobs
+      pending = pending.filter(o => {
+        const area = (o.location || '').toLowerCase().trim()
+        const assignedTech = assignments[area]
+        if (!area || !assignedTech) return true // No assignment → anyone can take it
+        return assignedTech.phone === myPhone
+      })
+
       pending.forEach(order => {
         if (!prevPendingIds.current.has(order.id)) {
-          notifyTechNewJob(techPushToken.current, order.customerName, order.brand, order.repair).catch(() => {})
-          playNewJobSound().catch(() => {})
+          notifyTechNewJob(techPushToken.current, order.customerName, order.brand, order.repair)
         }
       })
       prevPendingIds.current = new Set(pending.map(o => o.id))
-
-      // Also attach GPS distance to pending jobs for display
-      if (techLat !== 17.3850 || techLng !== 78.4867) {
-        pending = pending.map(o => {
-          let distKm = null
-          if (o.custLat && o.custLng) {
-            const d = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
-            if (!isNaN(d)) distKm = d
-          }
-          return { ...o, gpsDistance: distKm }
-        })
-      }
 
       setPending(pending)
       setOngoing(ongoing)
@@ -321,36 +229,11 @@ export default function TechHomeScreen() {
       if (ongoing) setCustPhone(ongoing.customerPhone || '')
     })
 
-    const unsubCustLoc = onValue(ref(db, 'custLocation'), snap => {
-      if (!snap.exists()) return
-      setCustLat(snap.val().lat)
-      setCustLng(snap.val().lng)
-    })
+    // ✅ FIX REMOVED: No longer listening to global 'custLocation' here.
+    // Customer location is now fetched per-order in startCustLocationListener()
+    // which is triggered when ongoingJob changes (see useEffect above).
 
-    return () => { unsub(); unsubCustLoc() }
-  }
-
-  // ── Text-based order matching (fallback when GPS is unavailable) ─────────
-  // Checks if order location text contains the tech's area OR vice versa,
-  // and if pincodes match (when both are present).
-  function textMatchOrder(order) {
-    const filterLoc = techLocRef.current
-    const filterPincode = techPincodeRef.current
-
-    if (filterLoc) {
-      const orderLoc = (order.location || '').toLowerCase().trim()
-      if (!orderLoc.includes(filterLoc) && !filterLoc.includes(orderLoc)) {
-        return false
-      }
-    }
-    if (filterPincode) {
-      const orderPincode = (order.pincode || '').toLowerCase().trim()
-      // If the order has no pincode (older orders), still show it
-      if (orderPincode && orderPincode !== filterPincode) {
-        return false
-      }
-    }
-    return true
+    return () => { unsub(); unsubArea() }
   }
 
   const acceptJob = async (orderId, order) => {
@@ -358,14 +241,17 @@ export default function TechHomeScreen() {
     const loc   = await AsyncStorage.getItem('techLocation') || ''
     const phone = await AsyncStorage.getItem('techPhone')    || ''
     await AsyncStorage.setItem('currentOrderId', orderId)
-    set(ref(db, 'techInfo'), { name, location: loc, phone })
+
+    // ✅ FIX: Removed set(ref(db, 'techInfo'), ...) — was a shared global node.
+    // Tech info is now stored directly on the order itself via the update below.
     update(ref(db, 'orders/' + orderId), { status: 'accepted', techPhone: phone, techName: name })
       .then(async () => {
-        // ── If appointment, schedule local notification reminder ──
-      if (order.isAppointment && order.appointmentTime) {
-        scheduleTechAppointmentReminder(order)
-      }
-      Alert.alert('✅ Job Accepted!', 'Customer can now track you!')
+        // Claim this area for this technician so future jobs here come to them
+        const area = (order.location || '').toLowerCase().trim()
+        if (area) {
+          set(ref(db, 'areaAssignments/' + area), { name, phone, location: loc })
+        }
+        Alert.alert('✅ Job Accepted!', 'Customer can now track you!')
         if (order.customerPushToken) {
           await notifyCustomerTechAccepted(order.customerPushToken, name)
         }
@@ -389,54 +275,25 @@ export default function TechHomeScreen() {
       { text: 'Cancel' },
       {
         text: 'Complete ✅', onPress: async () => {
-          await update(ref(db, 'orders/' + orderId), { status: 'completed', completedTime: Date.now() })
-          remove(ref(db, 'techLocation'))
-          remove(ref(db, 'techInfo'))
-          remove(ref(db, 'custLocation'))
+          update(ref(db, 'orders/' + orderId), { status: 'completed' })
+
+          // ✅ FIX: Remove techLocation and custLocation under the specific order only.
+          // Previously removed global 'techLocation', 'techInfo', 'custLocation' —
+          // which would wipe data for ALL active technicians!
+          remove(ref(db, `orders/${orderId}/techLocation`))
+          remove(ref(db, `orders/${orderId}/custLocation`))
+
           if (watchRef.current) { watchRef.current.remove(); watchRef.current = null }
-          if (ongoingJob?.customerPushToken) {
-            await notifyCustomerJobDone(ongoingJob.customerPushToken)
+          if (custLocUnsubRef.current) { custLocUnsubRef.current(); custLocUnsubRef.current = null }
+
+          if (ongoingJobRef.current?.customerPushToken) {
+            await notifyCustomerJobDone(ongoingJobRef.current.customerPushToken)
           }
           await notifyTechJobDone()
-          playJobCompleteSound().catch(() => {})
           Alert.alert('🎉 Job Complete!', 'Great work! Customer will be asked to review.')
         }
       }
     ])
-  }
-
-  // ── Schedule local notification for technician appointment reminder ──
-  const scheduleTechAppointmentReminder = (order) => {
-    try {
-      const slotLabel = order.timeSlot || order.time || ''
-      const remindAt = new Date(order.appointmentTime - 15 * 60 * 1000)
-      if (remindAt > new Date()) {
-        Notifications.scheduleNotificationAsync({
-          content: {
-            title: '⏰ Appointment Reminder',
-            body: `Appointment with ${order.customerName} at ${slotLabel} is in 15 minutes!`,
-            sound: true,
-            data: { screen: 'TechHomeScreen', orderId: order.id },
-          },
-          trigger: { date: remindAt, channelId: 'dotor-channel' },
-        }).catch(() => {})
-      }
-      // Also schedule one at appointment time
-      const apptTime = new Date(order.appointmentTime)
-      if (apptTime > new Date()) {
-        Notifications.scheduleNotificationAsync({
-          content: {
-            title: '🔔 Appointment Time!',
-            body: `Time for ${order.customerName}'s appointment at ${slotLabel}! Head to ${order.location || 'the customer'}.`,
-            sound: true,
-            data: { screen: 'TechHomeScreen', orderId: order.id },
-          },
-          trigger: { date: apptTime, channelId: 'dotor-channel' },
-        }).catch(() => {})
-      }
-    } catch (e) {
-      console.log('Failed to schedule tech reminder:', e.message)
-    }
   }
 
   const navigate = () => {
@@ -453,10 +310,10 @@ export default function TechHomeScreen() {
   }
 
   const TABS = [
-    { key: 'home',     icon: '🏠', label: 'Home' },
-    { key: 'pending',  icon: '📋', label: 'Pending' },
+    { key: 'home',      icon: '🏠', label: 'Home' },
+    { key: 'pending',   icon: '📋', label: 'Pending' },
     { key: 'completed', icon: '✅', label: 'Completed' },
-    { key: 'profile',  icon: '👤', label: 'Profile' },
+    { key: 'profile',   icon: '👤', label: 'Profile' },
   ]
 
   // ── HOME TAB ──
@@ -488,18 +345,18 @@ export default function TechHomeScreen() {
       </View>
 
       {/* STATS */}
-      <View style={s.statsRow}>
-        <View style={s.statCard}>
-          <Text style={s.statLabel}>Today's Jobs</Text>
-          <Text style={s.statNum}>{dailyCompleted}</Text>
+      <View style={s.earningsRow}>
+        <View style={s.earnCard}>
+          <Text style={s.earnLabel}>Today's Jobs</Text>
+          <Text style={s.earnAmt}>{dailyCompleted}</Text>
         </View>
-        <View style={s.statCard}>
-          <Text style={s.statLabel}>Pending</Text>
-          <Text style={s.statNum}>{pendingJobs.length}</Text>
+        <View style={s.earnCard}>
+          <Text style={s.earnLabel}>Pending</Text>
+          <Text style={s.earnAmt}>{pendingJobs.length}</Text>
         </View>
-        <View style={s.statCard}>
-          <Text style={s.statLabel}>Status</Text>
-          <Text style={[s.statNum, { fontSize: 13 }]}>{isOnline ? '🟢 Active' : '🔴 Off'}</Text>
+        <View style={s.earnCard}>
+          <Text style={s.earnLabel}>Status</Text>
+          <Text style={[s.earnAmt, { fontSize: 13 }]}>{isOnline ? '🟢 Active' : '🔴 Off'}</Text>
         </View>
       </View>
 
@@ -513,30 +370,8 @@ export default function TechHomeScreen() {
         <View style={s.ongoingCard}>
           <Text style={s.jobCust}>👤 {ongoingJob.customerName}</Text>
           <Text style={s.jobType}>📱 {ongoingJob.brand} — {ongoingJob.repair}</Text>
-          {ongoingJob.modelName ? <Text style={s.jobLoc}>📲 {ongoingJob.modelName}</Text> : null}
           <Text style={s.jobLoc}>📍 {ongoingJob.location}</Text>
           {ongoingJob.pincode ? <Text style={s.jobLoc}>📮 {ongoingJob.pincode}</Text> : null}
-          {ongoingJob.description ? (
-            <View style={s.ongoingDesc}>
-              <Text style={s.ongoingDescLabel}>📝 Customer's Description:</Text>
-              <Text style={s.ongoingDescText}>"{ongoingJob.description}"</Text>
-            </View>
-          ) : null}
-
-          {/* Ongoing job images — normalized to array in listenOrders */}
-          {ongoingJob.images && ongoingJob.images.length > 0 && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-              {ongoingJob.images.slice(0, 4).map((url, idx) => (
-                <TouchableOpacity key={idx} onPress={() => { setFullscreenImgIndex(idx); setFullscreenImages(ongoingJob.images); setFullscreenOrderId(ongoingJob.id) }}>
-                  <Image source={{ uri: url }} style={{ width: 72, height: 72, borderRadius: 10, backgroundColor: '#eee' }} resizeMode="cover" />
-                </TouchableOpacity>
-              ))}
-              {ongoingJob.images.length > 4 && (
-                <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{ongoingJob.images.length - 4}</Text>
-              )}
-            </View>
-          )}
-
           <Text style={s.inProgressTxt}>⚡ In Progress...</Text>
 
           <View style={s.distBanner}>
@@ -560,8 +395,8 @@ export default function TechHomeScreen() {
             </View>
           </View>
 
-          {/* ✅ Safe MapView */}
-          {MapView && Marker && (custLat || myLat) && (
+          {/* Safe MapView */}
+          {MapView && (custLat || myLat) && (
             <MapView
               ref={mapRef}
               style={s.map}
@@ -576,12 +411,10 @@ export default function TechHomeScreen() {
               {custLat && (
                 <>
                   <Marker coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Customer" />
-                  {Polyline && (
-                    <Polyline
-                      coordinates={[{ latitude: myLat, longitude: myLng }, { latitude: custLat, longitude: custLng }]}
-                      strokeColor="#FF6B00" strokeWidth={3} lineDashPattern={[8, 8]}
-                    />
-                  )}
+                  <Polyline
+                    coordinates={[{ latitude: myLat, longitude: myLng }, { latitude: custLat, longitude: custLng }]}
+                    strokeColor="#FF6B00" strokeWidth={3} lineDashPattern={[8, 8]}
+                  />
                 </>
               )}
             </MapView>
@@ -607,6 +440,25 @@ export default function TechHomeScreen() {
         </View>
       )}
 
+      {/* QUICK ACTIONS */}
+      <Text style={s.sectionTitle}>⚡ Quick Actions</Text>
+      <View style={s.quickRow}>
+        <TouchableOpacity style={s.quickCard} onPress={() => setActiveTab('pending')}>
+          <Text style={s.quickIcon}>📋</Text>
+          <Text style={s.quickLabel}>Pending Jobs</Text>
+          <View style={s.quickBadge}><Text style={s.quickBadgeTxt}>{pendingJobs.length}</Text></View>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.quickCard} onPress={() => setActiveTab('completed')}>
+          <Text style={s.quickIcon}>✅</Text>
+          <Text style={s.quickLabel}>Completed</Text>
+          <Text style={s.quickSub}>{dailyCompleted} today</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.quickCard} onPress={logout}>
+          <Text style={s.quickIcon}>🚪</Text>
+          <Text style={s.quickLabel}>Logout</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={{ height: 90 }} />
     </ScrollView>
   )
@@ -628,76 +480,40 @@ export default function TechHomeScreen() {
           <Text style={{ fontSize: 13, color: '#888', marginTop: 5 }}>No pending jobs right now</Text>
         </View>
       ) : (
-        pendingJobs.map(order => {
-          // Show GPS distance if available
-          const distDisplay = order.gpsDistance != null
-            ? `📍 ${order.gpsDistance.toFixed(1)} km away`
-            : null
-
-          return (
-            <View key={order.id} style={s.jobCard}>
-              <View style={s.newBadge}><Text style={s.newBadgeTxt}>NEW</Text></View>
-              <Text style={s.jobCust}>👤 {order.customerName}</Text>
-              <Text style={s.jobType}>📱 {order.brand} — {order.repair}</Text>
-              {order.modelName ? <Text style={s.jobLoc}>📲 {order.modelName}</Text> : null}
-              <Text style={s.jobLoc}>📍 {order.location}</Text>
-              {order.pincode ? <Text style={s.jobLoc}>📮 {order.pincode}</Text> : null}
-              {order.description ? (
-                <View style={s.descTag}>
-                  <Text style={s.descTagText}>📝 "{order.description.substring(0, 80)}{order.description.length > 80 ? '...' : ''}"</Text>
+        pendingJobs.map(order => (
+          <View key={order.id} style={s.jobCard}>
+            <View style={s.newBadge}><Text style={s.newBadgeTxt}>NEW</Text></View>
+            <Text style={s.jobCust}>👤 {order.customerName}</Text>
+            <Text style={s.jobType}>📱 {order.brand} — {order.repair}</Text>
+            <Text style={s.jobLoc}>📍 {order.location}</Text>
+            {order.pincode ? <Text style={s.jobLoc}>📮 {order.pincode}</Text> : null}
+            <Text style={s.jobTime}>🕐 {order.time}</Text>
+            <View style={s.jobActions}>
+              {ongoingJob ? (
+                <View style={{ flex: 1, backgroundColor: '#fff3e0', padding: 10, borderRadius: 10, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#e65100' }}>⚠️ Complete current job first</Text>
                 </View>
-              ) : null}
-
-              {/* Order images — normalized to array in listenOrders */}
-              {order.images && order.images.length > 0 && (
-                <View style={{ flexDirection: 'row', gap: 4, marginTop: 6 }}>
-                  {order.images.slice(0, 3).map((url, idx) => (
-                    <TouchableOpacity key={idx} onPress={() => { setFullscreenImgIndex(idx); setFullscreenImages(order.images); setFullscreenOrderId(order.id) }}>
-                      <Image source={{ uri: url }} style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: '#eee' }} resizeMode="cover" />
-                    </TouchableOpacity>
-                  ))}
-                  {order.images.length > 3 && (
-                    <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{order.images.length - 3}</Text>
-                  )}
-                </View>
-              )}
-
-              <Text style={s.jobTime}>🕐 {order.time}</Text>
-              {/* GPS distance display — shows how far the customer is */}
-              {distDisplay && (
-                <Text style={[s.jobLoc, order.gpsDistance <= AUTO_ASSIGN_RADIUS && s.jobAutoRange]}>
-                  {order.gpsDistance <= AUTO_ASSIGN_RADIUS
-                    ? `📍 ${order.gpsDistance.toFixed(1)} km (auto-assign range 🎯)`
-                    : distDisplay}
-                </Text>
-              )}
-              <View style={s.jobActions}>
-                {ongoingJob ? (
-                  <View style={{ flex: 1, backgroundColor: '#fff3e0', padding: 10, borderRadius: 10, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#e65100' }}>⚠️ Complete current job first</Text>
-                  </View>
-                ) : (
-                  <>
-                    <TouchableOpacity style={s.rejectBtn} onPress={() => rejectJob(order.id)}>
-                      <Text style={s.rejectTxt}>✕ Reject</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={s.acceptBtn} onPress={() => acceptJob(order.id, order)}>
-                      <Text style={s.acceptTxt}>✓ Accept</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-              {order.id && (
-                <TouchableOpacity
-                  style={s.pendingChatBtn}
-                  onPress={() => router.push(`/screens/ChatScreen?orderId=${order.id}&role=tech&customerName=${encodeURIComponent(order.customerName || 'Customer')}&techName=${encodeURIComponent(techName)}`)}
-                >
-                  <Text style={s.pendingChatTxt}>💬 Chat with Customer</Text>
-                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity style={s.rejectBtn} onPress={() => rejectJob(order.id)}>
+                    <Text style={s.rejectTxt}>✕ Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.acceptBtn} onPress={() => acceptJob(order.id, order)}>
+                    <Text style={s.acceptTxt}>✓ Accept</Text>
+                  </TouchableOpacity>
+                </>
               )}
             </View>
-          )
-        })
+            {order.id && (
+              <TouchableOpacity
+                style={s.pendingChatBtn}
+                onPress={() => router.push(`/screens/ChatScreen?orderId=${order.id}&role=tech&customerName=${encodeURIComponent(order.customerName || 'Customer')}&techName=${encodeURIComponent(techName)}`)}
+              >
+                <Text style={s.pendingChatTxt}>💬 Chat with Customer</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ))
       )}
 
       <View style={{ height: 90 }} />
@@ -726,27 +542,8 @@ export default function TechHomeScreen() {
             <View>
               <Text style={s.compCust}>👤 {order.customerName}</Text>
               <Text style={s.compType}>📱 {order.brand} — {order.repair}</Text>
-              {order.modelName ? <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📲 {order.modelName}</Text> : null}
               <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📍 {order.location}</Text>
               {order.pincode ? <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📮 {order.pincode}</Text> : null}
-              {order.description ? (
-                <Text style={{ fontSize: 11, color: '#FF6B00', marginTop: 2, fontStyle: 'italic' }}>
-                  📝 "{order.description.substring(0, 50)}{order.description.length > 50 ? '...' : ''}"
-                </Text>
-              ) : null}
-              {/* Completed job images — normalized to array in listenOrders */}
-              {order.images && order.images.length > 0 && (
-                <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
-                  {order.images.slice(0, 3).map((url, idx) => (
-                    <TouchableOpacity key={idx} onPress={() => { setFullscreenImgIndex(idx); setFullscreenImages(order.images); setFullscreenOrderId(order.id) }}>
-                      <Image source={{ uri: url }} style={{ width: 36, height: 36, borderRadius: 6, backgroundColor: '#eee' }} resizeMode="cover" />
-                    </TouchableOpacity>
-                  ))}
-                  {order.images.length > 3 && (
-                    <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{order.images.length - 3}</Text>
-                  )}
-                </View>
-              )}
             </View>
             <View style={s.compRight}>
               <Text style={s.compPrice}>✅ Done</Text>
@@ -760,70 +557,8 @@ export default function TechHomeScreen() {
     </ScrollView>
   )
 
-  {/* FULLSCREEN IMAGE VIEWER with navigation */}
-  const renderFullscreenImage = () => {
-    const isOpen = fullscreenImgIndex >= 0 && fullscreenImages.length > 0
-    const currentUrl = isOpen ? fullscreenImages[fullscreenImgIndex] : null
-    const total = fullscreenImages.length
-
-    const goNext = () => {
-      if (fullscreenImgIndex < total - 1) {
-        setFullscreenImgIndex(fullscreenImgIndex + 1)
-      }
-    }
-
-    const goPrev = () => {
-      if (fullscreenImgIndex > 0) {
-        setFullscreenImgIndex(fullscreenImgIndex - 1)
-      }
-    }
-
-    const close = () => {
-      setFullscreenImgIndex(-1)
-      setFullscreenImages([])
-    }
-
-    return (
-      <Modal visible={isOpen} transparent onRequestClose={close}>
-        <View style={s.modalOverlay}>
-          {/* Close button */}
-          <TouchableOpacity style={s.modalClose} onPress={close}>
-            <Text style={s.modalCloseTxt}>✕</Text>
-          </TouchableOpacity>
-
-          {/* Image counter */}
-          {total > 1 && (
-            <View style={s.modalCounter}>
-              <Text style={s.modalCounterTxt}>{fullscreenImgIndex + 1} / {total}</Text>
-            </View>
-          )}
-
-          {/* Previous arrow */}
-          {total > 1 && fullscreenImgIndex > 0 && (
-            <TouchableOpacity style={[s.modalArrow, s.modalArrowLeft]} onPress={goPrev}>
-              <Text style={s.modalArrowTxt}>←</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Image — key forces remount on navigation */}
-          {currentUrl && (
-            <Image key={fullscreenImgIndex} source={{ uri: currentUrl }} style={s.modalImage} resizeMode="contain" />
-          )}
-
-          {/* Next arrow */}
-          {total > 1 && fullscreenImgIndex < total - 1 && (
-            <TouchableOpacity style={[s.modalArrow, s.modalArrowRight]} onPress={goNext}>
-              <Text style={s.modalArrowTxt}>→</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </Modal>
-    )
-  }
-
   // Show loading while navigating to profile
   if (activeTab === 'profile') {
-    // Navigate to profile screen when tab is selected
     setTimeout(() => {
       router.push('/screens/TechProfileScreen')
       setActiveTab('home')
@@ -833,10 +568,10 @@ export default function TechHomeScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-      {activeTab === 'home' && renderHomeTab()}
-      {activeTab === 'pending' && renderPendingTab()}
+      {activeTab === 'home'      && renderHomeTab()}
+      {activeTab === 'pending'   && renderPendingTab()}
       {activeTab === 'completed' && renderCompletedTab()}
-      {renderFullscreenImage()}
+
       {/* BOTTOM TAB BAR */}
       <View style={s.tabBar}>
         {TABS.map(tab => (
@@ -872,10 +607,10 @@ const s = StyleSheet.create({
   offlinePill:   { backgroundColor: '#ffebee' },
   onlineTxt:     { fontSize: 12, fontWeight: '800', color: '#2e7d32' },
   offlineTxt:    { color: '#c62828' },
-  statsRow:   { flexDirection: 'row', gap: 10, margin: 15 },
-  statCard:      { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', elevation: 3 },
-  statLabel:     { fontSize: 11, color: '#888', fontWeight: '700' },
-  statNum:       { fontSize: 18, fontWeight: '800', color: '#1A3A6B', marginTop: 4 },
+  earningsRow:   { flexDirection: 'row', gap: 10, margin: 15 },
+  earnCard:      { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', elevation: 3 },
+  earnLabel:     { fontSize: 11, color: '#888', fontWeight: '700' },
+  earnAmt:       { fontSize: 18, fontWeight: '800', color: '#1A3A6B', marginTop: 4 },
   sectionTitle:  { fontSize: 16, fontWeight: '800', color: '#1A3A6B', marginHorizontal: 15, marginTop: 20, marginBottom: 12 },
   emptyCard:     { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginHorizontal: 15, alignItems: 'center', elevation: 2, marginBottom: 5 },
   emptyTxt:      { color: '#888', fontWeight: '600', fontSize: 13 },
@@ -886,7 +621,6 @@ const s = StyleSheet.create({
   jobType:       { fontSize: 13, fontWeight: '700', color: '#FF6B00', marginTop: 4 },
   jobLoc:        { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 3 },
   jobTime:       { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 3 },
-  jobAutoRange:  { color: '#2e7d32', fontWeight: '800' },
   jobActions:    { flexDirection: 'row', gap: 10, marginTop: 15 },
   rejectBtn:     { flex: 1, backgroundColor: '#ffebee', padding: 12, borderRadius: 12, alignItems: 'center' },
   rejectTxt:     { color: '#c62828', fontSize: 14, fontWeight: '800' },
@@ -917,20 +651,20 @@ const s = StyleSheet.create({
   pendingChatBtn: { backgroundColor: '#FF6B00', padding: 10, borderRadius: 12, alignItems: 'center', marginTop: 8 },
   pendingChatTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
   completedCard: { backgroundColor: '#fff', borderRadius: 14, padding: 15, marginHorizontal: 15, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 2 },
-  // ── Description Styles ──
-  descTag:       { backgroundColor: '#fff8e1', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginTop: 4, alignSelf: 'flex-start' },
-  descTagText:   { fontSize: 11, color: '#e65100', fontWeight: '600', fontStyle: 'italic' },
-  ongoingDesc:   { backgroundColor: '#fff8e1', borderRadius: 10, padding: 10, marginTop: 6 },
-  ongoingDescLabel: { fontSize: 11, fontWeight: '800', color: '#e65100', marginBottom: 3 },
-  ongoingDescText:  { fontSize: 12, color: '#333', fontStyle: 'italic', lineHeight: 18 },
-
-
-
   compCust:      { fontSize: 13, fontWeight: '800', color: '#1A3A6B' },
   compType:      { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 3 },
   compRight:     { alignItems: 'flex-end' },
   compPrice:     { fontSize: 14, fontWeight: '800', color: '#FF6B00' },
   compTime:      { fontSize: 11, color: '#888', marginTop: 3 },
+
+  // ── Quick Actions ──
+  quickRow:      { flexDirection: 'row', gap: 10, marginHorizontal: 15, marginBottom: 20 },
+  quickCard:     { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 16, alignItems: 'center', elevation: 3, position: 'relative' },
+  quickIcon:     { fontSize: 28 },
+  quickLabel:    { fontSize: 11, fontWeight: '700', color: '#1A3A6B', marginTop: 6 },
+  quickSub:      { fontSize: 10, color: '#888', marginTop: 2 },
+  quickBadge:    { position: 'absolute', top: 6, right: 6, backgroundColor: '#FF6B00', width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  quickBadgeTxt: { fontSize: 10, fontWeight: '800', color: '#fff' },
 
   // ── Bottom Tab Bar ──
   tabBar:        { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },
@@ -943,16 +677,4 @@ const s = StyleSheet.create({
   tabIndicator:  { position: 'absolute', top: -1, width: 24, height: 3, backgroundColor: '#FF6B00', borderRadius: 2, alignSelf: 'center' },
   tabBadge:      { position: 'absolute', top: 0, right: '15%', backgroundColor: '#FF6B00', width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   tabBadgeTxt:   { fontSize: 9, fontWeight: '800', color: '#fff' },
-
-  // ── Fullscreen Image Viewer ──
-  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
-  modalClose:     { position: 'absolute', top: 55, right: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
-  modalCloseTxt:  { color: '#fff', fontSize: 18, fontWeight: '800' },
-  modalCounter:   { position: 'absolute', top: 55, left: 20, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, zIndex: 10 },
-  modalCounterTxt:{ color: '#fff', fontSize: 14, fontWeight: '700' },
-  modalArrow:     { position: 'absolute', top: 0, bottom: 0, width: 60, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-  modalArrowLeft: { left: 0 },
-  modalArrowRight:{ right: 0 },
-  modalArrowTxt:  { color: 'rgba(255,255,255,0.8)', fontSize: 48, fontWeight: '300' },
-  modalImage:     { width: '90%', height: '70%' },
 })

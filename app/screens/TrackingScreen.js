@@ -1,43 +1,62 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'expo-router'
-import {
-  View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Linking, Alert, Platform
-} from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { db } from '../firebase/config'
-import { ref, onValue, set } from 'firebase/database'
 import * as Location from 'expo-location'
+import { useRouter } from 'expo-router'
+import { onValue, ref, set } from 'firebase/database'
+import { useEffect, useRef, useState } from 'react'
+import {
+  Alert,
+  Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native'
+import { db } from '../firebase/config'
 import { calcDistance } from '../utils/distance'
+
+// MapView is optional — only load if available
+let MapView, Marker, Polyline
+try {
+  const Maps = require('react-native-maps')
+  MapView  = Maps.default
+  Marker   = Maps.Marker
+  Polyline = Maps.Polyline
+} catch (e) {
+  MapView = null
+}
 
 export default function TrackingScreen() {
   const router = useRouter()
-  const [custLat, setCustLat]     = useState(null)
-  const [custLng, setCustLng]     = useState(null)
+  const [activeTab, setActiveTab]   = useState('home')
+
+  const [custLat, setCustLat]     = useState(17.3850)
+  const [custLng, setCustLng]     = useState(78.4867)
   const [techLat, setTechLat]     = useState(null)
   const [techLng, setTechLng]     = useState(null)
-  const [distance, setDistance]   = useState('Calculating...')
+  const [distance, setDistance]   = useState('--')
   const [eta, setEta]             = useState('--')
   const [techName, setTechName]   = useState('Connecting...')
   const [techPhone, setTechPhone] = useState('')
   const [statusMsg, setStatusMsg] = useState('⏳ Waiting for technician...')
-  const [statusColor, setStatusColor] = useState('#FFA500')
   const [brand, setBrand]         = useState('-')
   const [repair, setRepair]       = useState('-')
   const [location, setLocation]   = useState('-')
   const [jobDone, setJobDone]     = useState(false)
-  const [step, setStep]           = useState(0) // 0=pending 1=accepted 2=arrived 3=done
+  const [orderId, setOrderId]     = useState('')
+  const [custName, setCustName]   = useState('Customer')
 
-  const watchRef  = useRef(null)
-  const unsubsRef = useRef([])
-  const mounted   = useRef(true)
+  const watchRef    = useRef(null)
+  const unsubsRef   = useRef([])
+  const mounted     = useRef(true)
+  const custPosRef  = useRef({ lat: 17.3850, lng: 78.4867 })
+  const techPosRef  = useRef(null)
+  const orderIdRef  = useRef('')
 
   useEffect(() => {
     mounted.current = true
-    loadData()
-    startGPS()
-    startListeners()
-
+    init()
     return () => {
       mounted.current = false
       if (watchRef.current) {
@@ -45,342 +64,360 @@ export default function TrackingScreen() {
         watchRef.current = null
       }
       unsubsRef.current.forEach(fn => { try { fn() } catch(e) {} })
+      unsubsRef.current = []
     }
   }, [])
 
-  // Update distance when locations change
-  useEffect(() => {
-    if (custLat && techLat) {
-      const d = calcDistance(custLat, custLng, techLat, techLng)
-      setDistance(d + ' km')
-      const mins = Math.max(1, Math.round(d / 0.5))
-      setEta('~' + mins + ' mins')
-    }
-  }, [custLat, techLat])
-
-  const loadData = async () => {
+  const init = async () => {
     try {
-      const b = await AsyncStorage.getItem('lastBrand')
-      const r = await AsyncStorage.getItem('lastRepair')
-      const l = await AsyncStorage.getItem('custLocation')
-      if (b) setBrand(b)
-      if (r) setRepair(r)
-      if (l) setLocation(l)
-    } catch (e) {}
+      const o  = await AsyncStorage.getItem('lastOrderId')
+      const b  = await AsyncStorage.getItem('lastBrand')
+      const r  = await AsyncStorage.getItem('lastRepair')
+      const l  = await AsyncStorage.getItem('custLocation')
+      const n  = await AsyncStorage.getItem('lastCustName') || await AsyncStorage.getItem('custName') || 'Customer'
+
+      // Set orderIdRef BEFORE calling startListeners so the listener
+      // knows which order to watch.
+      if (o) { setOrderId(o); orderIdRef.current = o }
+      if (b)  setBrand(b)
+      if (r)  setRepair(r)
+      if (l)  setLocation(l)
+      if (n)  setCustName(n)
+
+      if (!o) {
+        console.warn('TrackingScreen: No lastOrderId found in AsyncStorage!')
+        return
+      }
+
+      await startGPS()
+      startListeners()
+    } catch (e) {
+      console.log('TrackingScreen init error:', e)
+    }
   }
 
   const startGPS = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') return
-
-      const pos = await Location.getCurrentPositionAsync({})
-      const lat  = pos.coords.latitude
-      const lng  = pos.coords.longitude
-      if (mounted.current) {
-        setCustLat(lat)
-        setCustLng(lng)
-      }
-      set(ref(db, 'custLocation'), { lat, lng }).catch(() => {})
-
       watchRef.current = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.Balanced, timeInterval: 8000, distanceInterval: 20 },
-        pos2 => {
+        { accuracy: Location.Accuracy.Balanced, timeInterval: 6000, distanceInterval: 10 },
+        pos => {
           if (!mounted.current) return
-          const la = pos2.coords.latitude
-          const lo = pos2.coords.longitude
-          setCustLat(la)
-          setCustLng(lo)
-          set(ref(db, 'custLocation'), { lat: la, lng: lo }).catch(() => {})
+          const lat = pos.coords.latitude
+          const lng = pos.coords.longitude
+          custPosRef.current = { lat, lng }
+          setCustLat(lat)
+          setCustLng(lng)
+          // ✅ FIX 2: Write customer GPS under their own order, not a shared global path.
+          // Previously: set(ref(db, 'custLocation'), ...) — all customers overwrote each other!
+          set(ref(db, `orders/${orderIdRef.current}/custLocation`), { lat, lng }).catch(() => {})
         }
       )
     } catch (e) {
-      console.log('GPS error:', e.message)
+      console.log('GPS error:', e)
     }
   }
 
   const startListeners = () => {
-    // Listen technician live location
-    const u1 = onValue(ref(db, 'techLocation'), snap => {
-      if (!mounted.current || !snap.exists()) return
-      const { lat, lng } = snap.val()
-      setTechLat(lat)
-      setTechLng(lng)
-      if (step < 1) {
-        setStep(1)
+    try {
+      // ✅ FIX 3: Listen to techLocation under this specific order, not a shared global path.
+      // Previously: ref(db, 'techLocation') — showed wrong technician if multiple jobs were active!
+      const u1 = onValue(ref(db, `orders/${orderIdRef.current}/techLocation`), snap => {
+        if (!mounted.current || !snap.exists()) return
+        const { lat, lng } = snap.val()
+        techPosRef.current = { lat, lng }
+        setTechLat(lat)
+        setTechLng(lng)
         setStatusMsg('🛵 Technician is on the way!')
-        setStatusColor('#FF6B00')
-      }
-    })
-    unsubsRef.current.push(u1)
+      })
+      unsubsRef.current.push(u1)
+    } catch (e) {
+      console.log('techLocation listener error:', e)
+    }
 
-    // Listen technician info
-    const u2 = onValue(ref(db, 'techInfo'), snap => {
-      if (!mounted.current || !snap.exists()) return
-      const info = snap.val()
-      if (info.name)  setTechName(info.name)
-      if (info.phone) setTechPhone(info.phone)
-      setStep(s => Math.max(s, 1))
-    })
-    unsubsRef.current.push(u2)
-
-    // Listen order status
-    const u3 = onValue(ref(db, 'orders'), snap => {
-      if (!mounted.current || !snap.exists()) return
-      snap.forEach(child => {
-        const val = child.val()
-        if (val.status === 'accepted' && step < 1) {
-          setStep(1)
-          setStatusMsg('🛵 Technician accepted your request!')
-          setStatusColor('#FF6B00')
+    try {
+      // ✅ FIX 1: Listen directly to THIS order only, not the entire /orders collection.
+      // Previously: ref(db, 'orders') downloaded ALL orders and looped through them — very slow
+      // and caused wrong order data to appear!
+      const u2 = onValue(ref(db, `orders/${orderIdRef.current}`), snap => {
+        if (!mounted.current || !snap.exists()) return
+        const o = snap.val()
+        if (o.techName) {
+          setTechName(o.techName)
+          if (o.techPhone) setTechPhone(o.techPhone)
         }
-        if (val.status === 'completed') {
-          setStep(3)
-          setStatusMsg('✅ Repair Completed!')
-          setStatusColor('#2e7d32')
+        if (o.status === 'completed') {
           setJobDone(true)
+          setStatusMsg('✅ Repair Completed!')
+        } else {
+          // Reset jobDone if order is not completed (prevents stale state)
+          setJobDone(false)
         }
       })
-    })
-    unsubsRef.current.push(u3)
+      unsubsRef.current.push(u2)
+    } catch (e) {
+      console.log('orders listener error:', e)
+    }
   }
+
+  const recalcDistance = (custPos, techPos) => {
+    if (!custPos || !techPos) return
+    const d = parseFloat(calcDistance(custPos.lat, custPos.lng, techPos.lat, techPos.lng))
+    setDistance(d + ' km')
+    const SPEED = 0.3 // km/min (~18 km/h — realistic city speed)
+    const etaMins = Math.round(d / SPEED)
+    setEta('~' + Math.max(1, etaMins) + ' mins')
+  }
+
+  // Recalculate distance whenever GPS or tech location changes
+  useEffect(() => {
+    if (custLat && techLat) {
+      recalcDistance({ lat: custLat, lng: custLng }, { lat: techLat, lng: techLng })
+    }
+  }, [custLat, custLng, techLat, techLng])
 
   const callTech = () => {
-    if (!techPhone) {
-      Alert.alert('Not Available', 'Technician phone not available yet. Please wait!')
-      return
+    if (techPhone) {
+      Linking.openURL('tel:+91' + techPhone).catch(() => Alert.alert('Error', 'Cannot make call!'))
+    } else {
+      Alert.alert('Not Available', 'Technician phone not available yet! Please wait.')
     }
-    Alert.alert(
-      '📞 Call Technician',
-      `Call ${techName}?`,
-      [
-        { text: 'Cancel' },
-        { text: 'Call', onPress: () => Linking.openURL('tel:+91' + techPhone) }
-      ]
-    )
-  }
-
-  const openMaps = () => {
-    if (!techLat) {
-      Alert.alert('Not Available', 'Technician location not available yet!')
-      return
-    }
-    const url = Platform.OS === 'ios'
-      ? `maps://?daddr=${techLat},${techLng}`
-      : `https://www.google.com/maps/dir/?api=1&destination=${techLat},${techLng}`
-    Linking.openURL(url)
   }
 
   const STEPS = [
-    { label: '✅ Order Confirmed',        done: step >= 0 },
-    { label: '🔔 Technician Accepted',    done: step >= 1 },
-    { label: '🛵 Technician On The Way',  done: step >= 1 },
-    { label: '📍 Technician Arrived',     done: step >= 2 },
-    { label: '🔧 Repair In Progress',     done: step >= 2 },
-    { label: '✅ Repair Completed!',      done: step >= 3 },
+    { label: '✅ Order Confirmed',       done: true },
+    { label: '🚗 Technician On The Way', done: !!techLat },
+    { label: '🔧 Repair In Progress',    done: jobDone },
+    { label: '✅ Repair Done!',          done: jobDone },
   ]
 
+  const TABS = [
+    { key: 'home',     icon: '🏠', label: 'Home' },
+    { key: 'orders',   icon: '📋', label: 'Orders' },
+    { key: 'profile',  icon: '👤', label: 'Profile' },
+  ]
+
+  const switchTab = (key) => {
+    if (key === 'home') { setActiveTab('home'); return }
+    if (key === 'orders') { router.push('/screens/HomeScreen'); return }
+    if (key === 'profile') { router.push('/screens/CustomerProfileScreen'); return }
+  }
+
   return (
-    <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
+    <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+      <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
 
-      {/* HEADER */}
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={s.back}>←</Text>
-        </TouchableOpacity>
-        <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={s.title}>🛵 Live Tracking</Text>
-          <Text style={s.sub}>{statusMsg}</Text>
-        </View>
-        <View style={[s.pill, { backgroundColor: statusColor }]}>
-          <Text style={s.pillTxt}>{jobDone ? '✅ Done' : '🟢 Live'}</Text>
-        </View>
-      </View>
-
-      {/* MAP PLACEHOLDER — animated status */}
-      <View style={[s.mapArea, { backgroundColor: jobDone ? '#1a472a' : '#1A3A6B' }]}>
-        <Text style={s.mapIcon}>{jobDone ? '✅' : techLat ? '🛵' : '⏳'}</Text>
-        <Text style={s.mapTitle}>
-          {jobDone
-            ? 'Repair Completed!'
-            : techLat
-              ? 'Technician is on the way!'
-              : 'Waiting for technician...'}
-        </Text>
-        {techLat && !jobDone && (
-          <TouchableOpacity style={s.mapBtn} onPress={openMaps}>
-            <Text style={s.mapBtnTxt}>🗺️ Open in Google Maps</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <View style={s.content}>
-
-        {/* DISTANCE BANNER */}
-        <View style={s.distBanner}>
+        {/* HEADER */}
+        <View style={s.header}>
           <View>
-            <Text style={s.distLabel}>Distance</Text>
-            <Text style={s.distVal}>{techLat ? distance : '--'}</Text>
+            <Text style={s.title}>🛵 Live Tracking</Text>
+            <Text style={s.sub}>{statusMsg}</Text>
           </View>
-          <View style={s.etaPill}>
-            <Text style={s.etaTxt}>ETA: {techLat ? eta : 'Waiting...'}</Text>
-          </View>
-        </View>
-
-        {/* LOCATION CARDS */}
-        <View style={s.locRow}>
-          <View style={s.locCard}>
-            <Text style={s.locIcon}>🏠</Text>
-            <Text style={s.locLabel}>YOUR LOCATION</Text>
-            <Text style={s.locName}>{location}</Text>
-          </View>
-          <View style={s.locCard}>
-            <Text style={s.locIcon}>🛵</Text>
-            <Text style={s.locLabel}>TECHNICIAN</Text>
-            <Text style={s.locName}>{techLat ? 'On the way!' : 'Being assigned...'}</Text>
+          <View style={[s.pill, { backgroundColor: jobDone ? '#2e7d32' : '#FF6B00' }]}>
+            <Text style={s.pillTxt}>{jobDone ? '✅ Done' : '🟢 Live'}</Text>
           </View>
         </View>
 
-        {/* TECHNICIAN CARD */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>YOUR TECHNICIAN</Text>
-          <View style={s.techRow}>
-            <View style={s.techAvatar}>
-              <Text style={{ fontSize: 26 }}>👨‍🔧</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.techName}>{techName}</Text>
-              <Text style={s.techSub}>⭐ Verified Expert Technician</Text>
-              {techPhone ? <Text style={s.techPhone}>📱 +91 {techPhone}</Text> : null}
-            </View>
-            <View style={s.ratingBadge}>
-              <Text style={s.ratingTxt}>⭐ 4.8</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* ORDER DETAILS */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>ORDER DETAILS</Text>
-          {[['Device', brand], ['Repair', repair], ['Location', location]].map(([l, v]) => (
-            <View key={l} style={s.infoRow}>
-              <Text style={s.infoLabel}>{l}</Text>
-              <Text style={s.infoVal}>{v || '-'}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* LIVE STATUS STEPS */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>LIVE STATUS</Text>
-          {STEPS.map((st, i) => (
-            <View key={i} style={s.step}>
-              <View style={[s.dot,
-                st.done ? s.dotDone :
-                i === STEPS.findIndex(x => !x.done) ? s.dotActive :
-                s.dotPending
-              ]} />
-              <Text style={[s.stepLabel, st.done && s.stepLabelDone]}>
-                {st.label}
-              </Text>
-            </View>
-          ))}
-        </View>
-
-        {/* ACTION BUTTONS */}
-        <View style={s.actionRow}>
-          <TouchableOpacity style={s.callBtn} onPress={callTech}>
-            <Text style={s.callTxt}>📞 Call Tech</Text>
-          </TouchableOpacity>
-          {techLat && (
-            <TouchableOpacity style={s.mapsBtn} onPress={openMaps}>
-              <Text style={s.mapsTxt}>🗺️ View Map</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* REVIEW BUTTON — only shows when done */}
-        {jobDone && (
-          <TouchableOpacity
-            style={s.reviewBtn}
-            onPress={() => router.push('/screens/ReviewScreen')}
+        {/* MAP or PLACEHOLDER */}
+        {MapView ? (
+          <MapView
+            style={s.map}
+            region={{
+              latitude:       (custLat + (techLat || custLat)) / 2,
+              longitude:      (custLng + (techLng || custLng)) / 2,
+              latitudeDelta:  0.05,
+              longitudeDelta: 0.05,
+            }}
           >
-            <Text style={s.reviewTxt}>⭐ Rate Your Experience</Text>
-          </TouchableOpacity>
+            <Marker coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Your Location" />
+            {techLat && <Marker coordinate={{ latitude: techLat, longitude: techLng }} title="🛵 Technician" pinColor="#FF6B00" />}
+            {techLat && (
+              <Polyline
+                coordinates={[
+                  { latitude: custLat, longitude: custLng },
+                  { latitude: techLat, longitude: techLng },
+                ]}
+                strokeColor="#FF6B00"
+                strokeWidth={3}
+                lineDashPattern={[8, 8]}
+              />
+            )}
+          </MapView>
+        ) : (
+          <View style={s.mapPlaceholder}>
+            <Text style={s.mapIcon}>🗺️</Text>
+            <Text style={s.mapTxt}>{techLat ? '🛵 Technician is moving towards you!' : '⏳ Waiting for technician...'}</Text>
+          </View>
         )}
 
-        <View style={{ height: 40 }} />
+        <View style={s.content}>
+
+          {/* DISTANCE BANNER */}
+          <View style={s.distBanner}>
+            <View>
+              <Text style={s.distLabel}>Distance</Text>
+              <Text style={s.distVal}>{distance}</Text>
+            </View>
+            <View style={s.etaPill}>
+              <Text style={s.etaTxt}>ETA: {eta}</Text>
+            </View>
+          </View>
+
+          {/* LOCATION CARDS */}
+          <View style={s.locRow}>
+            <View style={s.locCard}>
+              <Text style={s.locIcon}>🏠</Text>
+              <Text style={s.locLabel}>YOUR LOCATION</Text>
+              <Text style={s.locName}>{location}</Text>
+            </View>
+            <View style={s.locCard}>
+              <Text style={s.locIcon}>🛵</Text>
+              <Text style={s.locLabel}>TECHNICIAN</Text>
+              <Text style={s.locName}>{techLat ? 'On the way' : 'Being assigned...'}</Text>
+            </View>
+          </View>
+
+          {/* TECHNICIAN CARD */}
+          <View style={s.card}>
+            <Text style={s.cardTitle}>YOUR TECHNICIAN</Text>
+            <View style={s.techRow}>
+              <View style={s.techAvatar}><Text style={{ fontSize: 26 }}>👨‍🔧</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.techName}>{techName}</Text>
+                <Text style={s.techSub}>⭐ Verified Expert Technician</Text>
+                {techPhone ? (
+                  <Text style={s.techPhone}>📱 +91{techPhone}</Text>
+                ) : null}
+              </View>
+              <View style={s.ratingBadge}><Text style={s.ratingTxt}>⭐ 4.8</Text></View>
+            </View>
+          </View>
+
+          {/* ORDER DETAILS */}
+          <View style={s.card}>
+            <Text style={s.cardTitle}>ORDER DETAILS</Text>
+            {[['Device', brand], ['Repair', repair], ['Location', location]].map(([l, v]) => (
+              <View key={l} style={s.infoRow}>
+                <Text style={s.infoLabel}>{l}</Text>
+                <Text style={s.infoVal}>{v || '-'}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* STATUS STEPS */}
+          <View style={s.card}>
+            <Text style={s.cardTitle}>LIVE STATUS</Text>
+            {STEPS.map((step, i) => (
+              <View key={i} style={s.step}>
+                <View style={[s.dot, step.done ? s.dotDone : i === STEPS.findIndex(s => !s.done) ? s.dotActive : s.dotPending]} />
+                <Text style={s.stepLabel}>{step.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* CALL BUTTON */}
+          <TouchableOpacity style={s.callBtn} onPress={callTech}>
+            <Text style={s.callTxt}>📞 Call Technician</Text>
+          </TouchableOpacity>
+
+          {/* CHAT & REVIEW BUTTONS */}
+          <View style={s.actionRow}>
+            <TouchableOpacity
+              style={s.chatBtnTrack}
+              onPress={() => {
+                const name = techName || 'Technician'
+                const oid = orderId || 'current'
+                router.push(`/screens/ChatScreen?orderId=${oid}&role=cust&techName=${encodeURIComponent(name)}&customerName=${encodeURIComponent(custName)}`)
+              }}
+            >
+              <Text style={s.chatBtnTxt}>💬 Chat with Technician</Text>
+            </TouchableOpacity>
+
+            {jobDone && (
+              <TouchableOpacity style={s.reviewBtn} onPress={() => router.push('/screens/ReviewScreen')}>
+                <Text style={s.reviewTxt}>⭐ Rate Your Experience</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={{ height: 90 }} />
+        </View>
+      </ScrollView>
+
+      {/* BOTTOM TAB BAR */}
+      <View style={s.tabBar}>
+        {TABS.map(tab => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[s.tabItem, activeTab === tab.key && s.tabItemActive]}
+            onPress={() => switchTab(tab.key)}
+          >
+            <Text style={[s.tabIcon, activeTab === tab.key && s.tabIconActive]}>{tab.icon}</Text>
+            <Text style={[s.tabLabel, activeTab === tab.key && s.tabLabelActive]}>{tab.label}</Text>
+            {activeTab === tab.key && <View style={s.tabIndicator} />}
+          </TouchableOpacity>
+        ))}
       </View>
-    </ScrollView>
+    </View>
   )
 }
 
 const s = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: '#f5f5f5' },
+  container:      { flex: 1, backgroundColor: '#f5f5f5' },
+  header:         { backgroundColor: '#FF6B00', padding: 20, paddingTop: Platform.OS === 'ios' ? 55 : 45, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title:          { fontSize: 20, fontWeight: '800', color: '#fff' },
+  sub:            { fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 3 },
+  pill:           { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  pillTxt:        { color: '#fff', fontSize: 11, fontWeight: '800' },
+  map:            { width: '100%', height: 260 },
+  mapPlaceholder: { height: 200, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' },
+  mapIcon:        { fontSize: 50 },
+  mapTxt:         { color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 10, textAlign: 'center', paddingHorizontal: 20 },
+  content:        { padding: 15 },
+  distBanner:     { backgroundColor: '#1A3A6B', borderRadius: 16, padding: 15, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  distLabel:      { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '700' },
+  distVal:        { fontSize: 24, fontWeight: '800', color: '#fff', marginTop: 2 },
+  etaPill:        { backgroundColor: '#FF6B00', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  etaTxt:         { color: '#fff', fontSize: 12, fontWeight: '800' },
+  locRow:         { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  locCard:        { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', elevation: 2 },
+  locIcon:        { fontSize: 28 },
+  locLabel:       { fontSize: 10, fontWeight: '800', color: '#888', marginTop: 4, letterSpacing: 1 },
+  locName:        { fontSize: 12, fontWeight: '800', color: '#1A3A6B', marginTop: 3, textAlign: 'center' },
+  card:           { backgroundColor: '#fff', borderRadius: 16, padding: 18, marginBottom: 12, elevation: 2 },
+  cardTitle:      { fontSize: 11, fontWeight: '800', color: '#888', letterSpacing: 1, marginBottom: 12 },
+  techRow:        { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  techAvatar:     { width: 50, height: 50, backgroundColor: '#1A3A6B', borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
+  techName:       { fontSize: 15, fontWeight: '800', color: '#1A3A6B' },
+  techSub:        { fontSize: 12, color: '#888', marginTop: 2 },
+  techPhone:      { fontSize: 12, color: '#FF6B00', fontWeight: '700', marginTop: 2 },
+  ratingBadge:    { backgroundColor: '#fff5ee', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  ratingTxt:      { color: '#FF6B00', fontSize: 12, fontWeight: '800' },
+  infoRow:        { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
+  infoLabel:      { color: '#888', fontWeight: '600', fontSize: 13 },
+  infoVal:        { color: '#1A3A6B', fontWeight: '800', fontSize: 13 },
+  step:           { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  dot:            { width: 14, height: 14, borderRadius: 7 },
+  dotDone:        { backgroundColor: '#FF6B00' },
+  dotActive:      { backgroundColor: '#1A3A6B' },
+  dotPending:     { backgroundColor: '#ddd' },
+  stepLabel:      { fontSize: 13, fontWeight: '700', color: '#1A3A6B' },
+  callBtn:        { backgroundColor: '#1A3A6B', padding: 15, borderRadius: 14, alignItems: 'center', marginBottom: 10 },
+  callTxt:        { color: '#fff', fontSize: 16, fontWeight: '800' },
+  actionRow:      { gap: 10, marginBottom: 20 },
+  chatBtnTrack:   { backgroundColor: '#FF6B00', padding: 15, borderRadius: 14, alignItems: 'center' },
+  chatBtnTxt:     { color: '#fff', fontSize: 16, fontWeight: '800' },
+  reviewBtn:      { backgroundColor: '#2e7d32', padding: 15, borderRadius: 14, alignItems: 'center' },
+  reviewTxt:      { color: '#fff', fontSize: 16, fontWeight: '800' },
 
-  // Header
-  header:       { backgroundColor: '#FF6B00', padding: 20, paddingTop: Platform.OS === 'ios' ? 55 : 45, flexDirection: 'row', alignItems: 'center' },
-  back:         { fontSize: 24, color: '#fff', fontWeight: '700' },
-  title:        { fontSize: 18, fontWeight: '800', color: '#fff' },
-  sub:          { fontSize: 11, color: 'rgba(255,255,255,0.9)', marginTop: 2 },
-  pill:         { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  pillTxt:      { color: '#fff', fontSize: 11, fontWeight: '800' },
-
-  // Map area
-  mapArea:      { height: 200, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  mapIcon:      { fontSize: 60 },
-  mapTitle:     { color: '#fff', fontSize: 16, fontWeight: '800', textAlign: 'center', paddingHorizontal: 20 },
-  mapBtn:       { backgroundColor: '#FF6B00', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, marginTop: 5 },
-  mapBtnTxt:    { color: '#fff', fontSize: 12, fontWeight: '800' },
-
-  // Content
-  content:      { padding: 15 },
-  distBanner:   { backgroundColor: '#1A3A6B', borderRadius: 16, padding: 15, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  distLabel:    { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '700' },
-  distVal:      { fontSize: 24, fontWeight: '800', color: '#fff', marginTop: 2 },
-  etaPill:      { backgroundColor: '#FF6B00', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
-  etaTxt:       { color: '#fff', fontSize: 12, fontWeight: '800' },
-
-  // Location cards
-  locRow:       { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  locCard:      { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', elevation: 2 },
-  locIcon:      { fontSize: 28 },
-  locLabel:     { fontSize: 10, fontWeight: '800', color: '#888', marginTop: 4, letterSpacing: 1 },
-  locName:      { fontSize: 11, fontWeight: '800', color: '#1A3A6B', marginTop: 3, textAlign: 'center' },
-
-  // Card
-  card:         { backgroundColor: '#fff', borderRadius: 16, padding: 18, marginBottom: 12, elevation: 2 },
-  cardTitle:    { fontSize: 11, fontWeight: '800', color: '#888', letterSpacing: 1, marginBottom: 12 },
-
-  // Tech info
-  techRow:      { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  techAvatar:   { width: 50, height: 50, backgroundColor: '#1A3A6B', borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
-  techName:     { fontSize: 15, fontWeight: '800', color: '#1A3A6B' },
-  techSub:      { fontSize: 12, color: '#888', marginTop: 2 },
-  techPhone:    { fontSize: 12, color: '#FF6B00', fontWeight: '700', marginTop: 2 },
-  ratingBadge:  { backgroundColor: '#fff5ee', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  ratingTxt:    { color: '#FF6B00', fontSize: 12, fontWeight: '800' },
-
-  // Order details
-  infoRow:      { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
-  infoLabel:    { color: '#888', fontWeight: '600', fontSize: 13 },
-  infoVal:      { color: '#1A3A6B', fontWeight: '800', fontSize: 13, flex: 1, textAlign: 'right' },
-
-  // Status steps
-  step:         { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  dot:          { width: 14, height: 14, borderRadius: 7 },
-  dotDone:      { backgroundColor: '#FF6B00' },
-  dotActive:    { backgroundColor: '#1A3A6B' },
-  dotPending:   { backgroundColor: '#ddd' },
-  stepLabel:    { fontSize: 13, fontWeight: '600', color: '#888' },
-  stepLabelDone:{ color: '#1A3A6B', fontWeight: '800' },
-
-  // Buttons
-  actionRow:    { flexDirection: 'row', gap: 10, marginBottom: 10 },
-  callBtn:      { flex: 1, backgroundColor: '#1A3A6B', padding: 15, borderRadius: 14, alignItems: 'center' },
-  callTxt:      { color: '#fff', fontSize: 15, fontWeight: '800' },
-  mapsBtn:      { flex: 1, backgroundColor: '#FF6B00', padding: 15, borderRadius: 14, alignItems: 'center' },
-  mapsTxt:      { color: '#fff', fontSize: 15, fontWeight: '800' },
-  reviewBtn:    { backgroundColor: '#FF6B00', padding: 16, borderRadius: 14, alignItems: 'center' },
-  reviewTxt:    { color: '#fff', fontSize: 16, fontWeight: '800' },
+  // ── Bottom Tab Bar ──
+  tabBar:        { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },
+  tabItem:       { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, position: 'relative' },
+  tabItemActive: {},
+  tabIcon:       { fontSize: 22, opacity: 0.5 },
+  tabIconActive: { opacity: 1 },
+  tabLabel:      { fontSize: 10, fontWeight: '600', color: '#888', marginTop: 2 },
+  tabLabelActive:{ color: '#FF6B00', fontWeight: '800' },
+  tabIndicator:  { position: 'absolute', top: -1, width: 24, height: 3, backgroundColor: '#FF6B00', borderRadius: 2, alignSelf: 'center' },
 })
