@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { get, onValue, push, ref, set, update } from 'firebase/database';
+import { get, onValue, push, ref, set } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -197,11 +197,7 @@ export default function HomeScreen() {
   }
 
   const listenOrders = (phone) => {
-    // Clean up any previous listener first
-    if (ordersUnsubRef.current) {
-      try { ordersUnsubRef.current() } catch(e) {}
-    }
-    ordersUnsubRef.current = onValue(ref(db, 'orders'), snap => {
+    onValue(ref(db, 'orders'), snap => {
       if (!snap.exists()) { setMyOrders([]); return }
       const orders = []
       let foundAccepted = false
