@@ -62,6 +62,8 @@ export default function HomeScreen() {
   const [pincodeInput, setPincodeInput]     = useState('')
   const [isSubmitting, setIsSubmitting]     = useState(false)
   const [activeTab, setActiveTab]           = useState('home')
+  const [custLat, setCustLat]               = useState(null)
+  const [custLng, setCustLng]               = useState(null)
 
   const ordersUnsubRef = useRef(null)
 
@@ -163,10 +165,25 @@ export default function HomeScreen() {
         imageUrls = await uploadImages(deviceImages.map(uri => ({ uri })), tempOrderId)
       }
 
+      // Get GPS coords for nearby tech matching if not already captured
+      let orderLat = custLat, orderLng = custLng
+      if (!orderLat || !orderLng) {
+        try {
+          const { status } = await Location.requestForegroundPermissionsAsync()
+          if (status === 'granted') {
+            const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+            orderLat = pos.coords.latitude
+            orderLng = pos.coords.longitude
+          }
+        } catch (_) {}
+      }
+
       const order = {
         customerName:       name,
         customerPhone:      phone,
         customerPushToken,
+        custLat:            orderLat,
+        custLng:            orderLng,
         location:           locationInput.trim(),
         pincode:            pincodeInput.trim(),
         device:             selectedDevice,
@@ -339,7 +356,11 @@ export default function HomeScreen() {
       if (status !== 'granted') { Alert.alert('Permission denied', 'Allow location access to auto-fill.'); return }
       const pos = await Location.getCurrentPositionAsync({})
       const [place] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude })
-      if (place) { setLocationInput([place.name, place.district, place.city, place.region].filter(Boolean).join(', ')) }
+      if (place) {
+        setLocationInput([place.name, place.district, place.city, place.region].filter(Boolean).join(', '))
+        setCustLat(pos.coords.latitude)
+        setCustLng(pos.coords.longitude)
+      }
     }
     return (
       <View style={s.stepBody}>
