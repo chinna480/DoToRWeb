@@ -112,7 +112,8 @@ export default function JobHistoryScreen() {
     filtered = filtered.filter(j =>
       (j.customerName || '').toLowerCase().includes(q) ||
       (j.brand || '').toLowerCase().includes(q) ||
-      (j.repair || '').toLowerCase().includes(q) ||
+      (j.modelName || '').toLowerCase().includes(q) ||
+      (j.description || '').toLowerCase().includes(q) ||
       (j.location || '').toLowerCase().includes(q)
     )
   }
