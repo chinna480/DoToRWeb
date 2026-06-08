@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useRouter } from 'expo-router'
-import { ref, update } from 'firebase/database'
+import { ref, update, push } from 'firebase/database'
 import { useState } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { db } from '../firebase/config'
@@ -20,11 +20,12 @@ export default function ReviewScreen() {
 
     const name = await AsyncStorage.getItem('custName') || 'Customer'
 
-    await update(ref(db, 'reviews/' + Date.now()), {
+    await push(ref(db, 'reviews'), {
       customerName: name,
       rating,
       comment,
       time: new Date().toLocaleTimeString(),
+      createdAt: Date.now(),
     })
 
     setSubmitted(true)
