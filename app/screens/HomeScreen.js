@@ -489,6 +489,11 @@ export default function HomeScreen() {
               <View style={s.orderLeft}>
                 <Text style={s.orderDevice}>📱 {order.brand} {order.modelName ? `— ${order.modelName}` : ''}</Text>
                 {order.description ? <Text style={s.orderRepair}>🔧 {order.description}</Text> : null}
+                {order.images && order.images.length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                    {order.images.map((url, j) => <Image key={j} source={{ uri: url }} style={s.orderImage} />)}
+                  </ScrollView>
+                )}
                 <Text style={s.orderLoc}>📍 {order.location}</Text>
                 {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
                 <Text style={s.orderTime}>🕐 {order.time}</Text>
@@ -626,6 +631,7 @@ const s = StyleSheet.create({
   orderStatusLabel: { fontSize: 10, fontWeight: '800', textTransform: 'capitalize' },
   orderChatBtn:     { backgroundColor: '#FF6B00', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, marginTop: 4 },
   orderChatTxt:     { color: '#fff', fontSize: 10, fontWeight: '800' },
+  orderImage:       { width: 70, height: 70, borderRadius: 10, marginRight: 8 },
   // Tab bar
   tabBar:           { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },
   tabItem:          { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, position: 'relative' },
