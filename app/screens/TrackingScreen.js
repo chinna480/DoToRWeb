@@ -41,7 +41,7 @@ export default function TrackingScreen() {
   const [techPhone, setTechPhone] = useState('')
   const [statusMsg, setStatusMsg] = useState('⏳ Waiting for technician...')
   const [brand, setBrand]         = useState('-')
-  const [modelName, setModelName]   = useState('-')
+  const [modelName, setModelName]   = useState('')
   const [description, setDescription] = useState('')
   const [location, setLocation]   = useState('-')
   const [jobDone, setJobDone]     = useState(false)
@@ -304,7 +304,7 @@ export default function TrackingScreen() {
           {/* ORDER DETAILS */}
           <View style={s.card}>
             <Text style={s.cardTitle}>ORDER DETAILS</Text>
-            {[['Device', `${brand}${modelName !== '-' ? ' ' + modelName : ''}`], ['Issue', description || '—'], ['Location', location]].map(([l, v]) => (
+            {[['Device', `${brand}${modelName ? ' ' + modelName : ''}`], ['Issue', description || '—'], ['Location', location]].map(([l, v]) => (
               <View key={l} style={s.infoRow}>
                 <Text style={s.infoLabel}>{l}</Text>
                 <Text style={s.infoVal}>{v || '-'}</Text>

@@ -21,6 +21,7 @@ import {
 import { db } from '../firebase/config';
 import {
   notifyCustomerBookingConfirmed,
+  notifyTechsForNewOrder,
   registerForNotifications,
 } from '../utils/notifications';
 import { uploadImages } from '../utils/uploadImage';
@@ -190,6 +191,7 @@ export default function HomeScreen() {
       if (locationInput) await AsyncStorage.setItem('custLocation', locationInput.trim())
 
       await notifyCustomerBookingConfirmed(selectedBrand, modelName.trim())
+      await notifyTechsForNewOrder(order, orderId)
       resetWizard()
 
       Alert.alert(
