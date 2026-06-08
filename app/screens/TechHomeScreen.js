@@ -4,12 +4,12 @@ import { useRouter } from 'expo-router';
 import { onValue, ref, remove, set, update } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Linking,
+  Alert, Image, Linking,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import { db } from '../firebase/config';
 import { calcDistance } from '../utils/distance';
@@ -63,9 +63,12 @@ export default function TechHomeScreen() {
   const areaAssignments   = useRef({})
 
   useEffect(() => {
-    loadTech()
-    const unsub = listenOrders()
-    return () => { unsub(); if (watchRef.current) watchRef.current.remove() }
+    let unsub
+    let cancelled = false
+    loadTech().then(() => {
+      if (!cancelled) unsub = listenOrders()
+    })
+    return () => { cancelled = true; if (unsub) unsub(); if (watchRef.current) watchRef.current.remove() }
   }, [])
 
   const custLocUnsubRef = useRef(null)
@@ -203,7 +206,7 @@ export default function TechHomeScreen() {
 
       pending.forEach(order => {
         if (!prevPendingIds.current.has(order.id)) {
-          notifyTechNewJob(techPushToken.current, order.customerName, order.brand, order.repair)
+          notifyTechNewJob(techPushToken.current, order.customerName, order.brand, order.modelName || order.description || 'repair')
         }
       })
       prevPendingIds.current = new Set(pending.map(o => o.id))
@@ -348,7 +351,8 @@ export default function TechHomeScreen() {
       ) : (
         <View style={s.ongoingCard}>
           <Text style={s.jobCust}>👤 {ongoingJob.customerName}</Text>
-          <Text style={s.jobType}>📱 {ongoingJob.brand} — {ongoingJob.repair}</Text>
+          <Text style={s.jobType}>📱 {ongoingJob.brand} {ongoingJob.modelName ? `— ${ongoingJob.modelName}` : ''}</Text>
+          {ongoingJob.description ? <Text style={s.jobDesc}>📝 {ongoingJob.description}</Text> : null}
           <Text style={s.jobLoc}>📍 {ongoingJob.location}</Text>
           {ongoingJob.pincode ? <Text style={s.jobLoc}>📮 {ongoingJob.pincode}</Text> : null}
           <Text style={s.inProgressTxt}>⚡ In Progress...</Text>
@@ -463,9 +467,13 @@ export default function TechHomeScreen() {
           <View key={order.id} style={s.jobCard}>
             <View style={s.newBadge}><Text style={s.newBadgeTxt}>NEW</Text></View>
             <Text style={s.jobCust}>👤 {order.customerName}</Text>
-            <Text style={s.jobType}>📱 {order.brand} — {order.repair}</Text>
+            <Text style={s.jobType}>📱 {order.brand} {order.modelName ? `— ${order.modelName}` : ''}</Text>
+            {order.description ? <Text style={s.jobDesc}>📝 {order.description}</Text> : null}
             <Text style={s.jobLoc}>📍 {order.location}</Text>
             {order.pincode ? <Text style={s.jobLoc}>📮 {order.pincode}</Text> : null}
+            {order.images && order.images.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>{order.images.map((url, j) => <Image key={j} source={{ uri: url }} style={s.orderImage} />)}</ScrollView>
+            )}
             <Text style={s.jobTime}>🕐 {order.time}</Text>
             <View style={s.jobActions}>
               {ongoingJob ? (
@@ -520,7 +528,8 @@ export default function TechHomeScreen() {
           <View key={i} style={s.completedCard}>
             <View>
               <Text style={s.compCust}>👤 {order.customerName}</Text>
-              <Text style={s.compType}>📱 {order.brand} — {order.repair}</Text>
+              <Text style={s.compType}>📱 {order.brand} {order.modelName ? `— ${order.modelName}` : ''}</Text>
+              {order.description ? <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>📝 {order.description}</Text> : null}
               <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📍 {order.location}</Text>
               {order.pincode ? <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📮 {order.pincode}</Text> : null}
             </View>
@@ -599,7 +608,9 @@ const s = StyleSheet.create({
   newBadgeTxt:   { color: '#fff', fontSize: 10, fontWeight: '800' },
   jobCust:       { fontSize: 15, fontWeight: '800', color: '#1A3A6B' },
   jobType:       { fontSize: 13, fontWeight: '700', color: '#FF6B00', marginTop: 4 },
+  jobDesc:       { fontSize: 12, color: '#555', fontWeight: '600', marginTop: 3, fontStyle: 'italic' },
   jobLoc:        { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 3 },
+  orderImage:    { width: 70, height: 70, borderRadius: 10, marginRight: 8 },
   jobTime:       { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 3 },
   jobActions:    { flexDirection: 'row', gap: 10, marginTop: 15 },
   rejectBtn:     { flex: 1, backgroundColor: '#ffebee', padding: 12, borderRadius: 12, alignItems: 'center' },

@@ -5,9 +5,9 @@
 
 import * as FileSystem from 'expo-file-system'
 
-// ── Cloudinary credentials (hardcoded — cloud name is not a secret) ──────
-const CLOUDINARY_CLOUD_NAME    = 'dxyp1sblk'
-const CLOUDINARY_UPLOAD_PRESET = 'dotor_orders'
+// ── Cloudinary credentials (from .env via EXPO_PUBLIC_ prefix) ──────────
+const CLOUDINARY_CLOUD_NAME    = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dxyp1sblk'
+const CLOUDINARY_UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'dotor_orders'
 // ─────────────────────────────────────────────────────────────────────────
 
 const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`

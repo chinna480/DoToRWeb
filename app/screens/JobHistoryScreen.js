@@ -184,8 +184,8 @@ export default function JobHistoryScreen() {
               style={s.jobCard}
               onPress={() => {
                 Alert.alert(
-                  `${job.customerName}'s ${job.brand} ${job.repair}`,
-                  `📍 ${job.location}${job.pincode ? `\n📮 ${job.pincode}` : ''}\n🕐 ${job._date} at ${job._time}\n📱 ${job.brand} — ${job.repair}\n💰 ₹299${job.description ? `\n📝 Description: ${job.description}` : ''}\n📋 ${job.status === 'completed' ? '✅ Completed' : '🔧 In Progress'}`,
+                  `${job.customerName}'s ${job.brand} ${job.modelName || ''}`,
+                  `📍 ${job.location}${job.pincode ? `\n📮 ${job.pincode}` : ''}\n🕐 ${job._date} at ${job._time}\n📱 ${job.brand} — ${job.modelName || '—'}\n🔧 ${job.description || '—'}\n💰 ₹299\n📋 ${job.status === 'completed' ? '✅ Completed' : '🔧 In Progress'}`,
                   [{ text: 'OK' }]
                 )
               }}
@@ -194,7 +194,7 @@ export default function JobHistoryScreen() {
                 <View style={[s.statusDot, { backgroundColor: job.status === 'completed' ? '#2e7d32' : '#FF6B00' }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={s.jobCust}>👤 {job.customerName}</Text>
-                  <Text style={s.jobType}>📱 {job.brand} — {job.repair}</Text>
+                  <Text style={s.jobType}>📱 {job.brand} {job.modelName ? `— ${job.modelName}` : ''}</Text>
                   <Text style={s.jobLoc}>📍 {job.location}</Text>
                   {job.description ? (
                     <Text style={s.jobDesc}>📝 "{job.description.substring(0, 60)}{job.description.length > 60 ? '...' : ''}"</Text>
