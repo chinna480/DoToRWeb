@@ -5,6 +5,7 @@ import { onValue, ref, remove, set, update } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert, Image, Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -51,8 +52,14 @@ export default function TechHomeScreen() {
   const [distance, setDistance]          = useState('--')
   const [eta, setEta]                    = useState('--')
   const [currentCustPhone, setCustPhone] = useState('')
+  const [fsImages, setFsImages]          = useState([])
+  const [fsIndex, setFsIndex]            = useState(0)
+  const [liveOrderData, setLiveOrderData] = useState(null)
   const watchRef          = useRef(null)
+  const proximityWatchRef = useRef(null)
   const mapRef            = useRef(null)
+  const techLatRef        = useRef(17.3850)  // Always up-to-date tech GPS for closures
+  const techLngRef        = useRef(78.4867)
   const techPushToken     = useRef(null)
   const techLocRef        = useRef('')
   const techPincodeRef    = useRef('')
@@ -68,7 +75,12 @@ export default function TechHomeScreen() {
     loadTech().then(() => {
       if (!cancelled) unsub = listenOrders()
     })
-    return () => { cancelled = true; if (unsub) unsub(); if (watchRef.current) watchRef.current.remove() }
+    return () => {
+      cancelled = true
+      if (unsub) unsub()
+      if (watchRef.current) watchRef.current.remove()
+      if (proximityWatchRef.current) proximityWatchRef.current.remove()
+    }
   }, [])
 
   const custLocUnsubRef = useRef(null)
@@ -76,16 +88,34 @@ export default function TechHomeScreen() {
   useEffect(() => {
     if (ongoingJob) {
       startLocationSharing(ongoingJob.id)
-      // ✅ FIX: Listen to custLocation under this specific order
       if (custLocUnsubRef.current) custLocUnsubRef.current()
-      custLocUnsubRef.current = onValue(ref(db, 'orders/' + ongoingJob.id + '/custLocation'), snap => {
-        if (snap.exists()) { setCustLat(snap.val().lat); setCustLng(snap.val().lng) }
-      })
+      custLocUnsubRef.current = onValue(ref(db, 'orders/' + ongoingJob.id), snap => {
+        if (!snap.exists()) return
+        const order = { id: snap.key, ...snap.val() }
+        // Normalize images from Firebase (stored as objects {0:"url",1:"url"})
+        if (order.images && !Array.isArray(order.images)) {
+          order.images = typeof order.images === 'string' ? [order.images] : Object.values(order.images).filter(v => typeof v === 'string')
+        }
+        // Store full live order data so the ongoing card stays current (images, status, etc.)
+        setLiveOrderData(order)
+        // Prioritize nested custLocation (live GPS from customer's TrackingScreen)
+        if (order.custLocation && order.custLocation.lat != null && order.custLocation.lng != null) {
+          setCustLat(order.custLocation.lat)
+          setCustLng(order.custLocation.lng)
+        } else if (order.custLat != null && order.custLng != null) {
+          // Fallback to top-level fields from initial booking
+          setCustLat(order.custLat)
+          setCustLng(order.custLng)
+        }
+      }, err => console.log('custLocation listener error:', err))
       sentNearby.current  = false
       sentArrived.current = false
     } else {
       if (watchRef.current) { watchRef.current.remove(); watchRef.current = null }
       if (custLocUnsubRef.current) { custLocUnsubRef.current(); custLocUnsubRef.current = null }
+      setLiveOrderData(null)
+      // Restart proximity GPS watcher for pending-job matching
+      startProximityWatching()
     }
   }, [ongoingJob])
 
@@ -135,6 +165,8 @@ export default function TechHomeScreen() {
 
   const startLocationSharing = async (orderId) => {
     if (watchRef.current) return
+    // Stop proximity watcher before starting high-accuracy watcher
+    if (proximityWatchRef.current) { proximityWatchRef.current.remove(); proximityWatchRef.current = null }
     const { status } = await Location.requestForegroundPermissionsAsync()
     if (status !== 'granted') return
     watchRef.current = await Location.watchPositionAsync(
@@ -142,8 +174,25 @@ export default function TechHomeScreen() {
       pos => {
         const lat = pos.coords.latitude, lng = pos.coords.longitude
         setMyLat(lat); setMyLng(lng)
+        techLatRef.current = lat; techLngRef.current = lng
         // ✅ FIX: Write under this specific order, not global techLocation
         if (orderId) set(ref(db, 'orders/' + orderId + '/techLocation'), { lat, lng })
+      }
+    )
+  }
+
+  /** Start low-accuracy GPS watcher for proximity-based pending job matching (20 km radius) */
+  const startProximityWatching = async () => {
+    if (proximityWatchRef.current || watchRef.current) return
+    const { status } = await Location.requestForegroundPermissionsAsync()
+    if (status !== 'granted') return
+    proximityWatchRef.current = await Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.Balanced, timeInterval: 30000 },
+      pos => {
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        setMyLat(lat); setMyLng(lng)
+        techLatRef.current = lat; techLngRef.current = lng
       }
     )
   }
@@ -169,6 +218,10 @@ export default function TechHomeScreen() {
 
       snapshot.forEach(child => {
         const order = { id: child.key, ...child.val() }
+        // Normalize images from Firebase (stored as objects {0:"url",1:"url"})
+        if (order.images && !Array.isArray(order.images)) {
+          order.images = typeof order.images === 'string' ? [order.images] : Object.values(order.images).filter(v => typeof v === 'string')
+        }
         if (order.status === 'pending')   allPending.push(order)
         if (order.status === 'accepted') {
           // Only mark as ongoing if THIS tech accepted the job
@@ -180,18 +233,25 @@ export default function TechHomeScreen() {
         }
       })
 
-      // Filter pending jobs by technician's location area, pincode, AND area assignments
-      const filterLoc     = techLocRef.current
+      // Filter pending jobs by technician's pincode + GPS proximity (20 km radius)
       const filterPincode = techPincodeRef.current
+      const techLat = techLatRef.current  // use refs — state is stale in closures
+      const techLng = techLngRef.current
       const myPhone       = techPhoneRef.current
       const assignments   = areaAssignments.current
 
       let pending = allPending
-      if (filterLoc) {
-        pending = pending.filter(o => (o.location || '').toLowerCase().trim() === filterLoc)
-      }
       if (filterPincode) {
         pending = pending.filter(o => (o.pincode || '').toLowerCase().trim() === filterPincode)
+      }
+
+      // Filter by GPS proximity — only show orders within 20 km of technician's current location
+      if (techLat && techLng) {
+        pending = pending.filter(o => {
+          if (o.custLat == null || o.custLng == null) return false // No GPS → exclude
+          const dist = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
+          return dist <= 20 // within 20 km radius
+        })
       }
 
       // If an area is already assigned to a different technician, exclude those jobs
@@ -342,7 +402,7 @@ export default function TechHomeScreen() {
         </View>
       </View>
 
-      {/* ONGOING JOB */}
+      {/* ONGOING JOB — liveOrderData keeps fields current from Firebase */}
       <Text style={s.sectionTitle}>🔧 Ongoing Job</Text>
       {!ongoingJob ? (
         <View style={s.emptyCard}>
@@ -350,12 +410,22 @@ export default function TechHomeScreen() {
         </View>
       ) : (
         <View style={s.ongoingCard}>
-          <Text style={s.jobCust}>👤 {ongoingJob.customerName}</Text>
-          <Text style={s.jobType}>📱 {ongoingJob.brand} {ongoingJob.modelName ? `— ${ongoingJob.modelName}` : ''}</Text>
-          {ongoingJob.description ? <Text style={s.jobDesc}>📝 {ongoingJob.description}</Text> : null}
-          <Text style={s.jobLoc}>📍 {ongoingJob.location}</Text>
-          {ongoingJob.pincode ? <Text style={s.jobLoc}>📮 {ongoingJob.pincode}</Text> : null}
+          <Text style={s.jobCust}>👤 {(liveOrderData || ongoingJob).customerName}</Text>
+          <Text style={s.jobType}>📱 {(liveOrderData || ongoingJob).brand} {(liveOrderData || ongoingJob).modelName ? `— ${(liveOrderData || ongoingJob).modelName}` : ''}</Text>
+          {(liveOrderData || ongoingJob).description ? <Text style={s.jobDesc}>📝 {(liveOrderData || ongoingJob).description}</Text> : null}
+          <Text style={s.jobLoc}>📍 {(liveOrderData || ongoingJob).location}</Text>
+          {(liveOrderData || ongoingJob).pincode ? <Text style={s.jobLoc}>📮 {(liveOrderData || ongoingJob).pincode}</Text> : null}
           <Text style={s.inProgressTxt}>⚡ In Progress...</Text>
+
+          {(liveOrderData || ongoingJob).images && (liveOrderData || ongoingJob).images.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 8 }}>
+              {(liveOrderData || ongoingJob).images.map((url, j) => (
+                <TouchableOpacity key={j} onPress={() => { setFsImages((liveOrderData || ongoingJob).images); setFsIndex(j) }}>
+                  <Image source={{ uri: url }} style={s.orderImage} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
 
           <View style={s.distBanner}>
             <View>
@@ -446,6 +516,37 @@ export default function TechHomeScreen() {
     </ScrollView>
   )
 
+  /* ── Full-Screen Image Viewer Modal (with forward/backward nav) ── */
+  const renderImageModal = () => (
+    <Modal visible={fsImages.length > 0} transparent onRequestClose={() => setFsImages([])}>
+      <View style={s.fsOverlay}>
+        <TouchableOpacity style={s.fsClose} onPress={() => setFsImages([])}>
+          <Text style={s.fsCloseTxt}>✕</Text>
+        </TouchableOpacity>
+
+        <Text style={s.fsCounter}>{fsIndex + 1} / {fsImages.length}</Text>
+
+        <View style={s.fsContent}>
+          {fsIndex > 0 && (
+            <TouchableOpacity style={s.fsArrow} onPress={() => setFsIndex(i => i - 1)}>
+              <Text style={s.fsArrowTxt}>‹</Text>
+            </TouchableOpacity>
+          )}
+
+          {fsImages.length > 0 && (
+            <Image source={{ uri: fsImages[fsIndex] }} style={s.fsImage} resizeMode="contain" />
+          )}
+
+          {fsIndex < fsImages.length - 1 && (
+            <TouchableOpacity style={s.fsArrow} onPress={() => setFsIndex(i => i + 1)}>
+              <Text style={s.fsArrowTxt}>›</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </Modal>
+  )
+
   // ── PENDING TAB ──
   const renderPendingTab = () => (
     <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
@@ -472,7 +573,13 @@ export default function TechHomeScreen() {
             <Text style={s.jobLoc}>📍 {order.location}</Text>
             {order.pincode ? <Text style={s.jobLoc}>📮 {order.pincode}</Text> : null}
             {order.images && order.images.length > 0 && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>{order.images.map((url, j) => <Image key={j} source={{ uri: url }} style={s.orderImage} />)}</ScrollView>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                {order.images.map((url, j) => (
+                  <TouchableOpacity key={j} onPress={() => { setFsImages(order.images); setFsIndex(j) }}>
+                    <Image source={{ uri: url }} style={s.orderImage} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             )}
             <Text style={s.jobTime}>🕐 {order.time}</Text>
             <View style={s.jobActions}>
@@ -526,12 +633,24 @@ export default function TechHomeScreen() {
       ) : (
         completedJobs.map((order, i) => (
           <View key={i} style={s.completedCard}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={s.compCust}>👤 {order.customerName}</Text>
               <Text style={s.compType}>📱 {order.brand} {order.modelName ? `— ${order.modelName}` : ''}</Text>
               {order.description ? <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>📝 {order.description}</Text> : null}
               <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📍 {order.location}</Text>
               {order.pincode ? <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📮 {order.pincode}</Text> : null}
+              {order.images && order.images.length > 0 && (
+                <View style={{ flexDirection: 'row', gap: 4, marginTop: 6 }}>
+                  {order.images.slice(0, 3).map((url, j) => (
+                    <TouchableOpacity key={j} onPress={() => { setFsImages(order.images); setFsIndex(j) }}>
+                      <Image source={{ uri: url }} style={{ width: 36, height: 36, borderRadius: 6, backgroundColor: '#eee' }} />
+                    </TouchableOpacity>
+                  ))}
+                  {order.images.length > 3 && (
+                    <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{order.images.length - 3}</Text>
+                  )}
+                </View>
+              )}
             </View>
             <View style={s.compRight}>
               <Text style={s.compPrice}>✅ Done</Text>
@@ -560,6 +679,8 @@ export default function TechHomeScreen() {
       {activeTab === 'home' && renderHomeTab()}
       {activeTab === 'pending' && renderPendingTab()}
       {activeTab === 'completed' && renderCompletedTab()}
+
+      {renderImageModal()}
 
       {/* BOTTOM TAB BAR */}
       <View style={s.tabBar}>
@@ -668,4 +789,14 @@ const s = StyleSheet.create({
   tabIndicator:  { position: 'absolute', top: -1, width: 24, height: 3, backgroundColor: '#FF6B00', borderRadius: 2, alignSelf: 'center' },
   tabBadge:      { position: 'absolute', top: 0, right: '15%', backgroundColor: '#FF6B00', width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   tabBadgeTxt:   { fontSize: 9, fontWeight: '800', color: '#fff' },
+
+  // ── Full-screen Image Modal ──
+  fsOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
+  fsClose:        { position: 'absolute', top: 55, right: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  fsCloseTxt:     { color: '#fff', fontSize: 18, fontWeight: '800' },
+  fsCounter:      { position: 'absolute', top: 60, left: 20, color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '700', zIndex: 10 },
+  fsContent:      { flexDirection: 'row', alignItems: 'center', width: '100%', height: '100%' },
+  fsArrow:        { width: 50, height: '60%', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  fsArrowTxt:     { color: '#fff', fontSize: 48, fontWeight: '300', opacity: 0.8 },
+  fsImage:        { flex: 1, height: '70%' },
 })

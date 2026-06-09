@@ -133,7 +133,7 @@ export default function TrackingScreen() {
         setTechLat(lat)
         setTechLng(lng)
         setStatusMsg('🛵 Technician is on the way!')
-      })
+      }, err => console.log('techLocation listener error:', err))
       unsubsRef.current.push(u1)
     } catch (e) {
       console.log('techLocation listener error:', e)
@@ -161,7 +161,7 @@ export default function TrackingScreen() {
           // Reset jobDone if order is not completed (prevents stale state)
           setJobDone(false)
         }
-      })
+      }, err => console.log('order listener error:', err))
       unsubsRef.current.push(u2)
     } catch (e) {
       console.log('orders listener error:', e)

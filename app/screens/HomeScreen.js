@@ -10,6 +10,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -64,6 +65,8 @@ export default function HomeScreen() {
   const [activeTab, setActiveTab]           = useState('home')
   const [custLat, setCustLat]               = useState(null)
   const [custLng, setCustLng]               = useState(null)
+  const [fsImages, setFsImages]             = useState([])
+  const [fsIndex, setFsIndex]               = useState(0)
 
   const ordersUnsubRef = useRef(null)
 
@@ -478,10 +481,10 @@ export default function HomeScreen() {
           const statusColor = order.status === 'completed' ? '#2e7d32' : order.status === 'accepted' ? '#FF6B00' : '#888'
           const statusIcon = order.status === 'completed' ? '✅' : order.status === 'accepted' ? '🔧' : '⏳'
           return (
-            <TouchableOpacity key={order.id || i} style={s.orderCard} onPress={() => {
+            <TouchableOpacity key={order.id || i} style={s.orderCard} onPress={async () => {
               if (order.status === 'accepted' || order.status === 'pending') {
                 if (order.id) {
-                  AsyncStorage.setItem('lastOrderId', order.id)
+                  await AsyncStorage.setItem('lastOrderId', order.id)
                   router.push('/screens/TrackingScreen')
                 }
               }
@@ -491,7 +494,11 @@ export default function HomeScreen() {
                 {order.description ? <Text style={s.orderRepair}>🔧 {order.description}</Text> : null}
                 {order.images && order.images.length > 0 && (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
-                    {order.images.map((url, j) => <Image key={j} source={{ uri: url }} style={s.orderImage} />)}
+                    {order.images.map((url, j) => (
+                      <TouchableOpacity key={j} onPress={() => { setFsImages(order.images); setFsIndex(j) }}>
+                        <Image source={{ uri: url }} style={s.orderImage} />
+                      </TouchableOpacity>
+                    ))}
                   </ScrollView>
                 )}
                 <Text style={s.orderLoc}>📍 {order.location}</Text>
@@ -515,12 +522,44 @@ export default function HomeScreen() {
     </ScrollView>
   )
 
+  /* ── Full-Screen Image Viewer Modal (with forward/backward nav) ── */
+  const renderImageModal = () => (
+    <Modal visible={fsImages.length > 0} transparent onRequestClose={() => setFsImages([])}>
+      <View style={s.fsOverlay}>
+        <TouchableOpacity style={s.fsClose} onPress={() => setFsImages([])}>
+          <Text style={s.fsCloseTxt}>✕</Text>
+        </TouchableOpacity>
+
+        <Text style={s.fsCounter}>{fsIndex + 1} / {fsImages.length}</Text>
+
+        <View style={s.fsContent}>
+          {fsIndex > 0 && (
+            <TouchableOpacity style={s.fsArrow} onPress={() => setFsIndex(i => i - 1)}>
+              <Text style={s.fsArrowTxt}>‹</Text>
+            </TouchableOpacity>
+          )}
+
+          {fsImages.length > 0 && (
+            <Image source={{ uri: fsImages[fsIndex] }} style={s.fsImage} resizeMode="contain" />
+          )}
+
+          {fsIndex < fsImages.length - 1 && (
+            <TouchableOpacity style={s.fsArrow} onPress={() => setFsIndex(i => i + 1)}>
+              <Text style={s.fsArrowTxt}>›</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </Modal>
+  )
+
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
       {bookingStep > 0 ? renderWizard() : (
         <>
           {activeTab === 'home' && renderHome()}
           {activeTab === 'orders' && renderOrdersTab()}
+          {renderImageModal()}
           <View style={s.tabBar}>
             <TouchableOpacity style={[s.tabItem, activeTab === 'home' && s.tabItemActive]} onPress={() => setActiveTab('home')}><Text style={[s.tabIcon, activeTab === 'home' && s.tabIconActive]}>🏠</Text><Text style={[s.tabLabel, activeTab === 'home' && s.tabLabelActive]}>Home</Text></TouchableOpacity>
             <TouchableOpacity style={s.tabItem} onPress={() => setBookingStep(1)}><Text style={s.tabIcon}>🔧</Text><Text style={s.tabLabel}>Book</Text></TouchableOpacity>
@@ -640,4 +679,14 @@ const s = StyleSheet.create({
   tabIconActive:    { opacity: 1 },
   tabLabel:         { fontSize: 10, fontWeight: '600', color: '#888', marginTop: 2 },
   tabLabelActive:   { color: '#FF6B00', fontWeight: '800' },
+
+  // ── Full-screen Image Modal ──
+  fsOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
+  fsClose:        { position: 'absolute', top: 55, right: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  fsCloseTxt:     { color: '#fff', fontSize: 18, fontWeight: '800' },
+  fsCounter:      { position: 'absolute', top: 60, left: 20, color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '700', zIndex: 10 },
+  fsContent:      { flexDirection: 'row', alignItems: 'center', width: '100%', height: '100%' },
+  fsArrow:        { width: 50, height: '60%', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  fsArrowTxt:     { color: '#fff', fontSize: 48, fontWeight: '300', opacity: 0.8 },
+  fsImage:        { flex: 1, height: '70%' },
 })
