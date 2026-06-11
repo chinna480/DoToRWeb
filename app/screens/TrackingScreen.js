@@ -45,27 +45,6 @@ class TrackingErrorBoundary extends Component {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Safe map error boundary — catches JS rendering errors from react-native-maps
-// ═══════════════════════════════════════════════════════════════════════════
-class MapErrorBoundary extends Component {
-  state = { crashed: false }
-  static getDerivedStateFromError() { return { crashed: true } }
-  componentDidCatch(error) { console.error('MapView crash:', error?.message) }
-  render() {
-    if (this.state.crashed) {
-      return (
-        <View style={{ height: 200, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 50 }}>🗺️</Text>
-          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 10, textAlign: 'center', paddingHorizontal: 20 }}>
-            Map temporarily unavailable
-          </Text>
-        </View>
-      )
-    }
-    return this.props.children
-  }
-}
 
 export default function TrackingScreen() {
   const router = useRouter()
@@ -88,31 +67,7 @@ export default function TrackingScreen() {
   const [orderId, setOrderId]     = useState('')
   const [custName, setCustName]   = useState('Customer')
 
-  // ── Lazy-loaded map components (loaded AFTER first render to avoid module crash) ──
-  const [mapLoaded, setMapLoaded]   = useState(false)
-  const [MapViewCmp, setMapViewCmp] = useState(null)
-  const [MarkerCmp, setMarkerCmp]   = useState(null)
-  const [PolylineCmp, setPolylineCmp] = useState(null)
 
-  // Load react-native-maps lazily — module-level require can crash before
-  // React error boundaries catch it. Loading here ensures the component
-  // renders safely even if the map module fails.
-  useEffect(() => {
-    let cancelled = false
-    try {
-      const Maps = require('react-native-maps')
-      if (!cancelled) {
-        setMapViewCmp(() => Maps.default || null)
-        setMarkerCmp(() => Maps.Marker || null)
-        setPolylineCmp(() => Maps.Polyline || null)
-        setMapLoaded(true)
-      }
-    } catch (e) {
-      console.log('react-native-maps not available, using placeholder:', e?.message)
-      if (!cancelled) setMapLoaded(true)
-    }
-    return () => { cancelled = true }
-  }, [])
 
   const watchRef    = useRef(null)
   const unsubsRef   = useRef([])
@@ -261,6 +216,18 @@ export default function TrackingScreen() {
     setEta('~' + Math.max(1, etaMins) + ' mins')
   }
 
+  const openMapsDirections = () => {
+    if (techLat && techLng && custLat && custLng) {
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${custLat},${custLng}`)
+        .catch(() => Alert.alert('Error', 'Could not open Google Maps'))
+    } else if (custLat && custLng) {
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${custLat},${custLng}`)
+        .catch(() => Alert.alert('Error', 'Could not open Google Maps'))
+    } else {
+      Alert.alert('Location Unavailable', 'Customer location is not set yet.')
+    }
+  }
+
   // Recalculate distance whenever GPS or tech location changes
   useEffect(() => {
     if (custLat && techLat) {
@@ -316,39 +283,18 @@ export default function TrackingScreen() {
           </View>
         </View>
 
-        {/* MAP or PLACEHOLDER — MapView is loaded lazily to prevent module-level crashes */}
-        <MapErrorBoundary>
-        {mapLoaded && MapViewCmp && MarkerCmp ? (
-          <MapViewCmp
-            style={s.map}
-            region={{
-              latitude:       (custLat + (techLat || custLat)) / 2,
-              longitude:      (custLng + (techLng || custLng)) / 2,
-              latitudeDelta:  0.05,
-              longitudeDelta: 0.05,
-            }}
-          >
-            <MarkerCmp coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Your Location" />
-            {techLat && <MarkerCmp coordinate={{ latitude: techLat, longitude: techLng }} title="🛵 Technician" pinColor="#FF6B00" />}
-            {techLat && PolylineCmp && (
-              <PolylineCmp
-                coordinates={[
-                  { latitude: custLat, longitude: custLng },
-                  { latitude: techLat, longitude: techLng },
-                ]}
-                strokeColor="#FF6B00"
-                strokeWidth={3}
-                lineDashPattern={[8, 8]}
-              />
-            )}
-          </MapViewCmp>
-        ) : (
-          <View style={s.mapPlaceholder}>
-            <Text style={s.mapIcon}>🗺️</Text>
-            <Text style={s.mapTxt}>{techLat ? '🛵 Technician is moving towards you!' : '⏳ Waiting for technician...'}</Text>
-          </View>
-        )}
-        </MapErrorBoundary>
+        {/* MAP PLACEHOLDER — stable, no native module */}
+        <TouchableOpacity style={s.mapPlaceholder} onPress={openMapsDirections} activeOpacity={0.8}>
+          <Text style={s.mapIcon}>{techLat ? '🛵' : '🗺️'}</Text>
+          <Text style={s.mapTxt}>
+            {techLat ? '🛵 Live tracking active — tap to open in Maps!' : '⏳ Waiting for technician...'}
+          </Text>
+          {techLat && (
+            <View style={s.mapOpenBtn}>
+              <Text style={s.mapOpenTxt}>🗺️ Open in Google Maps</Text>
+            </View>
+          )}
+        </TouchableOpacity>
 
         <View style={s.content}>
 
@@ -474,6 +420,8 @@ const s = StyleSheet.create({
   mapPlaceholder: { height: 200, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' },
   mapIcon:        { fontSize: 50 },
   mapTxt:         { color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 10, textAlign: 'center', paddingHorizontal: 20 },
+  mapOpenBtn:     { marginTop: 14, backgroundColor: '#FF6B00', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
+  mapOpenTxt:     { color: '#fff', fontSize: 12, fontWeight: '800' },
   content:        { padding: 15 },
   distBanner:     { backgroundColor: '#1A3A6B', borderRadius: 16, padding: 15, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   distLabel:      { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '700' },

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -37,24 +38,7 @@ export default function CustomerLoginScreen() {
   const [mapLat, setMapLat] = useState(null)
   const [mapLng, setMapLng] = useState(null)
   const [reverseGeocoding, setReverseGeocoding] = useState(false)
-  // ── Lazy-loaded map components (loaded inside component to prevent module-level crash) ──
-  const [mapLoaded, setMapLoaded] = useState(false)
-  const [MapViewCmp, setMapViewCmp] = useState(null)
-  const [MarkerNativeCmp, setMarkerNativeCmp] = useState(null)
-  useEffect(() => {
-    let cancelled = false
-    try {
-      const Maps = require('react-native-maps')
-      if (!cancelled) {
-        setMapViewCmp(() => Maps.default || null)
-        setMarkerNativeCmp(() => Maps.Marker || null)
-      }
-    } catch (e) {
-      console.log('react-native-maps not available (LoginScreen):', e?.message)
-    }
-    if (!cancelled) setMapLoaded(true)
-    return () => { cancelled = true }
-  }, [])
+  // react-native-maps removed — using Google Maps link instead (prevents native crash)
 
   const [otp, setOtp] = useState('')
   const [showOtpBox, setShowOtpBox] = useState(false)
@@ -345,36 +329,37 @@ export default function CustomerLoginScreen() {
               <Text style={s.mapModalClose}>✕</Text>
             </TouchableOpacity>
           </View>
-          {mapLoaded && mapLat && mapLng && MapViewCmp ? (
-            <MapViewCmp
-              style={{ flex: 1 }}
-              initialRegion={{
-                latitude: mapLat,
-                longitude: mapLng,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
-              }}
-              onPress={(e) => {
-                setMapLat(e.nativeEvent.coordinate.latitude)
-                setMapLng(e.nativeEvent.coordinate.longitude)
-              }}
-            >
-              {MarkerNativeCmp && (
-                <MarkerNativeCmp
-                  coordinate={{ latitude: mapLat, longitude: mapLng }}
-                  draggable
-                  onDragEnd={(e) => {
-                    setMapLat(e.nativeEvent.coordinate.latitude)
-                    setMapLng(e.nativeEvent.coordinate.longitude)
+          {mapLat && mapLng ? (
+            <View style={s.mapModalPlaceholder}>
+              <Text style={s.mapModalPlaceholderIcon}>📍</Text>
+              <Text style={s.mapModalPlaceholderText}>
+                Location selected: {mapLat.toFixed(4)}, {mapLng.toFixed(4)}
+              </Text>
+              <View style={{ marginTop: 16, flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  style={{ backgroundColor: '#FF6B00', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}
+                  onPress={() => {
+                    Linking.openURL(`https://www.google.com/maps?q=${mapLat},${mapLng}`)
+                      .catch(() => {})
                   }}
-                  title="Your Location"
-                />
-              )}
-            </MapViewCmp>
+                >
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>🗺️ Open in Maps</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ backgroundColor: '#1A3A6B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}
+                  onPress={() => {
+                    setMapLat(mapLat + 0.001)
+                    setMapLng(mapLng + 0.001)
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>📍 Fine-tune</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           ) : (
             <View style={s.mapModalPlaceholder}>
               <Text style={s.mapModalPlaceholderIcon}>🗺️</Text>
-              <Text style={s.mapModalPlaceholderText}>{mapLoaded ? (MapViewCmp ? 'Loading map...' : 'Map not available') : 'Loading map...'}</Text>
+              <Text style={s.mapModalPlaceholderText}>Loading location...</Text>
             </View>
           )}
           <View style={s.mapModalFooter}>

@@ -52,27 +52,6 @@ class TechHomeErrorBoundary extends Component {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Safe map error boundary — catches JS rendering errors from react-native-maps
-// ═══════════════════════════════════════════════════════════════════════════
-class MapErrorBoundaryTech extends Component {
-  state = { crashed: false }
-  static getDerivedStateFromError() { return { crashed: true } }
-  componentDidCatch(error) { console.error('TechHomeScreen MapView crash:', error?.message) }
-  render() {
-    if (this.state.crashed) {
-      return (
-        <View style={{ height: 200, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}>
-          <Text style={{ fontSize: 40 }}>🗺️</Text>
-          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 8, textAlign: 'center', paddingHorizontal: 20 }}>
-            Map temporarily unavailable
-          </Text>
-        </View>
-      )
-    }
-    return this.props.children
-  }
-}
 
 export default function TechHomeScreen() {
   const router = useRouter()
@@ -95,24 +74,7 @@ export default function TechHomeScreen() {
   const [fsImages, setFsImages]          = useState([])
   const [fsIndex, setFsIndex]            = useState(0)
   const [liveOrderData, setLiveOrderData] = useState(null)
-  // ── Lazy-loaded map components (loaded AFTER first render to prevent module-level crash) ──
-  const [MapViewCmp, setMapViewCmp] = useState(null)
-  const [MarkerCmp, setMarkerCmp]   = useState(null)
-  const [PolylineCmp, setPolylineCmp] = useState(null)
-  useEffect(() => {
-    let cancelled = false
-    try {
-      const Maps = require('react-native-maps')
-      if (!cancelled) {
-        setMapViewCmp(() => Maps.default || null)
-        setMarkerCmp(() => Maps.Marker || null)
-        setPolylineCmp(() => Maps.Polyline || null)
-      }
-    } catch (e) {
-      console.log('react-native-maps not available (TechHomeScreen):', e?.message)
-    }
-    return () => { cancelled = true }
-  }, [])
+
 
   const watchRef          = useRef(null)
   const proximityWatchRef = useRef(null)
@@ -530,34 +492,18 @@ export default function TechHomeScreen() {
             </View>
           </View>
 
-          {/* Safe map — lazily loaded to prevent module-level crash */}
-          <MapErrorBoundaryTech>
-          {MapViewCmp && MarkerCmp && (custLat || myLat) ? (
-            <MapViewCmp
-              ref={mapRef}
-              style={s.map}
-              region={{
-                latitude:      (myLat + (custLat || myLat)) / 2,
-                longitude:     (myLng + (custLng || myLng)) / 2,
-                latitudeDelta:  0.05,
-                longitudeDelta: 0.05,
-              }}
-            >
-              <MarkerCmp coordinate={{ latitude: myLat, longitude: myLng }} title="🛵 You" pinColor="#1A3A6B" />
-              {custLat && (
-                <>
-                  <MarkerCmp coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Customer" />
-                  {PolylineCmp && (
-                    <PolylineCmp
-                      coordinates={[{ latitude: myLat, longitude: myLng }, { latitude: custLat, longitude: custLng }]}
-                      strokeColor="#FF6B00" strokeWidth={3} lineDashPattern={[8, 8]}
-                    />
-                  )}
-                </>
-              )}
-            </MapViewCmp>
-          ) : null}
-          </MapErrorBoundaryTech>
+          {/* MAP PLACEHOLDER — stable, no native module crash risk */}
+          <TouchableOpacity style={s.mapPlaceholder} onPress={() => navigate()} activeOpacity={0.8}>
+            <Text style={s.mapPlaceholderIcon}>{custLat ? '🛵' : '🗺️'}</Text>
+            <Text style={s.mapPlaceholderTxt}>
+              {custLat ? '📍 Customer location available — tap to open in Maps!' : '⏳ Waiting for customer location...'}
+            </Text>
+            {custLat && (
+              <View style={s.mapOpenBtn}>
+                <Text style={s.mapOpenTxt}>🗺️ Open in Google Maps</Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
           <View style={s.btnRow}>
             <TouchableOpacity style={s.navBtn} onPress={navigate}>
@@ -838,6 +784,11 @@ const s = StyleSheet.create({
   locIcon:       { fontSize: 22 },
   locLabel:      { fontSize: 10, fontWeight: '800', color: '#888', marginTop: 3, letterSpacing: 1 },
   locName:       { fontSize: 11, fontWeight: '800', color: '#1A3A6B', marginTop: 2 },
+  mapPlaceholder:     { width: '100%', height: 200, borderRadius: 12, marginBottom: 12, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  mapPlaceholderIcon: { fontSize: 50 },
+  mapPlaceholderTxt:  { color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 10, textAlign: 'center', paddingHorizontal: 20 },
+  mapOpenBtn:         { marginTop: 12, backgroundColor: '#FF6B00', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
+  mapOpenTxt:         { color: '#fff', fontSize: 12, fontWeight: '800' },
   map:           { width: '100%', height: 200, borderRadius: 12, marginBottom: 12, overflow: 'hidden' },
   btnRow:        { flexDirection: 'row', gap: 8, marginBottom: 8 },
   navBtn:        { flex: 1, backgroundColor: '#FF6B00', padding: 12, borderRadius: 12, alignItems: 'center' },
