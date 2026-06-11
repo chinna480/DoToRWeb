@@ -46,29 +46,7 @@ class TrackingErrorBoundary extends Component {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Safe map components — each loaded & validated individually so the whole
-// screen never crashes if a sub-component is unexpectedly undefined.
-// ═══════════════════════════════════════════════════════════════════════════
-let MapView, Marker, Polyline
-try {
-  const Maps = require('react-native-maps')
-  MapView  = Maps.default  || null
-  Marker   = Maps.Marker   || null
-  Polyline = Maps.Polyline || null
-} catch (e) {
-  MapView = null
-  Marker  = null
-  Polyline = null
-}
-
-// Only render the real map when ALL required components are available
-const hasMap = !!(MapView && Marker)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Safe map wrapper — catches JS errors thrown by react-native-maps during
-// rendering so the *entire* TrackingScreen doesn't crash. Native crashes
-// (i.e. missing Google Maps API key) cannot be caught by JS, but this
-// prevents JS-level exceptions from killing the whole screen.
+// Safe map error boundary — catches JS rendering errors from react-native-maps
 // ═══════════════════════════════════════════════════════════════════════════
 class MapErrorBoundary extends Component {
   state = { crashed: false }
@@ -109,6 +87,32 @@ export default function TrackingScreen() {
   const [jobDone, setJobDone]     = useState(false)
   const [orderId, setOrderId]     = useState('')
   const [custName, setCustName]   = useState('Customer')
+
+  // ── Lazy-loaded map components (loaded AFTER first render to avoid module crash) ──
+  const [mapLoaded, setMapLoaded]   = useState(false)
+  const [MapViewCmp, setMapViewCmp] = useState(null)
+  const [MarkerCmp, setMarkerCmp]   = useState(null)
+  const [PolylineCmp, setPolylineCmp] = useState(null)
+
+  // Load react-native-maps lazily — module-level require can crash before
+  // React error boundaries catch it. Loading here ensures the component
+  // renders safely even if the map module fails.
+  useEffect(() => {
+    let cancelled = false
+    try {
+      const Maps = require('react-native-maps')
+      if (!cancelled) {
+        setMapViewCmp(() => Maps.default || null)
+        setMarkerCmp(() => Maps.Marker || null)
+        setPolylineCmp(() => Maps.Polyline || null)
+        setMapLoaded(true)
+      }
+    } catch (e) {
+      console.log('react-native-maps not available, using placeholder:', e?.message)
+      if (!cancelled) setMapLoaded(true)
+    }
+    return () => { cancelled = true }
+  }, [])
 
   const watchRef    = useRef(null)
   const unsubsRef   = useRef([])
@@ -295,10 +299,10 @@ export default function TrackingScreen() {
           </View>
         </View>
 
-        {/* MAP or PLACEHOLDER — wrapped in MapErrorBoundary to catch JS crashes from react-native-maps */}
+        {/* MAP or PLACEHOLDER — MapView is loaded lazily to prevent module-level crashes */}
         <MapErrorBoundary>
-        {hasMap ? (
-          <MapView
+        {mapLoaded && MapViewCmp && MarkerCmp ? (
+          <MapViewCmp
             style={s.map}
             region={{
               latitude:       (custLat + (techLat || custLat)) / 2,
@@ -307,10 +311,10 @@ export default function TrackingScreen() {
               longitudeDelta: 0.05,
             }}
           >
-            <Marker coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Your Location" />
-            {techLat && <Marker coordinate={{ latitude: techLat, longitude: techLng }} title="🛵 Technician" pinColor="#FF6B00" />}
-            {techLat && Polyline && (
-              <Polyline
+            <MarkerCmp coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Your Location" />
+            {techLat && <MarkerCmp coordinate={{ latitude: techLat, longitude: techLng }} title="🛵 Technician" pinColor="#FF6B00" />}
+            {techLat && PolylineCmp && (
+              <PolylineCmp
                 coordinates={[
                   { latitude: custLat, longitude: custLng },
                   { latitude: techLat, longitude: techLng },
@@ -320,7 +324,7 @@ export default function TrackingScreen() {
                 lineDashPattern={[8, 8]}
               />
             )}
-          </MapView>
+          </MapViewCmp>
         ) : (
           <View style={s.mapPlaceholder}>
             <Text style={s.mapIcon}>🗺️</Text>
