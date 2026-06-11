@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DoToR - My Orders</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .orders-page { max-width: 700px; margin: 0 auto; }
+    .phone-input-row { display: flex; gap: 10px; margin-bottom: 16px; }
+    .phone-input-row input { flex: 1; }
+    .order-detail-modal { position: fixed; top:0;left:0;right:0;bottom:0; background:rgba(0,0,0,0.5); display:none; align-items:center; justify-content:center; z-index:200; padding:20px; }
+    .order-detail-modal.show { display:flex; }
+    .order-detail-content { background:var(--white); border-radius:var(--radius-lg); padding:24px; max-width:500px; width:100%; max-height:80vh; overflow-y:auto; }
+    .order-detail-content h3 { font-size:18px;font-weight:800;color:var(--navy);margin-bottom:16px; }
+    .detail-row { display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--gray-border);font-size:13px; }
+    .detail-label { color:var(--gray);font-weight:600; }
+    .detail-value { color:var(--navy);font-weight:700;text-align:right; }
+
+    /* ── Full-screen Image Viewer ────────────────────────────────── */
+    .fs-viewer {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 500;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+    .fs-viewer.show { display: flex; }
+    .fs-viewer .close-btn {
+      position: absolute;
+      top: 20px; right: 20px;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      border: none;
+      font-size: 22px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      transition: all 0.2s;
+    }
+    .fs-viewer .close-btn:hover { background: rgba(255,255,255,0.3); }
+    .fs-viewer .counter {
+      position: absolute;
+      top: 24px; left: 24px;
+      color: rgba(255,255,255,0.7);
+      font-size: 14px;
+      font-weight: 700;
+      z-index: 10;
+    }
+    .fs-viewer .nav-area {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+    .fs-viewer .nav-btn {
+      width: 60px;
+      height: 60%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+      color: #fff;
+      font-size: 48px;
+      font-weight: 300;
+      opacity: 0.6;
+      transition: all 0.2s;
+      border: none;
+      background: none;
+    }
+    .fs-viewer .nav-btn:hover { opacity: 1; }
+    .fs-viewer .nav-btn:disabled { opacity: 0; cursor: default; }
+    .fs-viewer .fs-image {
+      flex: 1;
+      height: 80vh;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a href="/" class="nav-brand"><span>🔧</span> DoToR</a>
+    <div class="nav-links">
+      <a href="/">Book Repair</a>
+      <a href="/tracking.html">Track</a>
+      <a href="/orders.html" class="active">My Orders</a>
+      <a href="/profile.html">Profile</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="header-card navy">
+      <h1>📋 My Orders</h1>
+      <p>View all your repair requests and their status</p>
+    </div>
+
+    <div class="card orders-page">
+      <div class="card-title">🔍 Find Your Orders</div>
+      <p style="font-size:13px;color:var(--gray);margin-bottom:12px;">
+        Enter your phone number to see all your repair orders.
+      </p>
+      <div class="phone-input-row">
+        <input type="tel" id="searchPhone" class="form-input" placeholder="Enter your 10-digit phone number" maxlength="10">
+        <button class="btn btn-primary" onclick="loadOrders()">🔍 Search</button>
+      </div>
+      <p id="savedPhoneHint" style="font-size:11px;color:var(--primary);display:none;cursor:pointer;" onclick="useSaved()">
+        Use your saved phone number
+      </p>
+    </div>
+
+    <!-- Filter Bar -->
+    <div id="filterBar" style="display:none;" class="card">
+      <div class="filter-bar">
+        <select id="statusFilter" onchange="applyFilter()">
+          <option value="all">All Orders</option>
+          <option value="pending">Pending</option>
+          <option value="accepted">Accepted</option>
+          <option value="completed">Completed</option>
+        </select>
+        <span style="font-size:13px;color:var(--gray);align-self:center;" id="orderCount"></span>
+      </div>
+    </div>
+
+    <!-- Orders List -->
+    <div id="ordersList" style="display:none;"></div>
+
+    <!-- Empty State -->
+    <div id="emptyOrders" class="empty-state">
+      <div class="icon">📦</div>
+      <h3>No Orders Found</h3>
+      <p>Enter your phone number above to see your orders, or book a new repair.</p>
+      <div style="margin-top:16px;">
+        <a href="/" class="btn btn-primary">📱 Book a Repair</a>
+      </div>
+    </div>
+
+    <div id="noOrdersFound" class="empty-state" style="display:none;">
+      <div class="icon">📭</div>
+      <h3>No Orders Yet</h3>
+      <p>You haven't placed any orders with this phone number.</p>
+      <div style="margin-top:16px;">
+        <a href="/" class="btn btn-primary">📱 Book Your First Repair</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Order Detail Modal -->
+  <div class="order-detail-modal" id="orderDetailModal">
+    <div class="order-detail-content">
+      <button class="modal-close" onclick="closeDetail()">✕</button>
+      <h3 id="detailTitle">Order Details</h3>
+      <div id="detailBody"></div>
+    </div>
+  </div>
+
+  <!-- ── Full-screen Image Viewer ─────────────────────────────────------- -->
+  <div class="fs-viewer" id="fsViewer" onclick="if(event.target===this)closeFsViewer()">
+    <button class="close-btn" onclick="closeFsViewer()">✕</button>
+    <div class="counter" id="fsCounter">1 / 1</div>
+    <div class="nav-area">
+      <button class="nav-btn" id="fsPrev" onclick="navigateFs(-1)">‹</button>
+      <img class="fs-image" id="fsImage" src="" alt="Full screen image">
+      <button class="nav-btn" id="fsNext" onclick="navigateFs(1)">›</button>
+    </div>
+  </div>
+
+  <div class="footer">© 2025 DoToR - Doorstep Repair Service</div>
+
+  <script type="module">
+    import { listenCustomerOrders, getTechRating, getTechProfile } from './firebase.js';
+
+    let allOrders = [];
+    let currentPhone = '';
+    let unsubOrders = null;
+    const techProfileCache = {}; // phone -> { photo, rating, reviewCount } cache
+
+    // ── Init ──────────────────────────────────────────────────────────
+    const savedPhone = localStorage.getItem('lastCustPhone');
+    if (savedPhone) {
+      document.getElementById('searchPhone').value = savedPhone;
+      document.getElementById('savedPhoneHint').style.display = 'block';
+      loadOrders();
+    }
+
+    window.loadOrders = function() {
+      const phone = document.getElementById('searchPhone').value.trim();
+      if (!phone || phone.length < 10) {
+        showToast('Please enter your 10-digit phone number', 'error');
+        return;
+      }
+
+      currentPhone = phone;
+      localStorage.setItem('lastCustPhone', phone);
+
+      // Clean up old listener
+      if (unsubOrders) unsubOrders();
+
+      document.getElementById('ordersList').style.display = 'none';
+      document.getElementById('noOrdersFound').style.display = 'none';
+
+      unsubOrders = listenCustomerOrders(phone, (orders) => {
+        allOrders = orders;
+        document.getElementById('loadingOrders').style.display = 'none';
+
+        if (orders.length === 0) {
+          document.getElementById('noOrdersFound').style.display = 'block';
+          document.getElementById('ordersList').style.display = 'none';
+          document.getElementById('filterBar').style.display = 'none';
+          return;
+        }
+
+        document.getElementById('filterBar').style.display = 'block';
+        document.getElementById('noOrdersFound').style.display = 'none';
+        applyFilter();
+      });
+    };
+
+    window.applyFilter = function() {
+      const filter = document.getElementById('statusFilter').value;
+      const filtered = filter === 'all' ? allOrders : allOrders.filter(o => o.status === filter);
+
+      document.getElementById('orderCount').textContent = `${filtered.length} of ${allOrders.length} orders`;
+
+      renderOrders(filtered);
+    };
+
+    async function fetchTechProfile(techPhone) {
+      if (techProfileCache[techPhone]) return techProfileCache[techPhone];
+      try {
+        const [rating, profile] = await Promise.all([
+          getTechRating(techPhone),
+          getTechProfile(techPhone)
+        ]);
+        techProfileCache[techPhone] = {
+          photo: profile?.photo || null,
+          rating: rating?.average || null,
+          reviewCount: rating?.count || 0,
+        };
+        return techProfileCache[techPhone];
+      } catch(e) {
+        return { photo: null, rating: null, reviewCount: 0 };
+      }
+    }
+
+    function renderOrders(orders) {
+      const container = document.getElementById('ordersList');
+      container.style.display = 'block';
+
+      // Fetch tech profiles for accepted orders (async)
+      orders.forEach(order => {
+        if (order.status === 'accepted' && order.techPhone && !techProfileCache[order.techPhone]) {
+          fetchTechProfile(order.techPhone).then(() => {
+            // Re-render to show updated tech info
+            applyFilter();
+          });
+        }
+      });
+
+      container.innerHTML = orders.map(order => {
+        const techProfile = order.techPhone ? techProfileCache[order.techPhone] : null;
+        const hasTechInfo = order.status === 'accepted' && order.techName && techProfile;
+
+        return `
+        <div class="order-card ${order.status}" onclick="showDetail('${order.id}')">
+          <div class="order-left">
+            <div class="order-brand">📱 ${order.brand || 'Device'}${order.modelName || order.model ? ` — ${order.modelName || order.model}` : ''}</div>
+            <div class="order-repair">🔧 ${order.description || order.repair || 'Service'}</div>
+            <div class="order-detail">📍 ${order.location || 'Location not set'}</div>
+            ${order.pincode ? `<div class="order-detail">📮 ${order.pincode}</div>` : ''}
+            <div class="order-detail">🕐 ${order.time || ''}</div>
+            ${order.techName ? `<div class="order-detail">🛵 ${order.techName}</div>` : ''}
+            ${hasTechInfo ? `
+              <div class="tech-info-row">
+                <div class="tech-avatar-sm">
+                  ${techProfile.photo ? `<img src="${techProfile.photo}" alt="tech">` : '🔧'}
+                </div>
+                <div>
+                  <div class="tech-name-sm">🛵 ${order.techName}</div>
+                  ${techProfile.rating != null
+                    ? `<div class="tech-rating-sm">⭐ ${techProfile.rating.toFixed(1)} (${techProfile.reviewCount} reviews)</div>`
+                    : `<div class="tech-rating-sm new-tech">🆕 New Technician</div>`
+                  }
+                </div>
+              </div>
+            ` : ''}
+            ${order.images && order.images.length > 0 ? `
+              <div class="order-images">
+                ${order.images.slice(0, 3).map((url, j) => `<img src="${url}" alt="order image" onclick="event.stopPropagation();openFsViewer(${JSON.stringify(order.images)}, ${j})">`).join('')}
+                ${order.images.length > 3 ? `<span class="order-more-images">+${order.images.length - 3}</span>` : ''}
+              </div>
+            ` : ''}
+          </div>
+          <div class="order-right">
+            <span class="order-status ${order.status}">${order.status}</span>
+            ${order.id ? `<a href="tracking.html" class="btn btn-outline btn-sm" style="margin-top:8px;width:100%;" onclick="event.stopPropagation()">📍 Track</a>` : ''}
+            ${order.status === 'accepted' && order.techName ? `<a href="chat.html?orderId=${order.id}" class="btn btn-primary btn-sm" style="margin-top:4px;width:100%;" onclick="event.stopPropagation()">💬 Chat</a>` : ''}
+            ${order.status === 'completed' && order.techName ? `<a href="review.html?orderId=${order.id}" class="btn btn-green btn-sm" style="margin-top:4px;width:100%;" onclick="event.stopPropagation()">⭐ Rate</a>` : ''}
+          </div>
+        </div>
+      `}).join('');
+    }
+
+    window.showDetail = async function(orderId) {
+      const order = allOrders.find(o => o.id === orderId);
+      if (!order) return;
+
+      const modal = document.getElementById('orderDetailModal');
+      document.getElementById('detailTitle').textContent = `📋 ${order.brand || 'Order'} Details`;
+
+      // Fetch technician rating + profile if tech is assigned
+      let techRatingHtml = '';
+      let techBadgesHtml = '';
+      if (order.techPhone) {
+        try {
+          const [rating, profile] = await Promise.all([
+            getTechRating(order.techPhone),
+            getTechProfile(order.techPhone)
+          ]);
+
+          // Rating
+          if (rating && rating.count > 0) {
+            const stars = '⭐'.repeat(Math.round(rating.average)) + '☆'.repeat(Math.max(0, 5 - Math.round(rating.average)));
+            techRatingHtml = `<div class="detail-row"><span class="detail-label">Tech Rating</span><span class="detail-value">${stars} ${rating.average.toFixed(1)} (${rating.count} reviews)</span></div>`;
+          } else {
+            techRatingHtml = `<div class="detail-row"><span class="detail-label">Tech Rating</span><span class="detail-value" style="color:var(--primary);">🆕 New Technician</span></div>`;
+          }
+
+          // Verification badges
+          if (profile) {
+            const badges = [];
+            if (profile.aadharVerified) badges.push('🏛️ Aadhar ✓');
+            if (profile.certificateUploaded) badges.push('📄 Cert ✓');
+            if (profile.verifiedBadge) badges.push('✅ Verified');
+            if (profile.experience) badges.push('⭐ ' + profile.experience);
+            if (badges.length > 0) {
+              techBadgesHtml = `<div class="detail-row"><span class="detail-label">Verification</span><span class="detail-value" style="font-size:11px;">${badges.join(' · ')}</span></div>`;
+            }
+          }
+        } catch(e) {
+          techRatingHtml = '';
+          techBadgesHtml = '';
+        }
+      }
+
+      document.getElementById('detailBody').innerHTML = `
+        <div class="detail-row"><span class="detail-label">Order ID</span><span class="detail-value" style="font-size:11px;">${order.id}</span></div>
+        <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="order-status ${order.status}">${order.status}</span></span></div>
+        <div class="detail-row"><span class="detail-label">Device</span><span class="detail-value">${order.brand || '—'}${order.modelName || order.model ? ` — ${order.modelName || order.model}` : ''}</span></div>
+        <div class="detail-row"><span class="detail-label">Model</span><span class="detail-value">${order.modelName || order.model || '—'}</span></div>
+        <div class="detail-row"><span class="detail-label">Description</span><span class="detail-value">${order.description || order.repair || '—'}</span></div>
+        <div class="detail-row"><span class="detail-label">Location</span><span class="detail-value">${order.location || '—'}</span></div>
+        <div class="detail-row"><span class="detail-label">Pincode</span><span class="detail-value">${order.pincode || '—'}</span></div>
+        <div class="detail-row"><span class="detail-label">Time</span><span class="detail-value">${order.time || '—'}</span></div>
+        ${order.techName ? `<div class="detail-row"><span class="detail-label">Technician</span><span class="detail-value">${order.techName}</span></div>` : ''}
+        ${order.techPhone ? `<div class="detail-row"><span class="detail-label">Tech Phone</span><span class="detail-value">${order.techPhone}</span></div>` : ''}
+        ${techBadgesHtml}
+        ${techRatingHtml}
+        ${order.isAppointment ? `
+          <div class="detail-row"><span class="detail-label">Appointment</span><span class="detail-value">${order.dateLabel || ''} ${order.timeSlot || ''}</span></div>
+        ` : ''}
+        ${order.images && order.images.length > 0 ? `
+          <div style="margin-top:12px;">
+            <p style="font-size:12px;font-weight:700;color:var(--gray);margin-bottom:6px;">Images:</p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${order.images.map((url, j) => `<img src="${url}" style="width:72px;height:72px;border-radius:8px;object-fit:cover;background:var(--gray-light);cursor:pointer;" onclick="event.stopPropagation();openFsViewer(${JSON.stringify(order.images)}, ${j})">`).join('')}
+            </div>
+          </div>
+        ` : ''}
+      `;
+
+      modal.classList.add('show');
+    };
+
+    window.closeDetail = function() {
+      document.getElementById('orderDetailModal').classList.remove('show');
+    };
+
+    window.useSaved = function() {
+      document.getElementById('searchPhone').value = localStorage.getItem('lastCustPhone');
+      loadOrders();
+    };
+
+    // Add styles for tech info display
+    const styleEl = document.createElement('style');
+    styleEl.textContent = `
+      .tech-info-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--primary-light);
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-top: 8px;
+      }
+      .tech-avatar-sm {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--gray-light);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        flex-shrink: 0;
+        overflow: hidden;
+      }
+      .tech-avatar-sm img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .tech-name-sm {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--navy);
+      }
+      .tech-rating-sm {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--gray);
+        margin-top: 2px;
+      }
+      .tech-rating-sm.new-tech {
+        color: var(--primary);
+        font-weight: 700;
+      }
+    `;
+    document.head.appendChild(styleEl);
+
+    // ── Full-screen Image Viewer ───────────────────────────────────
+    let fsImages = [];
+    let fsIndex = 0;
+
+    window.openFsViewer = function(images, index) {
+      fsImages = images;
+      fsIndex = index;
+      updateFsViewer();
+      document.getElementById('fsViewer').classList.add('show');
+      document.body.style.overflow = 'hidden';
+    };
+
+    window.closeFsViewer = function() {
+      document.getElementById('fsViewer').classList.remove('show');
+      document.body.style.overflow = '';
+    };
+
+    window.navigateFs = function(dir) {
+      fsIndex = Math.max(0, Math.min(fsImages.length - 1, fsIndex + dir));
+      updateFsViewer();
+    };
+
+    function updateFsViewer() {
+      const img = document.getElementById('fsImage');
+      const counter = document.getElementById('fsCounter');
+      const prev = document.getElementById('fsPrev');
+      const next = document.getElementById('fsNext');
+
+      if (fsImages.length > 0 && fsImages[fsIndex]) {
+        img.src = fsImages[fsIndex];
+        img.alt = `Image ${fsIndex + 1}`;
+      }
+      counter.textContent = `${fsIndex + 1} / ${fsImages.length}`;
+      prev.disabled = fsIndex <= 0;
+      next.disabled = fsIndex >= fsImages.length - 1;
+    }
+
+    // Close on Esc key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeFsViewer();
+      if (e.key === 'ArrowLeft') navigateFs(-1);
+      if (e.key === 'ArrowRight') navigateFs(1);
+    });
+
+    function showToast(msg, type) {
+      const existing = document.querySelector('.toast');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    // Close modal on overlay click
+    document.getElementById('orderDetailModal').addEventListener('click', function(e) {
+      if (e.target === this) closeDetail();
+    });
+  </script>
+</body>
+</html>

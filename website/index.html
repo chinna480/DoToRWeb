@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DoToR - Book a Repair</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .booking-form { max-width: 600px; margin: 0 auto; }
+    .step-indicator {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      justify-content: center;
+    }
+    .step-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--gray-border);
+    }
+    .step-dot.active { background: var(--primary); }
+    .step-dot.done { background: var(--green); }
+    .location-row { display: flex; gap: 10px; }
+    .location-row > * { flex: 1; }
+    .get-location-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px;
+      border: 2px dashed var(--primary);
+      border-radius: var(--radius);
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 13px;
+      margin-bottom: 12px;
+      transition: all 0.2s;
+    }
+    .get-location-btn:hover { background: #ffe0cc; }
+    .why-section { margin-top: 30px; }
+    .success-box {
+      text-align: center;
+      padding: 30px;
+    }
+    .success-box .big-icon { font-size: 64px; margin-bottom: 16px; }
+    .success-box h2 { font-size: 22px; color: var(--green); margin-bottom: 8px; }
+    .success-box p { color: var(--gray); font-size: 14px; margin-bottom: 20px; }
+    .section-divider {
+      height: 1px;
+      background: var(--gray-border);
+      margin: 24px 0;
+    }
+
+    /* ── Image Upload Styles ─────────────────────────────────────── */
+    .photo-upload-section {
+      margin: 16px 0;
+      padding: 16px;
+      background: var(--gray-light);
+      border-radius: var(--radius);
+      border: 2px dashed var(--gray-border);
+      transition: border-color 0.2s;
+    }
+    .photo-upload-section:hover { border-color: var(--primary); }
+    .photo-upload-section.drag-over { border-color: var(--primary); background: var(--primary-light); }
+    .photo-upload-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .photo-upload-header .icon { font-size: 24px; }
+    .photo-upload-header .title { font-size: 14px; font-weight: 800; color: var(--navy); }
+    .photo-upload-header .sub { font-size: 11px; color: var(--gray); }
+    .photo-upload-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border: 2px dashed var(--primary);
+      border-radius: var(--radius);
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+    }
+    .photo-upload-btn:hover { background: #ffe0cc; }
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .photo-item {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--gray-border);
+    }
+    .photo-item img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .photo-item .remove-btn {
+      position: absolute;
+      top: 4px; right: 4px;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .photo-item .remove-btn:hover { background: var(--red); transform: scale(1.1); }
+    .photo-item .uploading-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .photo-count {
+      font-size: 11px;
+      color: var(--gray);
+      margin-top: 8px;
+      text-align: center;
+    }
+    #fileInput { display: none; }
+
+    /* ── Full-screen Image Viewer ────────────────────────────────── */
+    .fs-viewer {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 500;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+    .fs-viewer.show { display: flex; }
+    .fs-viewer .close-btn {
+      position: absolute;
+      top: 20px; right: 20px;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      border: none;
+      font-size: 22px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      transition: all 0.2s;
+    }
+    .fs-viewer .close-btn:hover { background: rgba(255,255,255,0.3); }
+    .fs-viewer .counter {
+      position: absolute;
+      top: 24px; left: 24px;
+      color: rgba(255,255,255,0.7);
+      font-size: 14px;
+      font-weight: 700;
+      z-index: 10;
+    }
+    .fs-viewer .nav-area {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+    .fs-viewer .nav-btn {
+      width: 60px;
+      height: 60%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+      color: #fff;
+      font-size: 48px;
+      font-weight: 300;
+      opacity: 0.6;
+      transition: all 0.2s;
+      border: none;
+      background: none;
+    }
+    .fs-viewer .nav-btn:hover { opacity: 1; }
+    .fs-viewer .nav-btn:disabled { opacity: 0; cursor: default; }
+    .fs-viewer .fs-image {
+      flex: 1;
+      height: 80vh;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">      <a href="/" class="nav-brand"><span>🔧</span> DoToR</a>
+    <div class="nav-links">
+      <a href="/" class="active">Book Repair</a>
+      <a href="/tracking.html">Track</a>
+      <a href="/orders.html">My Orders</a>
+      <a href="/profile.html">Profile</a>
+      <a href="#androidApp" class="primary-link">📱 Get App</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="header-card">
+      <h1>📱 Book a Doorstep Repair</h1>
+      <p>We'll send a technician to your home! Fast, transparent, and affordable.</p>
+    </div>
+
+    <!-- Step Indicator -->
+    <div class="step-indicator" id="stepIndicator">
+      <div class="step-dot active" data-step="1"></div>
+      <div class="step-dot" data-step="2"></div>
+      <div class="step-dot" data-step="3"></div>
+      <div class="step-dot" data-step="4"></div>
+    </div>
+
+    <!-- Booking Form -->
+    <div id="bookingForm" class="card booking-form">
+      <div class="card-title">📋 Book a Repair</div>
+
+      <!-- STEP 1: Contact Info -->
+      <div id="step1" class="form-step">
+        <h3 style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:16px;">👤 Your Contact Details</h3>
+        <div class="form-group">
+          <label>Your Name <span class="required">*</span></label>
+          <input type="text" id="custName" class="form-input" placeholder="e.g. Rahul Kumar" required>
+        </div>
+        <div class="form-group">
+          <label>Phone Number <span class="required">*</span></label>
+          <input type="tel" id="custPhone" class="form-input" placeholder="e.g. 9876543210" required maxlength="10" pattern="[0-9]{10}">
+        </div>
+        <div class="btn-row" style="justify-content:flex-end;">
+          <button class="btn btn-primary" onclick="nextStep(2)">Continue →</button>
+        </div>
+      </div>
+
+      <!-- STEP 2: Device & Brand -->
+      <div id="step2" class="form-step" style="display:none;">
+        <h3 style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:16px;">📱 Select Device & Brand</h3>
+        <p style="font-size:13px;color:var(--gray);margin-bottom:12px;">Choose your device type</p>
+        <div class="device-grid">
+          <div class="device-card" onclick="selectDevice('phone')" id="devPhone">
+            <div class="icon">📱</div>
+            <div class="name">Phone</div>
+          </div>
+          <div class="device-card" onclick="selectDevice('laptop')" id="devLaptop">
+            <div class="icon">💻</div>
+            <div class="name">Laptop</div>
+          </div>
+        </div>
+
+        <div id="brandSection" style="display:none;">
+          <p style="font-size:13px;color:var(--gray);margin-bottom:12px;margin-top:8px;">Select your brand</p>
+          <div class="brand-grid" id="brandGrid"></div>
+
+          <!-- Device Model -->
+          <div id="modelSection" style="display:none;margin-top:16px;">
+            <div class="form-group">
+              <label>Device Model (optional but helpful)</label>
+              <input type="text" id="deviceModel" class="form-input" placeholder="e.g. iPhone 15 Pro Max, Galaxy S24, Dell XPS 15...">
+              <p class="form-hint">Helps the technician know exactly what device you have and bring the right parts</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row" style="justify-content:space-between;margin-top:12px;">
+          <button class="btn btn-outline" onclick="prevStep(1)">← Back</button>
+          <button class="btn btn-primary" onclick="nextStep(3)" id="step2Next" disabled>Continue →</button>
+        </div>
+      </div>
+
+      <!-- STEP 3: Describe Issue, Photos & Location -->
+      <div id="step3" class="form-step" style="display:none;">
+        <h3 style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:16px;">📝 Describe the Issue</h3>
+        <div class="form-group">
+          <label>What's the problem? <span class="required">*</span></label>
+          <textarea id="description" class="form-textarea" placeholder="e.g. Screen cracked, phone not charging, battery draining fast..." rows="3"></textarea>
+        </div>
+
+        <!-- Photo Upload Section -->
+        <div class="photo-upload-section" id="photoUploadSection">
+          <div class="photo-upload-header">
+            <span class="icon">📸</span>
+            <div>
+              <div class="title">Add Photos of the Issue</div>
+              <div class="sub">Helps the technician diagnose before arriving (max 6 photos)</div>
+            </div>
+          </div>
+
+          <input type="file" id="fileInput" accept="image/*" multiple>
+          <button class="photo-upload-btn" onclick="document.getElementById('fileInput').click()" type="button">
+            📷 Upload Photos
+          </button>
+
+          <div class="photo-grid" id="photoGrid"></div>
+          <div class="photo-count" id="photoCount">No photos selected</div>
+        </div>
+
+        <h3 style="font-size:15px;font-weight:800;color:var(--navy);margin:16px 0 12px;">📍 Your Address</h3>
+        <div class="form-group">
+          <label>Location / Area</label>
+          <input type="text" id="location" class="form-input" placeholder="e.g. Kukatpally, Hyderabad">
+        </div>
+        <div class="form-group">
+          <label>Pincode</label>
+          <div class="input-with-icon">
+            <span class="icon">📮</span>
+            <input type="text" id="pincode" placeholder="Enter 6-digit pincode" maxlength="6" pattern="[0-9]{6}">
+          </div>
+        </div>
+        <button class="get-location-btn" onclick="getCurrentLocation()">
+          <span>📍</span> Use My Current Location (GPS)
+        </button>
+        <p id="gpsStatus" style="font-size:11px;color:var(--gray);margin-top:4px;"></p>
+
+        <div class="btn-row" style="justify-content:space-between;">
+          <button class="btn btn-outline" onclick="prevStep(2)">← Back</button>
+          <button class="btn btn-primary" onclick="nextStep(4)" id="step3Next">Continue →</button>
+        </div>
+      </div>
+
+      <!-- STEP 4: Appointment & Submit -->
+      <div id="step4" class="form-step" style="display:none;">
+        <h3 style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:16px;">📅 Final Step</h3>
+
+        <!-- Appointment Toggle -->
+        <div class="appt-toggle" onclick="toggleAppointment()">
+          <div class="appt-toggle-icon">📅</div>
+          <div class="appt-toggle-text">
+            <div class="appt-toggle-title">Want to book an appointment?</div>
+            <div class="appt-toggle-sub">Pick a convenient date & time</div>
+          </div>
+          <div class="appt-toggle-arrow" id="apptArrow">▶</div>
+        </div>
+
+        <div id="appointmentSection" style="display:none;">
+          <p style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px;">Select Date</p>
+          <div class="date-scroll" id="dateScroll"></div>
+
+          <p style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px;">Select Time Slot</p>
+          <div class="slots-grid" id="slotsGrid"></div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div id="submitSummary" style="background:var(--gray-light);padding:14px;border-radius:var(--radius);margin-bottom:16px;font-size:13px;">
+          <p style="font-weight:700;color:var(--navy);margin-bottom:6px;">📋 Order Summary</p>
+          <p id="summaryDevice" style="color:var(--gray);">Device: —</p>
+          <p id="summaryBrand" style="color:var(--gray);">Brand: —</p>
+          <p id="summaryModel" style="color:var(--gray);">Model: —</p>
+          <p id="summaryName" style="color:var(--gray);">Name: —</p>
+          <p id="summaryPhone" style="color:var(--gray);">Phone: —</p>
+          <p id="summaryLocation" style="color:var(--gray);">Location: —</p>
+          <div id="summaryImages" style="color:var(--gray);margin-top:4px;">📸 Photos: —</div>
+        </div>
+
+        <button class="btn btn-primary btn-lg" onclick="submitOrder()" id="submitBtn">
+          📋 Submit Repair Request
+        </button>
+
+        <div class="btn-row" style="justify-content:space-between;margin-top:12px;">
+          <button class="btn btn-outline" onclick="prevStep(3)">← Back</button>
+        </div>
+      </div>
+
+      <!-- Success State (shown after booking) -->
+      <div id="successState" style="display:none;">
+        <div class="success-box">
+          <div class="big-icon">✅</div>
+          <h2>Booking Confirmed!</h2>
+          <p>A technician will be assigned shortly. You can track them in real-time!</p>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+            <a href="tracking.html" class="btn btn-primary">📍 Track Technician</a>
+            <a href="/" class="btn btn-outline">📋 Book Another</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Why DoToR -->
+    <div class="why-section">
+      <h2 style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:12px;">⭐ Why DoToR?</h2>
+      <div class="features-list">
+        <div class="feature-item">
+          <div class="feature-icon">🏠</div>
+          <div><div class="feature-title">Doorstep Service</div><div class="feature-desc">Technician comes to your home!</div></div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon">👀</div>
+          <div><div class="feature-title">Repair in Front of You</div><div class="feature-desc">100% transparent process!</div></div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon">⚡</div>
+          <div><div class="feature-title">Fast Service</div><div class="feature-desc">Arrives within 60 mins!</div></div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-icon">💰</div>
+          <div><div class="feature-title">Best Price</div><div class="feature-desc">No hidden charges ever!</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Android App Section ─────────────────────────────────────── -->
+    <div id="androidApp" class="app-section">
+      <div class="app-section-header">
+        <div class="app-icon-big">📱</div>
+        <h2>🚀 Get the DoToR Android App</h2>
+        <p>Faster booking, real-time tracking, instant chat & more — right in your pocket!</p>
+      </div>
+
+      <div class="app-features-grid">
+        <div class="app-feature-card">
+          <div class="app-feature-icon">⚡</div>
+          <div class="app-feature-title">One-Tap Booking</div>
+          <div class="app-feature-desc">Book a repair in seconds with saved profile & address</div>
+        </div>
+        <div class="app-feature-card">
+          <div class="app-feature-icon">📍</div>
+          <div class="app-feature-title">Live GPS Tracking</div>
+          <div class="app-feature-desc">See your technician moving towards you on a real-time map</div>
+        </div>
+        <div class="app-feature-card">
+          <div class="app-feature-icon">💬</div>
+          <div class="app-feature-title">In-App Chat</div>
+          <div class="app-feature-desc">Message your technician directly without switching apps</div>
+        </div>
+        <div class="app-feature-card">
+          <div class="app-feature-icon">🔔</div>
+          <div class="app-feature-title">Push Notifications</div>
+          <div class="app-feature-desc">Get instant alerts when a technician accepts & arrives</div>
+        </div>
+        <div class="app-feature-card">
+          <div class="app-feature-icon">📸</div>
+          <div class="app-feature-title">Photo Upload</div>
+          <div class="app-feature-desc">Snap & upload photos of the issue directly from camera</div>
+        </div>
+        <div class="app-feature-card">
+          <div class="app-feature-icon">🆔</div>
+          <div class="app-feature-title">DigiLocker Ready</div>
+          <div class="app-feature-desc">Verify your Aadhar securely via DigiLocker integration</div>
+        </div>
+      </div>
+
+      <div class="app-download-box">
+        <div class="app-download-text">
+          <div class="app-download-title">📲 Download for Android</div>
+          <div class="app-download-sub">
+            Get the full DoToR experience on your phone. The app is currently available for Android.
+          </div>
+          <div class="app-download-badges">
+            <a href="#" class="download-badge" onclick="showToast('📱 APK download will be available soon! Stay tuned.', 'success', this)">
+              <span class="badge-icon">📥</span>
+              <div class="badge-text">
+                <div class="badge-small">Download for</div>
+                <div class="badge-large">Android APK</div>
+              </div>
+            </a>
+            <a href="#" class="download-badge play-store" onclick="showToast('🏪 Coming soon to Google Play Store!', 'success', this)">
+              <span class="badge-icon">▶️</span>
+              <div class="badge-text">
+                <div class="badge-small">Get it on</div>
+                <div class="badge-large">Google Play</div>
+              </div>
+            </a>
+          </div>
+        </div>
+        <div class="app-phone-mockup">
+          <div class="mockup-screen">
+            <div class="mockup-header">🔧 DoToR</div>
+            <div class="mockup-content">
+              <div class="mockup-line">📱 Phone Repair</div>
+              <div class="mockup-line">💻 Laptop Repair</div>
+              <div class="mockup-line active">📍 Track Tech</div>
+              <div class="mockup-line">💬 Live Chat</div>
+              <div class="mockup-bar"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="app-cta">
+        <p>Use the web version or download the app for the best experience!</p>
+        <div class="app-cta-links">
+          <a href="/" class="btn btn-primary">📱 Book via Web</a>
+          <span style="color:var(--gray);font-size:13px;font-weight:600;">or</span>
+          <a href="#androidApp" class="btn btn-outline">📲 Get the App</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Full-screen Image Viewer ─────────────────────────────────------- -->
+  <div class="fs-viewer" id="fsViewer" onclick="if(event.target===this)closeFsViewer()">
+    <button class="close-btn" onclick="closeFsViewer()">✕</button>
+    <div class="counter" id="fsCounter">1 / 1</div>
+    <div class="nav-area">
+      <button class="nav-btn" id="fsPrev" onclick="navigateFs(-1)">‹</button>
+      <img class="fs-image" id="fsImage" src="" alt="Full screen image">
+      <button class="nav-btn" id="fsNext" onclick="navigateFs(1)">›</button>
+    </div>
+  </div>
+
+  <div class="footer">© 2025 DoToR - Doorstep Repair Service</div>
+
+  <script type="module">
+    import {
+      createOrder, PHONE_BRANDS, LAPTOP_BRANDS, TIME_SLOTS, MONTHS, DAYS
+    } from './firebase.js';
+
+    // ── Cloudinary Config (same as mobile app) ─────────────────────
+    const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/dxyp1sblk/image/upload';
+    const CLOUDINARY_PRESET = 'dotor_orders';
+    const MAX_IMAGES = 6;
+    const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+
+    // ── State ────────────────────────────────────────────────────────
+    let selectedDevice = null;
+    let selectedBrand = null;
+    let currentStep = 1;
+    let gpsLat = null;
+    let gpsLng = null;
+    let wantAppointment = false;
+    let selectedDate = null;
+    let selectedSlot = null;
+    let submitting = false;
+    let selectedFiles = [];      // Array of { file, preview, status, url }
+    let uploadingCount = 0;
+
+    const dates = generateDates();
+
+    // ── Expose functions globally for inline onclick ──────────────────
+    window.selectDevice = function(type) {
+      selectedDevice = type;
+      document.querySelectorAll('.device-card').forEach(c => c.classList.remove('active'));
+      document.getElementById('dev' + type.charAt(0).toUpperCase() + type.slice(1)).classList.add('active');
+
+      const brands = type === 'phone' ? PHONE_BRANDS : LAPTOP_BRANDS;
+      const grid = document.getElementById('brandGrid');          grid.innerHTML = brands.map(b => `<div class="brand-card" onclick="selectBrand('${b}', this)">${b}</div>`).join('');
+      document.getElementById('brandSection').style.display = 'block';
+      document.getElementById('modelSection').style.display = 'none';
+      document.getElementById('deviceModel').value = '';
+      selectedBrand = null;
+      document.getElementById('step2Next').disabled = true;
+      updateSummary();
+    };
+
+    window.selectBrand = function(brand, el) {
+      selectedBrand = brand;
+      document.querySelectorAll('.brand-card').forEach(c => c.classList.remove('active'));
+      if (el) el.classList.add('active');
+      document.getElementById('step2Next').disabled = false;
+      document.getElementById('modelSection').style.display = 'block';
+      updateSummary();
+    };
+
+    window.nextStep = function(step) {
+      if (step === 2) {
+        if (!document.getElementById('custName').value.trim() || !document.getElementById('custPhone').value.trim()) {
+          showToast('Please fill in your name and phone number', 'error');
+          return;
+        }
+      }
+      if (step === 3 && !selectedBrand) {
+        showToast('Please select a device and brand', 'error');
+        return;
+      }
+      currentStep = step;
+      document.querySelectorAll('.form-step').forEach(s => s.style.display = 'none');
+      document.getElementById('step' + step).style.display = 'block';
+      updateStepIndicator();
+      updateSummary();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    window.prevStep = function(step) {
+      currentStep = step;
+      document.querySelectorAll('.form-step').forEach(s => s.style.display = 'none');
+      document.getElementById('step' + step).style.display = 'block';
+      updateStepIndicator();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    window.toggleAppointment = function() {
+      wantAppointment = !wantAppointment;
+      document.getElementById('appointmentSection').style.display = wantAppointment ? 'block' : 'none';
+      document.getElementById('apptArrow').textContent = wantAppointment ? '▼' : '▶';
+      if (!wantAppointment) { selectedDate = null; selectedSlot = null; }
+    };
+
+    window.getCurrentLocation = async function() {
+      const statusEl = document.getElementById('gpsStatus');
+      statusEl.textContent = '📍 Getting your location...';
+      try {
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+        });
+        gpsLat = pos.coords.latitude;
+        gpsLng = pos.coords.longitude;
+        statusEl.textContent = `✅ Location found! (${gpsLat.toFixed(4)}, ${gpsLng.toFixed(4)})`;
+        statusEl.style.color = 'var(--green)';
+
+        // Reverse geocode
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${gpsLat}&lon=${gpsLng}&format=json`);
+          const data = await res.json();
+          if (data.display_name) {
+            document.getElementById('location').value = data.display_name.split(',').slice(0,3).join(',');
+          }
+        } catch(e) {}
+
+        if (!document.getElementById('location').value) {
+          document.getElementById('location').value = `${gpsLat.toFixed(4)}, ${gpsLng.toFixed(4)}`;
+        }
+      } catch(e) {
+        statusEl.textContent = '⚠️ Could not get location. Please enter manually.';
+        statusEl.style.color = 'var(--red)';
+      }
+    };
+
+    window.selectDate = function(dateStr) {
+      selectedDate = dateStr;
+      document.querySelectorAll('.date-card').forEach(c => c.classList.remove('active'));
+      event.target.closest('.date-card').classList.add('active');
+    };
+
+    window.selectSlot = function(slot) {
+      selectedSlot = slot;
+      document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+    };
+
+    // ── Image Upload Functions ─────────────────────────────────────
+    window.handleFileSelect = function() {
+      const input = document.getElementById('fileInput');
+      const files = Array.from(input.files);
+      addFiles(files);
+      input.value = '';
+    };
+
+    document.getElementById('fileInput').addEventListener('change', window.handleFileSelect);
+
+    // Drag and drop support
+    const photoSection = document.getElementById('photoUploadSection');
+    photoSection.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      photoSection.classList.add('drag-over');
+    });
+    photoSection.addEventListener('dragleave', () => {
+      photoSection.classList.remove('drag-over');
+    });
+    photoSection.addEventListener('drop', (e) => {
+      e.preventDefault();
+      photoSection.classList.remove('drag-over');
+      const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+      addFiles(files);
+    });
+
+    function addFiles(files) {
+      const remaining = MAX_IMAGES - selectedFiles.length;
+      if (remaining <= 0) {
+        showToast('Maximum ' + MAX_IMAGES + ' photos allowed', 'error');
+        return;
+      }
+
+      const toAdd = files.slice(0, remaining);
+
+      toAdd.forEach(file => {
+        // Check file size
+        if (file.size > MAX_IMAGE_SIZE) {
+          showToast(file.name + ' is too large (max 5MB)', 'error');
+          return;
+        }
+
+        const preview = URL.createObjectURL(file);
+        selectedFiles.push({
+          file,
+          preview,
+          status: 'pending', // pending | uploading | done | error
+          url: null,
+        });
+      });
+
+      updatePhotoGrid();
+    }
+
+    window.removePhoto = function(index) {
+      const item = selectedFiles[index];
+      if (item.preview) URL.revokeObjectURL(item.preview);
+      selectedFiles.splice(index, 1);
+      updatePhotoGrid();
+    };
+
+    async function uploadImage(file, index) {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', CLOUDINARY_PRESET);
+
+      selectedFiles[index].status = 'uploading';
+      updatePhotoGrid();
+
+      try {
+        const res = await fetch(CLOUDINARY_URL, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!res.ok) throw new Error('Upload failed: ' + res.status);
+
+        const data = await res.json();
+        selectedFiles[index].url = data.secure_url;
+        selectedFiles[index].status = 'done';
+      } catch(err) {
+        console.error('Upload failed:', err);
+        selectedFiles[index].status = 'error';
+      }
+
+      updatePhotoGrid();
+    }
+
+    async function uploadAllImages() {
+      const toUpload = selectedFiles.filter(f => f.status === 'pending' && !f.url);
+      if (toUpload.length === 0) return;
+
+      uploadingCount = toUpload.length;
+      const promises = toUpload.map((item, i) => {
+        const idx = selectedFiles.indexOf(item);
+        return uploadImage(item.file, idx);
+      });
+
+      await Promise.allSettled(promises);
+    }
+
+    function updatePhotoGrid() {
+      const grid = document.getElementById('photoGrid');
+      const count = document.getElementById('photoCount');
+
+      const uploaded = selectedFiles.filter(f => f.status === 'done' || f.url).length;
+      const uploading = selectedFiles.filter(f => f.status === 'uploading').length;
+      const pending = selectedFiles.filter(f => f.status === 'pending').length;
+      const failed = selectedFiles.filter(f => f.status === 'error').length;
+
+      count.textContent = `${uploaded} uploaded · ${pending} pending · ${uploading} uploading${failed > 0 ? ' · ' + failed + ' failed' : ''}${selectedFiles.length === 0 ? 'No photos selected' : ''}`;
+
+      if (selectedFiles.length === 0) {
+        grid.innerHTML = '';
+        return;
+      }
+
+      grid.innerHTML = selectedFiles.map((item, i) => {
+        const uploadedUrls = selectedFiles.filter(f => f.status === 'done' && f.url).map(f => f.url);
+        return `
+        <div class="photo-item">
+          <img src="${item.preview}" alt="Photo ${i+1}" style="cursor:pointer;"${item.url ? ` onclick="openFsViewer(${JSON.stringify(uploadedUrls)}, ${uploadedUrls.indexOf(item.url)})"` : ''}>
+          ${item.status === 'uploading'
+            ? '<div class="uploading-overlay">⏳ Uploading...</div>'
+            : item.status === 'error'
+              ? '<div class="uploading-overlay" style="background:rgba(198,40,40,0.7);">❌ Failed</div>'
+              : ''
+          }
+          ${item.status !== 'uploading'
+            ? `<button class="remove-btn" onclick="removePhoto(${i})">✕</button>`
+            : ''
+          }
+        </div>
+      `}).join('');
+
+      // Update summary images display
+      updateSummaryImages();
+    }
+
+    function updateSummaryImages() {
+      const summaryEl = document.getElementById('summaryImages');
+      if (!summaryEl) return;
+      const uploaded = selectedFiles.filter(f => f.status === 'done' && f.url);
+      if (uploaded.length > 0) {
+        summaryEl.innerHTML = '📸 Photos: <span style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">' +
+          uploaded.map((f, i) => `<img src="${f.url}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;background:var(--gray-light);cursor:pointer;" onclick="openFsViewer(${JSON.stringify(uploaded.map(x => x.url))}, ${i})">`).join('') +
+          '</span>';
+      } else {
+        const totalSelected = selectedFiles.filter(f => f.status !== 'error').length;
+        summaryEl.innerHTML = totalSelected > 0
+          ? `📸 Photos: ${totalSelected} selected (will upload on submit)`
+          : '📸 Photos: None';
+      }
+    }
+
+    window.submitOrder = async function() {
+      if (submitting) return;
+      const name = document.getElementById('custName').value.trim();
+      const phone = document.getElementById('custPhone').value.trim();
+      const desc = document.getElementById('description').value.trim();
+      const location = document.getElementById('location').value.trim();
+      const pincode = document.getElementById('pincode').value.trim();
+      const model = document.getElementById('deviceModel').value.trim();
+
+      if (!name || !phone) { showToast('Please fill in your contact details', 'error'); return; }
+      if (!selectedDevice || !selectedBrand) { showToast('Please select device and brand', 'error'); return; }
+      if (!desc) { showToast('Please describe your issue', 'error'); return; }
+
+      submitting = true;
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Uploading photos & submitting...';
+
+      try {
+        // Upload any pending images first
+        const pendingImages = selectedFiles.filter(f => f.status === 'pending' && !f.url);
+        if (pendingImages.length > 0) {
+          btn.innerHTML = `⏳ Uploading ${pendingImages.length} photo(s)...`;
+          await uploadAllImages();
+        }
+
+        let appointmentTime = null;
+        if (wantAppointment && selectedDate && selectedSlot) {
+          const d = new Date(selectedDate);
+          const startHour = parseInt(selectedSlot.split(' - ')[0].split(':')[0], 10);
+          const startMin = parseInt(selectedSlot.split(' - ')[0].split(':')[1], 10);
+          d.setHours(startHour, startMin, 0, 0);
+          appointmentTime = d.getTime();
+        }
+
+        // Get uploaded image URLs
+        const imageUrls = selectedFiles
+          .filter(f => f.status === 'done' && f.url)
+          .map(f => f.url);
+
+        const orderData = {
+          name,
+          phone,
+          description: desc,
+          location: location || '',
+          pincode,
+          lat: gpsLat,
+          lng: gpsLng,
+          brand: selectedBrand,
+          device: selectedDevice,
+          modelName: model || '',
+          time: selectedSlot || new Date().toLocaleTimeString(),
+          images: imageUrls,
+          ...(wantAppointment && selectedDate && selectedSlot ? {
+            isAppointment: true,
+            appointmentTime,
+            date: selectedDate,
+            dateLabel: new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+            timeSlot: selectedSlot,
+          } : {}),
+        };
+
+        const result = await createOrder(orderData);
+        console.log('✅ Order created:', result.orderId);
+
+        // Hide form, show success
+        document.getElementById('bookingForm').querySelector('.card-title').style.display = 'none';
+        document.querySelectorAll('.form-step').forEach(s => s.style.display = 'none');
+        document.getElementById('stepIndicator').style.display = 'none';
+        document.getElementById('successState').style.display = 'block';
+
+        showToast('✅ Booking confirmed! Technician will be notified.', 'success');
+
+        // Save order to localStorage for tracking page
+        localStorage.setItem('lastOrderId', result.orderId);
+        localStorage.setItem('lastCustName', name);
+        localStorage.setItem('lastCustPhone', phone);
+
+      } catch(err) {
+        console.error('❌ Submit failed:', err);
+        showToast('❌ Booking failed! Please try again.', 'error');
+      } finally {
+        submitting = false;
+        btn.disabled = false;
+        btn.innerHTML = '📋 Submit Repair Request';
+      }
+    };
+
+    function updateStepIndicator() {
+      document.querySelectorAll('.step-dot').forEach(dot => {
+        const step = parseInt(dot.dataset.step);
+        dot.classList.remove('active', 'done');
+        if (step === currentStep) dot.classList.add('active');
+        else if (step < currentStep) dot.classList.add('done');
+      });
+    }
+
+    function updateSummary() {
+      const name = document.getElementById('custName').value.trim() || '—';
+      const phone = document.getElementById('custPhone').value.trim() || '—';
+      const location = document.getElementById('location').value.trim() || '—';
+      const model = document.getElementById('deviceModel').value.trim() || '—';
+      document.getElementById('summaryDevice').textContent = `Device: ${selectedDevice || '—'}`;
+      document.getElementById('summaryBrand').textContent = `Brand: ${selectedBrand || '—'}`;
+      document.getElementById('summaryModel').textContent = `Model: ${model}`;
+      document.getElementById('summaryName').textContent = `Name: ${name}`;
+      document.getElementById('summaryPhone').textContent = `Phone: ${phone}`;
+      document.getElementById('summaryLocation').textContent = `Location: ${location}`;
+      updateSummaryImages();
+    }
+
+    function generateDates() {
+      const days = [];
+      const today = new Date();
+      for (let i = 0; i < 14; i++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() + i);
+        days.push(d);
+      }
+      return days;
+    }
+
+    function renderDateScroll() {
+      const container = document.getElementById('dateScroll');
+      container.innerHTML = dates.map(d => {
+        const day = DAYS[d.getDay()];
+        const num = d.getDate();
+        const month = MONTHS[d.getMonth()];
+        return `<div class="date-card" onclick="selectDate('${d.toISOString().split('T')[0]}')">
+          <div class="date-day">${day}</div>
+          <div class="date-num">${num}</div>
+          <div class="date-month">${month}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderSlots() {
+      const container = document.getElementById('slotsGrid');
+      container.innerHTML = TIME_SLOTS.map(slot =>
+        `<div class="slot-btn" onclick="selectSlot('${slot}')">🕐 ${slot}</div>`
+      ).join('');
+    }
+
+    // ── Full-screen Image Viewer ───────────────────────────────────
+    let fsImages = [];
+    let fsIndex = 0;
+
+    window.openFsViewer = function(images, index) {
+      fsImages = images;
+      fsIndex = index;
+      updateFsViewer();
+      document.getElementById('fsViewer').classList.add('show');
+      document.body.style.overflow = 'hidden';
+    };
+
+    window.closeFsViewer = function() {
+      document.getElementById('fsViewer').classList.remove('show');
+      document.body.style.overflow = '';
+    };
+
+    window.navigateFs = function(dir) {
+      fsIndex = Math.max(0, Math.min(fsImages.length - 1, fsIndex + dir));
+      updateFsViewer();
+    };
+
+    function updateFsViewer() {
+      const img = document.getElementById('fsImage');
+      const counter = document.getElementById('fsCounter');
+      const prev = document.getElementById('fsPrev');
+      const next = document.getElementById('fsNext');
+
+      if (fsImages.length > 0 && fsImages[fsIndex]) {
+        img.src = fsImages[fsIndex];
+        img.alt = `Image ${fsIndex + 1}`;
+      }
+      counter.textContent = `${fsIndex + 1} / ${fsImages.length}`;
+      prev.disabled = fsIndex <= 0;
+      next.disabled = fsIndex >= fsImages.length - 1;
+    }
+
+    // Close on Esc key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeFsViewer();
+      if (e.key === 'ArrowLeft') navigateFs(-1);
+      if (e.key === 'ArrowRight') navigateFs(1);
+    });
+
+    function showToast(msg, type = 'success') {
+      const existing = document.querySelector('.toast');
+      if (existing) existing.remove();
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────
+    renderDateScroll();
+    renderSlots();
+
+    // Load saved data from localStorage
+    const savedName = localStorage.getItem('custName');
+    const savedPhone = localStorage.getItem('custPhone');
+    const savedLocation = localStorage.getItem('custLocation');
+    if (savedName) document.getElementById('custName').value = savedName;
+    if (savedPhone) document.getElementById('custPhone').value = savedPhone;
+    if (savedLocation) document.getElementById('location').value = savedLocation;
+
+    // Update summary on input
+    ['custName','custPhone','location','pincode','deviceModel'].forEach(id => {
+      document.getElementById(id).addEventListener('input', updateSummary);
+    });
+  </script>
+</body>
+</html>
