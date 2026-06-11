@@ -22,18 +22,6 @@ import { db, GOOGLE_PLACES_API_KEY } from '../firebase/config'
 import { registerForNotifications } from '../utils/notifications'
 import LocationAutocomplete from '../../components/LocationAutocomplete'
 
-// ── MapView (native only, graceful fallback on web) ──
-let MapView = null, MarkerNative = null
-if (Platform.OS !== 'web') {
-  try {
-    const Maps = require('react-native-maps')
-    MapView = Maps.default
-    MarkerNative = Maps.Marker
-  } catch (e) {
-    MapView = null
-  }
-}
-
 export default function CustomerLoginScreen() {
   const router = useRouter()
 
@@ -49,6 +37,24 @@ export default function CustomerLoginScreen() {
   const [mapLat, setMapLat] = useState(null)
   const [mapLng, setMapLng] = useState(null)
   const [reverseGeocoding, setReverseGeocoding] = useState(false)
+  // ── Lazy-loaded map components (loaded inside component to prevent module-level crash) ──
+  const [mapLoaded, setMapLoaded] = useState(false)
+  const [MapViewCmp, setMapViewCmp] = useState(null)
+  const [MarkerNativeCmp, setMarkerNativeCmp] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    try {
+      const Maps = require('react-native-maps')
+      if (!cancelled) {
+        setMapViewCmp(() => Maps.default || null)
+        setMarkerNativeCmp(() => Maps.Marker || null)
+      }
+    } catch (e) {
+      console.log('react-native-maps not available (LoginScreen):', e?.message)
+    }
+    if (!cancelled) setMapLoaded(true)
+    return () => { cancelled = true }
+  }, [])
 
   const [otp, setOtp] = useState('')
   const [showOtpBox, setShowOtpBox] = useState(false)
@@ -339,8 +345,8 @@ export default function CustomerLoginScreen() {
               <Text style={s.mapModalClose}>✕</Text>
             </TouchableOpacity>
           </View>
-          {mapLat && mapLng && MapView ? (
-            <MapView
+          {mapLoaded && mapLat && mapLng && MapViewCmp ? (
+            <MapViewCmp
               style={{ flex: 1 }}
               initialRegion={{
                 latitude: mapLat,
@@ -353,8 +359,8 @@ export default function CustomerLoginScreen() {
                 setMapLng(e.nativeEvent.coordinate.longitude)
               }}
             >
-              {MarkerNative && (
-                <MarkerNative
+              {MarkerNativeCmp && (
+                <MarkerNativeCmp
                   coordinate={{ latitude: mapLat, longitude: mapLng }}
                   draggable
                   onDragEnd={(e) => {
@@ -364,11 +370,11 @@ export default function CustomerLoginScreen() {
                   title="Your Location"
                 />
               )}
-            </MapView>
+            </MapViewCmp>
           ) : (
             <View style={s.mapModalPlaceholder}>
               <Text style={s.mapModalPlaceholderIcon}>🗺️</Text>
-              <Text style={s.mapModalPlaceholderText}>{MapView ? 'Loading map...' : 'Map is not available on web'}</Text>
+              <Text style={s.mapModalPlaceholderText}>{mapLoaded ? (MapViewCmp ? 'Loading map...' : 'Map not available') : 'Loading map...'}</Text>
             </View>
           )}
           <View style={s.mapModalFooter}>

@@ -53,22 +53,26 @@ class TechHomeErrorBoundary extends Component {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Safe map components — each loaded & validated individually
+// Safe map error boundary — catches JS rendering errors from react-native-maps
 // ═══════════════════════════════════════════════════════════════════════════
-let MapView, Marker, Polyline
-try {
-  const Maps = require('react-native-maps')
-  MapView  = Maps.default  || null
-  Marker   = Maps.Marker   || null
-  Polyline = Maps.Polyline || null
-} catch (e) {
-  MapView = null
-  Marker  = null
-  Polyline = null
+class MapErrorBoundaryTech extends Component {
+  state = { crashed: false }
+  static getDerivedStateFromError() { return { crashed: true } }
+  componentDidCatch(error) { console.error('TechHomeScreen MapView crash:', error?.message) }
+  render() {
+    if (this.state.crashed) {
+      return (
+        <View style={{ height: 200, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}>
+          <Text style={{ fontSize: 40 }}>🗺️</Text>
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 8, textAlign: 'center', paddingHorizontal: 20 }}>
+            Map temporarily unavailable
+          </Text>
+        </View>
+      )
+    }
+    return this.props.children
+  }
 }
-
-// Only render the real map when ALL required components are available
-const hasMap = !!(MapView && Marker)
 
 export default function TechHomeScreen() {
   const router = useRouter()
@@ -91,6 +95,25 @@ export default function TechHomeScreen() {
   const [fsImages, setFsImages]          = useState([])
   const [fsIndex, setFsIndex]            = useState(0)
   const [liveOrderData, setLiveOrderData] = useState(null)
+  // ── Lazy-loaded map components (loaded AFTER first render to prevent module-level crash) ──
+  const [MapViewCmp, setMapViewCmp] = useState(null)
+  const [MarkerCmp, setMarkerCmp]   = useState(null)
+  const [PolylineCmp, setPolylineCmp] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    try {
+      const Maps = require('react-native-maps')
+      if (!cancelled) {
+        setMapViewCmp(() => Maps.default || null)
+        setMarkerCmp(() => Maps.Marker || null)
+        setPolylineCmp(() => Maps.Polyline || null)
+      }
+    } catch (e) {
+      console.log('react-native-maps not available (TechHomeScreen):', e?.message)
+    }
+    return () => { cancelled = true }
+  }, [])
+
   const watchRef          = useRef(null)
   const proximityWatchRef = useRef(null)
   const mapRef            = useRef(null)
@@ -498,9 +521,10 @@ export default function TechHomeScreen() {
             </View>
           </View>
 
-          {/* Safe map — only render when ALL map components are available */}
-          {hasMap && (custLat || myLat) && (
-            <MapView
+          {/* Safe map — lazily loaded to prevent module-level crash */}
+          <MapErrorBoundaryTech>
+          {MapViewCmp && MarkerCmp && (custLat || myLat) ? (
+            <MapViewCmp
               ref={mapRef}
               style={s.map}
               region={{
@@ -510,20 +534,21 @@ export default function TechHomeScreen() {
                 longitudeDelta: 0.05,
               }}
             >
-              <Marker coordinate={{ latitude: myLat, longitude: myLng }} title="🛵 You" pinColor="#1A3A6B" />
+              <MarkerCmp coordinate={{ latitude: myLat, longitude: myLng }} title="🛵 You" pinColor="#1A3A6B" />
               {custLat && (
                 <>
-                  <Marker coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Customer" />
-                  {Polyline && (
-                    <Polyline
+                  <MarkerCmp coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Customer" />
+                  {PolylineCmp && (
+                    <PolylineCmp
                       coordinates={[{ latitude: myLat, longitude: myLng }, { latitude: custLat, longitude: custLng }]}
                       strokeColor="#FF6B00" strokeWidth={3} lineDashPattern={[8, 8]}
                     />
                   )}
                 </>
               )}
-            </MapView>
-          )}
+            </MapViewCmp>
+          ) : null}
+          </MapErrorBoundaryTech>
 
           <View style={s.btnRow}>
             <TouchableOpacity style={s.navBtn} onPress={navigate}>
