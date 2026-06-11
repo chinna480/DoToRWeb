@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { onValue, ref, remove, set, update } from 'firebase/database';
-import { useEffect, useRef, useState } from 'react';
+import { Component, useEffect, useRef, useState } from 'react';
 import {
   Alert, Linking,
   ScrollView,
@@ -22,16 +22,52 @@ import {
   notifyTechNewJob,
 } from '../utils/notifications';
 
-// ✅ Safe import — won't crash if react-native-maps is not installed
+// ═══════════════════════════════════════════════════════════════════════════
+// Local error boundary — catches rendering crashes so the app doesn't close
+// ═══════════════════════════════════════════════════════════════════════════
+class TechHomeErrorBoundary extends Component {
+  state = { hasError: false, error: null }
+  static getDerivedStateFromError(error) { return { hasError: true, error } }
+  componentDidCatch(error) { console.error('TechHomeScreen crash:', error?.message) }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center', padding: 30 }}>
+          <Text style={{ fontSize: 50, marginBottom: 16 }}>🔧</Text>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: '#1A3A6B', marginBottom: 8 }}>Something went wrong</Text>
+          <Text style={{ fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 24 }}>
+            {this.state.error?.message || 'An unexpected error occurred on the home screen.'}
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: '#FF6B00', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 12 }}
+            onPress={() => this.setState({ hasError: false, error: null })}
+          >
+            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>🔄 Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )
+    }
+    return this.props.children
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Safe map components — each loaded & validated individually
+// ═══════════════════════════════════════════════════════════════════════════
 let MapView, Marker, Polyline
 try {
   const Maps = require('react-native-maps')
-  MapView  = Maps.default
-  Marker   = Maps.Marker
-  Polyline = Maps.Polyline
+  MapView  = Maps.default  || null
+  Marker   = Maps.Marker   || null
+  Polyline = Maps.Polyline || null
 } catch (e) {
   MapView = null
+  Marker  = null
+  Polyline = null
 }
+
+// Only render the real map when ALL required components are available
+const hasMap = !!(MapView && Marker)
 
 export default function TechHomeScreen() {
   const router = useRouter()
@@ -76,7 +112,12 @@ export default function TechHomeScreen() {
       // ✅ FIX: Listen to custLocation under this specific order
       if (custLocUnsubRef.current) custLocUnsubRef.current()
       custLocUnsubRef.current = onValue(ref(db, 'orders/' + ongoingJob.id + '/custLocation'), snap => {
-        if (snap.exists()) { setCustLat(snap.val().lat); setCustLng(snap.val().lng) }
+        if (!snap.exists()) return
+        const val = snap.val()
+        // Guard: custLocation must have valid numeric lat/lng
+        if (!val || typeof val.lat !== 'number' || typeof val.lng !== 'number') return
+        setCustLat(val.lat)
+        setCustLng(val.lng)
       })
       sentNearby.current  = false
       sentArrived.current = false
@@ -89,6 +130,7 @@ export default function TechHomeScreen() {
   useEffect(() => {
     if (!custLat || !myLat || !ongoingJob) return
     const d = parseFloat(calcDistance(myLat, myLng, custLat, custLng))
+    if (isNaN(d)) return
     const SPEED = 0.3 // km/min (~18 km/h — realistic city speed)
     const etaMins = Math.round(d / SPEED)
     setDistance(d + ' km')
@@ -138,9 +180,11 @@ export default function TechHomeScreen() {
       { accuracy: Location.Accuracy.High, timeInterval: 4000 },
       pos => {
         const lat = pos.coords.latitude, lng = pos.coords.longitude
+        // Guard: skip invalid coordinates
+        if (typeof lat !== 'number' || typeof lng !== 'number') return
         setMyLat(lat); setMyLng(lng)
-        // ✅ FIX: Write under this specific order, not global techLocation
-        if (orderId) set(ref(db, 'orders/' + orderId + '/techLocation'), { lat, lng })
+        // Write under this specific order, not global techLocation
+        if (orderId) set(ref(db, 'orders/' + orderId + '/techLocation'), { lat, lng }).catch(() => {})
       }
     )
   }
@@ -165,7 +209,10 @@ export default function TechHomeScreen() {
       let ongoing = null, count = 0, dailyCount = 0
 
       snapshot.forEach(child => {
-        const order = { id: child.key, ...child.val() }
+        const val = child.val()
+        // Guard: skip if order data is not an object (prevents crash from corrupt data)
+        if (!val || typeof val !== 'object') return
+        const order = { id: child.key, ...val }
         if (order.status === 'pending')   allPending.push(order)
         if (order.status === 'accepted') {
           // Only mark as ongoing if THIS tech accepted the job
@@ -284,8 +331,16 @@ export default function TechHomeScreen() {
   }
 
   const callCustomer = () => {
-    if (currentCustPhone) Linking.openURL('tel:+91' + currentCustPhone)
-    else Alert.alert('Not Available', 'Customer phone not available!')
+    if (currentCustPhone) {
+      const cleanPhone = currentCustPhone.replace(/[^0-9]/g, '')
+      if (cleanPhone.length < 10) {
+        Alert.alert('Not Available', 'Customer phone number is not valid.')
+        return
+      }
+      Linking.openURL('tel:+91' + cleanPhone)
+    } else {
+      Alert.alert('Not Available', 'Customer phone not available!')
+    }
   }
 
   const TABS = [
@@ -374,8 +429,8 @@ export default function TechHomeScreen() {
             </View>
           </View>
 
-          {/* ✅ Safe MapView */}
-          {MapView && (custLat || myLat) && (
+          {/* Safe map — only render when ALL map components are available */}
+          {hasMap && (custLat || myLat) && (
             <MapView
               ref={mapRef}
               style={s.map}
@@ -390,10 +445,12 @@ export default function TechHomeScreen() {
               {custLat && (
                 <>
                   <Marker coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Customer" />
-                  <Polyline
-                    coordinates={[{ latitude: myLat, longitude: myLng }, { latitude: custLat, longitude: custLng }]}
-                    strokeColor="#FF6B00" strokeWidth={3} lineDashPattern={[8, 8]}
-                  />
+                  {Polyline && (
+                    <Polyline
+                      coordinates={[{ latitude: myLat, longitude: myLng }, { latitude: custLat, longitude: custLng }]}
+                      strokeColor="#FF6B00" strokeWidth={3} lineDashPattern={[8, 8]}
+                    />
+                  )}
                 </>
               )}
             </MapView>
@@ -547,6 +604,7 @@ export default function TechHomeScreen() {
   }
 
   return (
+    <TechHomeErrorBoundary>
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
       {activeTab === 'home' && renderHomeTab()}
       {activeTab === 'pending' && renderPendingTab()}
@@ -572,6 +630,7 @@ export default function TechHomeScreen() {
         ))}
       </View>
     </View>
+    </TechHomeErrorBoundary>
   )
 }
 

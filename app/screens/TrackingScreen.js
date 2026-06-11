@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Location from 'expo-location'
 import { useRouter } from 'expo-router'
 import { onValue, ref, set } from 'firebase/database'
-import { useEffect, useRef, useState } from 'react'
+import { Component, useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Linking,
@@ -16,16 +16,53 @@ import {
 import { db } from '../firebase/config'
 import { calcDistance } from '../utils/distance'
 
-// MapView is optional — only load if available
+// ═══════════════════════════════════════════════════════════════════════════
+// Local error boundary — catches rendering crashes so the app doesn't close
+// ═══════════════════════════════════════════════════════════════════════════
+class TrackingErrorBoundary extends Component {
+  state = { hasError: false, error: null }
+  static getDerivedStateFromError(error) { return { hasError: true, error } }
+  componentDidCatch(error) { console.error('TrackingScreen crash:', error?.message) }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center', padding: 30 }}>
+          <Text style={{ fontSize: 50, marginBottom: 16 }}>🗺️</Text>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: '#1A3A6B', marginBottom: 8 }}>Tracking Unavailable</Text>
+          <Text style={{ fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 24 }}>
+            {this.state.error?.message || 'Something went wrong loading the tracking screen.'}
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: '#FF6B00', paddingHorizontal: 30, paddingVertical: 12, borderRadius: 12 }}
+            onPress={() => this.setState({ hasError: false, error: null })}
+          >
+            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>🔄 Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )
+    }
+    return this.props.children
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Safe map components — each loaded & validated individually so the whole
+// screen never crashes if a sub-component is unexpectedly undefined.
+// ═══════════════════════════════════════════════════════════════════════════
 let MapView, Marker, Polyline
 try {
   const Maps = require('react-native-maps')
-  MapView  = Maps.default
-  Marker   = Maps.Marker
-  Polyline = Maps.Polyline
+  MapView  = Maps.default  || null
+  Marker   = Maps.Marker   || null
+  Polyline = Maps.Polyline || null
 } catch (e) {
   MapView = null
+  Marker  = null
+  Polyline = null
 }
+
+// Only render the real map when ALL required components are available
+const hasMap = !!(MapView && Marker)
 
 export default function TrackingScreen() {
   const router = useRouter()
@@ -106,12 +143,14 @@ export default function TrackingScreen() {
           if (!mounted.current) return
           const lat = pos.coords.latitude
           const lng = pos.coords.longitude
+          // Guard: skip invalid coordinates
+          if (typeof lat !== 'number' || typeof lng !== 'number') return
           custPosRef.current = { lat, lng }
           setCustLat(lat)
           setCustLng(lng)
-          // ✅ FIX 2: Write customer GPS under their own order, not a shared global path.
-          // Previously: set(ref(db, 'custLocation'), ...) — all customers overwrote each other!
-          set(ref(db, `orders/${orderIdRef.current}/custLocation`), { lat, lng }).catch(() => {})
+          if (orderIdRef.current) {
+            set(ref(db, `orders/${orderIdRef.current}/custLocation`), { lat, lng }).catch(() => {})
+          }
         }
       )
     } catch (e) {
@@ -121,11 +160,12 @@ export default function TrackingScreen() {
 
   const startListeners = () => {
     try {
-      // ✅ FIX 3: Listen to techLocation under this specific order, not a shared global path.
-      // Previously: ref(db, 'techLocation') — showed wrong technician if multiple jobs were active!
       const u1 = onValue(ref(db, `orders/${orderIdRef.current}/techLocation`), snap => {
         if (!mounted.current || !snap.exists()) return
-        const { lat, lng } = snap.val()
+        const val = snap.val()
+        // Guard: techLocation must be an object with valid numeric lat/lng
+        if (!val || typeof val.lat !== 'number' || typeof val.lng !== 'number') return
+        const { lat, lng } = val
         techPosRef.current = { lat, lng }
         setTechLat(lat)
         setTechLng(lng)
@@ -137,12 +177,10 @@ export default function TrackingScreen() {
     }
 
     try {
-      // ✅ FIX 1: Listen directly to THIS order only, not the entire /orders collection.
-      // Previously: ref(db, 'orders') downloaded ALL orders and looped through them — very slow
-      // and caused wrong order data to appear!
       const u2 = onValue(ref(db, `orders/${orderIdRef.current}`), snap => {
         if (!mounted.current || !snap.exists()) return
         const o = snap.val()
+        if (!o) return
         if (o.techName) {
           setTechName(o.techName)
           if (o.techPhone) setTechPhone(o.techPhone)
@@ -151,7 +189,6 @@ export default function TrackingScreen() {
           setJobDone(true)
           setStatusMsg('✅ Repair Completed!')
         } else {
-          // Reset jobDone if order is not completed (prevents stale state)
           setJobDone(false)
         }
       })
@@ -164,6 +201,7 @@ export default function TrackingScreen() {
   const recalcDistance = (custPos, techPos) => {
     if (!custPos || !techPos) return
     const d = parseFloat(calcDistance(custPos.lat, custPos.lng, techPos.lat, techPos.lng))
+    if (isNaN(d)) return
     setDistance(d + ' km')
     const SPEED = 0.3 // km/min (~18 km/h — realistic city speed)
     const etaMins = Math.round(d / SPEED)
@@ -179,7 +217,12 @@ export default function TrackingScreen() {
 
   const callTech = () => {
     if (techPhone) {
-      Linking.openURL('tel:+91' + techPhone).catch(() => Alert.alert('Error', 'Cannot make call!'))
+      const cleanPhone = techPhone.replace(/[^0-9]/g, '')
+      if (cleanPhone.length < 10) {
+        Alert.alert('Not Available', 'Technician phone number is not valid yet.')
+        return
+      }
+      Linking.openURL('tel:+91' + cleanPhone).catch(() => Alert.alert('Error', 'Cannot make call!'))
     } else {
       Alert.alert('Not Available', 'Technician phone not available yet! Please wait.')
     }
@@ -205,6 +248,7 @@ export default function TrackingScreen() {
   }
 
   return (
+    <TrackingErrorBoundary>
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
       <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
 
@@ -219,8 +263,8 @@ export default function TrackingScreen() {
           </View>
         </View>
 
-        {/* MAP or PLACEHOLDER */}
-        {MapView ? (
+        {/* MAP or PLACEHOLDER — only render real map when ALL components are available */}
+        {hasMap ? (
           <MapView
             style={s.map}
             region={{
@@ -232,7 +276,7 @@ export default function TrackingScreen() {
           >
             <Marker coordinate={{ latitude: custLat, longitude: custLng }} title="🏠 Your Location" />
             {techLat && <Marker coordinate={{ latitude: techLat, longitude: techLng }} title="🛵 Technician" pinColor="#FF6B00" />}
-            {techLat && (
+            {techLat && Polyline && (
               <Polyline
                 coordinates={[
                   { latitude: custLat, longitude: custLng },
@@ -360,6 +404,7 @@ export default function TrackingScreen() {
         ))}
       </View>
     </View>
+    </TrackingErrorBoundary>
   )
 }
 
