@@ -195,8 +195,15 @@ export default function TrackingScreen() {
   }
 
   const startListeners = () => {
+    // Safety: guard against empty orderId — prevents invalid Firebase paths
+    const oid = orderIdRef.current
+    if (!oid || typeof oid !== 'string' || oid.trim() === '') {
+      console.log('TrackingScreen: No valid orderId to listen to, skipping listeners')
+      return
+    }
+
     try {
-      const u1 = onValue(ref(db, `orders/${orderIdRef.current}/techLocation`), snap => {
+      const u1 = onValue(ref(db, `orders/${oid}/techLocation`), snap => {
         try {
           if (!mounted.current || !snap.exists()) return
           const val = snap.val()
@@ -216,7 +223,7 @@ export default function TrackingScreen() {
     }
 
     try {
-      const u2 = onValue(ref(db, `orders/${orderIdRef.current}`), snap => {
+      const u2 = onValue(ref(db, `orders/${oid}`), snap => {
         try {
           if (!mounted.current || !snap.exists()) return
           const o = snap.val()

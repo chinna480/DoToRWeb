@@ -476,48 +476,112 @@ export default function HomeScreen() {
           <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3A6B' }}>No orders yet</Text>
           <Text style={{ fontSize: 13, color: '#888', marginTop: 5 }}>Book your first repair and it will appear here!</Text>
         </View>
-      ) : (
-        myOrders.map((order, i) => {
-          const statusColor = order.status === 'completed' ? '#2e7d32' : order.status === 'accepted' ? '#FF6B00' : '#888'
-          const statusIcon = order.status === 'completed' ? '✅' : order.status === 'accepted' ? '🔧' : '⏳'
-          return (
-            <TouchableOpacity key={order.id || i} style={s.orderCard} onPress={async () => {
-              if (order.status === 'accepted' || order.status === 'pending') {
-                if (order.id) {
-                  await AsyncStorage.setItem('lastOrderId', order.id)
-                  router.push('/screens/TrackingScreen')
-                }
-              }
-            }}>
-              <View style={s.orderLeft}>
-                <Text style={s.orderDevice}>📱 {order.brand} {order.modelName ? `— ${order.modelName}` : ''}</Text>
-                {order.description ? <Text style={s.orderRepair}>🔧 {order.description}</Text> : null}
-                {order.images && order.images.length > 0 && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
-                    {order.images.map((url, j) => (
-                      <TouchableOpacity key={j} onPress={() => { setFsImages(order.images); setFsIndex(j) }}>
-                        <Image source={{ uri: url }} style={s.orderImage} />
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                )}
-                <Text style={s.orderLoc}>📍 {order.location}</Text>
-                {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
-                <Text style={s.orderTime}>🕐 {order.time}</Text>
-              </View>
-              <View style={s.orderRight}>
-                <Text style={[s.orderStatus, { color: statusColor }]}>{statusIcon}</Text>
-                <Text style={[s.orderStatusLabel, { color: statusColor }]}>{order.status}</Text>
-                {order.id && (
-                  <TouchableOpacity style={s.orderChatBtn} onPress={() => router.push(`/screens/ChatScreen?orderId=${order.id}&role=cust&customerName=${encodeURIComponent(custName)}&techName=${encodeURIComponent(order.techName || '')}`)}>
-                    <Text style={s.orderChatTxt}>💬 Chat</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </TouchableOpacity>
-          )
-        })
-      )}
+      ) : (() => {
+        const ongoingOrders = myOrders.filter(o => o.status !== 'completed')
+        const completedOrders = myOrders.filter(o => o.status === 'completed')
+        return (
+          <>
+            {/* Ongoing orders section */}
+            {ongoingOrders.length > 0 && (
+              <>
+                <Text style={s.sectionTitle}>🟢 Ongoing Orders</Text>
+                {ongoingOrders.map((order, i) => {
+                  const statusColor = order.status === 'accepted' ? '#FF6B00' : '#888'
+                  const statusIcon = order.status === 'accepted' ? '🔧' : '⏳'
+                  return (
+                    <TouchableOpacity key={order.id || i} style={[s.orderCard, { borderLeftColor: '#FF6B00' }]} onPress={async () => {
+                      try {
+                        if (order.status !== 'completed' && order.status !== 'cancelled') {
+                          if (order.id) {
+                            await AsyncStorage.setItem('lastOrderId', order.id)
+                            router.push('/screens/TrackingScreen')
+                          }
+                        }
+                      } catch (e) {
+                        console.log('Order card navigation error:', e)
+                      }
+                    }}>
+                      <View style={s.orderLeft}>
+                        <Text style={s.orderDevice}>📱 {order.brand} {order.modelName ? `— ${order.modelName}` : ''}</Text>
+                        {order.description ? <Text style={s.orderRepair}>🔧 {order.description}</Text> : null}
+                        {order.images && order.images.length > 0 && (
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                            {order.images.map((url, j) => (
+                              <TouchableOpacity key={j} onPress={() => { setFsImages(order.images); setFsIndex(j) }}>
+                                <Image source={{ uri: url }} style={s.orderImage} />
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        )}
+                        <Text style={s.orderLoc}>📍 {order.location}</Text>
+                        {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
+                        <Text style={s.orderTime}>🕐 {order.time}</Text>
+                      </View>
+                      <View style={s.orderRight}>
+                        <Text style={[s.orderStatus, { color: statusColor }]}>{statusIcon}</Text>
+                        <Text style={[s.orderStatusLabel, { color: statusColor }]}>{order.status}</Text>
+                        {order.id && (
+                          <TouchableOpacity style={s.orderChatBtn} onPress={() => {
+                            try {
+                              router.push(`/screens/ChatScreen?orderId=${order.id}&role=cust&customerName=${encodeURIComponent(custName)}&techName=${encodeURIComponent(order.techName || '')}`)
+                            } catch (e) {
+                              console.log('Chat navigation error:', e)
+                            }
+                          }}>
+                            <Text style={s.orderChatTxt}>💬 Chat</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  )
+                })}
+              </>
+            )}
+
+            {/* Completed orders section */}
+            {completedOrders.length > 0 && (
+              <>
+                <Text style={s.sectionTitle}>✅ Completed Orders</Text>
+                {completedOrders.map((order, i) => (
+                  <View key={order.id || i} style={[s.orderCard, { borderLeftColor: '#2e7d32', opacity: 0.8 }]}>
+                    <View style={s.orderLeft}>
+                      <Text style={s.orderDevice}>📱 {order.brand} {order.modelName ? `— ${order.modelName}` : ''}</Text>
+                      {order.description ? <Text style={[s.orderRepair, { color: '#2e7d32' }]}>✅ {order.description}</Text> : null}
+                      {order.images && order.images.length > 0 && (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                          {order.images.map((url, j) => (
+                            <TouchableOpacity key={j} onPress={() => { setFsImages(order.images); setFsIndex(j) }}>
+                              <Image source={{ uri: url }} style={s.orderImage} />
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      )}
+                      <Text style={s.orderLoc}>📍 {order.location}</Text>
+                      {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
+                      <Text style={s.orderTime}>🕐 {order.time}</Text>
+                    </View>
+                    <View style={s.orderRight}>
+                      <Text style={[s.orderStatus, { color: '#2e7d32' }]}>✅</Text>
+                      <Text style={[s.orderStatusLabel, { color: '#2e7d32' }]}>Completed</Text>
+                      {order.id && (
+                        <TouchableOpacity style={[s.orderChatBtn, { backgroundColor: '#2e7d32' }]} onPress={() => {
+                          try {
+                            router.push(`/screens/ChatScreen?orderId=${order.id}&role=cust&customerName=${encodeURIComponent(custName)}&techName=${encodeURIComponent(order.techName || '')}`)
+                          } catch (e) {
+                            console.log('Chat navigation error:', e)
+                          }
+                        }}>
+                          <Text style={s.orderChatTxt}>💬 Chat</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                ))}
+              </>
+            )}
+          </>
+        )
+      })()}
       <View style={{ height: 90 }} />
     </ScrollView>
   )
