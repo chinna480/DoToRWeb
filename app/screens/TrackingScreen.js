@@ -172,16 +172,20 @@ export default function TrackingScreen() {
       watchRef.current = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.Balanced, timeInterval: 6000, distanceInterval: 10 },
         pos => {
-          if (!mounted.current) return
-          const lat = pos.coords.latitude
-          const lng = pos.coords.longitude
-          // Guard: skip invalid coordinates
-          if (typeof lat !== 'number' || typeof lng !== 'number') return
-          custPosRef.current = { lat, lng }
-          setCustLat(lat)
-          setCustLng(lng)
-          if (orderIdRef.current) {
-            set(ref(db, `orders/${orderIdRef.current}/custLocation`), { lat, lng }).catch(() => {})
+          try {
+            if (!mounted.current) return
+            // Guard: validate position object before accessing properties
+            if (!pos || !pos.coords || typeof pos.coords.latitude !== 'number' || typeof pos.coords.longitude !== 'number') return
+            const lat = pos.coords.latitude
+            const lng = pos.coords.longitude
+            custPosRef.current = { lat, lng }
+            setCustLat(lat)
+            setCustLng(lng)
+            if (orderIdRef.current) {
+              set(ref(db, `orders/${orderIdRef.current}/custLocation`), { lat, lng }).catch(() => {})
+            }
+          } catch (e) {
+            console.log('GPS position callback error:', e)
           }
         }
       )
@@ -193,44 +197,50 @@ export default function TrackingScreen() {
   const startListeners = () => {
     try {
       const u1 = onValue(ref(db, `orders/${orderIdRef.current}/techLocation`), snap => {
-        if (!mounted.current || !snap.exists()) return
-        const val = snap.val()
-        // Guard: techLocation must be an object with valid numeric lat/lng
-        if (!val || typeof val.lat !== 'number' || typeof val.lng !== 'number') return
-        const { lat, lng } = val
-        techPosRef.current = { lat, lng }
-        setTechLat(lat)
-        setTechLng(lng)
-        setStatusMsg('🛵 Technician is on the way!')
+        try {
+          if (!mounted.current || !snap.exists()) return
+          const val = snap.val()
+          if (!val || typeof val.lat !== 'number' || typeof val.lng !== 'number') return
+          const { lat, lng } = val
+          techPosRef.current = { lat, lng }
+          setTechLat(lat)
+          setTechLng(lng)
+          setStatusMsg('🛵 Technician is on the way!')
+        } catch (e) {
+          console.log('techLocation data callback error:', e)
+        }
       }, err => console.log('techLocation listener error:', err))
       unsubsRef.current.push(u1)
     } catch (e) {
-      console.log('techLocation listener error:', e)
+      console.log('techLocation listener setup error:', e)
     }
 
     try {
       const u2 = onValue(ref(db, `orders/${orderIdRef.current}`), snap => {
-        if (!mounted.current || !snap.exists()) return
-        const o = snap.val()
-        if (!o) return
-        if (o.techName) {
-          setTechName(o.techName)
-          if (o.techPhone) setTechPhone(o.techPhone)
-        }
-        // Update order details from Firebase (modelName/description may arrive after init)
-        if (o.modelName) setModelName(o.modelName)
-        if (o.description) setDescription(o.description)
-        if (o.location) setLocation(o.location)
-        if (o.status === 'completed') {
-          setJobDone(true)
-          setStatusMsg('✅ Repair Completed!')
-        } else {
-          setJobDone(false)
+        try {
+          if (!mounted.current || !snap.exists()) return
+          const o = snap.val()
+          if (!o) return
+          if (o.techName) {
+            setTechName(o.techName)
+            if (o.techPhone) setTechPhone(o.techPhone)
+          }
+          if (o.modelName) setModelName(o.modelName)
+          if (o.description) setDescription(o.description)
+          if (o.location) setLocation(o.location)
+          if (o.status === 'completed') {
+            setJobDone(true)
+            setStatusMsg('✅ Repair Completed!')
+          } else {
+            setJobDone(false)
+          }
+        } catch (e) {
+          console.log('order data callback error:', e)
         }
       }, err => console.log('order listener error:', err))
       unsubsRef.current.push(u2)
     } catch (e) {
-      console.log('orders listener error:', e)
+      console.log('orders listener setup error:', e)
     }
   }
 

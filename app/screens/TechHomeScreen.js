@@ -117,8 +117,8 @@ export default function TechHomeScreen() {
   const watchRef          = useRef(null)
   const proximityWatchRef = useRef(null)
   const mapRef            = useRef(null)
-  const techLatRef        = useRef(17.3850)  // Always up-to-date tech GPS for closures
-  const techLngRef        = useRef(78.4867)
+  const techLatRef        = useRef(null)  // Always up-to-date tech GPS for closures (null until GPS fix acquired)
+  const techLngRef        = useRef(null)
   const techPushToken     = useRef(null)
   const techLocRef        = useRef('')
   const techPincodeRef    = useRef('')
@@ -232,13 +232,16 @@ export default function TechHomeScreen() {
     watchRef.current = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.High, timeInterval: 4000 },
       pos => {
-        const lat = pos.coords.latitude, lng = pos.coords.longitude
-        // Guard: skip invalid coordinates
-        if (typeof lat !== 'number' || typeof lng !== 'number') return
-        setMyLat(lat); setMyLng(lng)
-        techLatRef.current = lat; techLngRef.current = lng
-        // ✅ FIX: Write under this specific order, not global techLocation
-        if (orderId) set(ref(db, 'orders/' + orderId + '/techLocation'), { lat, lng }).catch(() => {})
+        try {
+          if (!pos || !pos.coords || typeof pos.coords.latitude !== 'number' || typeof pos.coords.longitude !== 'number') return
+          const lat = pos.coords.latitude, lng = pos.coords.longitude
+          setMyLat(lat); setMyLng(lng)
+          techLatRef.current = lat; techLngRef.current = lng
+          // ✅ FIX: Write under this specific order, not global techLocation
+          if (orderId) set(ref(db, 'orders/' + orderId + '/techLocation'), { lat, lng }).catch(() => {})
+        } catch (e) {
+          console.log('startLocationSharing GPS callback error:', e)
+        }
       }
     )
   }
@@ -251,10 +254,15 @@ export default function TechHomeScreen() {
     proximityWatchRef.current = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.Balanced, timeInterval: 30000 },
       pos => {
-        const lat = pos.coords.latitude
-        const lng = pos.coords.longitude
-        setMyLat(lat); setMyLng(lng)
-        techLatRef.current = lat; techLngRef.current = lng
+        try {
+          if (!pos || !pos.coords || typeof pos.coords.latitude !== 'number' || typeof pos.coords.longitude !== 'number') return
+          const lat = pos.coords.latitude
+          const lng = pos.coords.longitude
+          setMyLat(lat); setMyLng(lng)
+          techLatRef.current = lat; techLngRef.current = lng
+        } catch (e) {
+          console.log('startProximityWatching GPS callback error:', e)
+        }
       }
     )
   }
@@ -311,9 +319,10 @@ export default function TechHomeScreen() {
       }
 
       // Filter by GPS proximity — only show orders within 20 km of technician's current location
+      // Orders without GPS coordinates are still shown (e.g., website bookings where customer didn't share GPS)
       if (techLat && techLng) {
         pending = pending.filter(o => {
-          if (o.custLat == null || o.custLng == null) return false // No GPS → exclude
+          if (o.custLat == null || o.custLng == null) return true // No GPS → still show (website orders)
           const dist = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
           return dist <= 20 // within 20 km radius
         })
