@@ -443,7 +443,7 @@ async function notifyTechList(techsList, order, orderId) {
         await sendPushNotification(
           pushToken,
           '🔔 New Job Nearby!',
-          `${order.customerName} needs ${order.brand} ${order.repair}${distanceText}. Accept now!`,
+          `${order.customerName} needs ${order.brand} ${order.modelName || order.description || 'repair'}${distanceText}. Accept now!`,
           { screen: 'TechHomeScreen', orderId }
         );
         console.log(`  📲 Sent push to ${tech.phone}`);

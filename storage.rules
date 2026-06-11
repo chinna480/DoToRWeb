@@ -1,22 +1,19 @@
 rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Firebase Storage Rules — DoToR App
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// NOTE: This app uses Cloudinary for all image uploads (see utils/uploadImage.js).
+// Firebase Storage is NOT used by the app. These rules are set to deny all
+// as a security best practice. If you ever switch back to Firebase Storage,
+// update these rules accordingly.
+//
+// ═══════════════════════════════════════════════════════════════════════════
+
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow read/write for order images
-    match /orders/{orderId}/{allPaths=**} {
-      allow read, write: if true;
-    }
-
-    // Allow read/write for chat images
-    match /chats/{orderId}/{allPaths=**} {
-      allow read, write: if true;
-    }
-
-    // Allow read/write for profile photos
-    match /profiles/{userId}/{allPaths=**} {
-      allow read, write: if true;
-    }
-
-    // Default: deny all other access
+    // Deny all access — app uses Cloudinary for image uploads
     match /{allPaths=**} {
       allow read, write: if false;
     }

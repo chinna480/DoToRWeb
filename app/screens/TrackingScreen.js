@@ -64,6 +64,31 @@ try {
 // Only render the real map when ALL required components are available
 const hasMap = !!(MapView && Marker)
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Safe map wrapper — catches JS errors thrown by react-native-maps during
+// rendering so the *entire* TrackingScreen doesn't crash. Native crashes
+// (i.e. missing Google Maps API key) cannot be caught by JS, but this
+// prevents JS-level exceptions from killing the whole screen.
+// ═══════════════════════════════════════════════════════════════════════════
+class MapErrorBoundary extends Component {
+  state = { crashed: false }
+  static getDerivedStateFromError() { return { crashed: true } }
+  componentDidCatch(error) { console.error('MapView crash:', error?.message) }
+  render() {
+    if (this.state.crashed) {
+      return (
+        <View style={{ height: 200, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 50 }}>🗺️</Text>
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 10, textAlign: 'center', paddingHorizontal: 20 }}>
+            Map temporarily unavailable
+          </Text>
+        </View>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function TrackingScreen() {
   const router = useRouter()
   const [activeTab, setActiveTab]   = useState('home')
@@ -78,7 +103,8 @@ export default function TrackingScreen() {
   const [techPhone, setTechPhone] = useState('')
   const [statusMsg, setStatusMsg] = useState('⏳ Waiting for technician...')
   const [brand, setBrand]         = useState('-')
-  const [repair, setRepair]       = useState('-')
+  const [modelName, setModelName]   = useState('')
+  const [description, setDescription] = useState('')
   const [location, setLocation]   = useState('-')
   const [jobDone, setJobDone]     = useState(false)
   const [orderId, setOrderId]     = useState('')
@@ -109,7 +135,8 @@ export default function TrackingScreen() {
     try {
       const o  = await AsyncStorage.getItem('lastOrderId')
       const b  = await AsyncStorage.getItem('lastBrand')
-      const r  = await AsyncStorage.getItem('lastRepair')
+      const m  = await AsyncStorage.getItem('lastModelName')
+      const d  = await AsyncStorage.getItem('lastDescription')
       const l  = await AsyncStorage.getItem('custLocation')
       const n  = await AsyncStorage.getItem('lastCustName') || await AsyncStorage.getItem('custName') || 'Customer'
 
@@ -117,7 +144,8 @@ export default function TrackingScreen() {
       // knows which order to watch.
       if (o) { setOrderId(o); orderIdRef.current = o }
       if (b)  setBrand(b)
-      if (r)  setRepair(r)
+      if (m)  setModelName(m)
+      if (d)  setDescription(d)
       if (l)  setLocation(l)
       if (n)  setCustName(n)
 
@@ -170,7 +198,7 @@ export default function TrackingScreen() {
         setTechLat(lat)
         setTechLng(lng)
         setStatusMsg('🛵 Technician is on the way!')
-      })
+      }, err => console.log('techLocation listener error:', err))
       unsubsRef.current.push(u1)
     } catch (e) {
       console.log('techLocation listener error:', e)
@@ -185,13 +213,17 @@ export default function TrackingScreen() {
           setTechName(o.techName)
           if (o.techPhone) setTechPhone(o.techPhone)
         }
+        // Update order details from Firebase (modelName/description may arrive after init)
+        if (o.modelName) setModelName(o.modelName)
+        if (o.description) setDescription(o.description)
+        if (o.location) setLocation(o.location)
         if (o.status === 'completed') {
           setJobDone(true)
           setStatusMsg('✅ Repair Completed!')
         } else {
           setJobDone(false)
         }
-      })
+      }, err => console.log('order listener error:', err))
       unsubsRef.current.push(u2)
     } catch (e) {
       console.log('orders listener error:', e)
@@ -263,7 +295,8 @@ export default function TrackingScreen() {
           </View>
         </View>
 
-        {/* MAP or PLACEHOLDER — only render real map when ALL components are available */}
+        {/* MAP or PLACEHOLDER — wrapped in MapErrorBoundary to catch JS crashes from react-native-maps */}
+        <MapErrorBoundary>
         {hasMap ? (
           <MapView
             style={s.map}
@@ -294,6 +327,7 @@ export default function TrackingScreen() {
             <Text style={s.mapTxt}>{techLat ? '🛵 Technician is moving towards you!' : '⏳ Waiting for technician...'}</Text>
           </View>
         )}
+        </MapErrorBoundary>
 
         <View style={s.content}>
 
@@ -341,7 +375,7 @@ export default function TrackingScreen() {
           {/* ORDER DETAILS */}
           <View style={s.card}>
             <Text style={s.cardTitle}>ORDER DETAILS</Text>
-            {[['Device', brand], ['Repair', repair], ['Location', location]].map(([l, v]) => (
+            {[['Device', `${brand}${modelName ? ' ' + modelName : ''}`], ['Issue', description || '—'], ['Location', location]].map(([l, v]) => (
               <View key={l} style={s.infoRow}>
                 <Text style={s.infoLabel}>{l}</Text>
                 <Text style={s.infoVal}>{v || '-'}</Text>
