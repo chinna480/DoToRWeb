@@ -72,39 +72,10 @@ jobs:
 
       # ── AUTO-UPDATE: Bump version.json so app users see the update popup ──
       - name: Update version.json with new build info
-        run: |
-          node -e "
-            const fs = require('fs');
-            const v = require('./website/version.json');
-            const [major, minor, patch] = v.version.split('.').map(Number);
-            const newVer = major + '.' + minor + '.' + (patch + 1);
-            const runUrl = 'https://github.com/${{ github.repository }}/actions/runs/' + process.env.RUN_ID;
-            const now = new Date().toISOString().slice(0, 10);
-            const { execSync } = require('child_process');
-            const log = execSync('git log --format=\"%s\" -5 --no-merges', { encoding: 'utf8' });
-            const notes = log.trim().split('\n')
-              .filter(function(m) { return !m.includes('[skip ci]'); })
-              .map(function(m) { return m.replace(/^(feat|fix|chore|refactor|docs): /, ''); })
-              .map(function(m) { return '✨ ' + m; });
-            if (notes.length === 0) notes.push('🔧 Performance improvements and bug fixes');
-            var newVersion = {
-              version: newVer,
-              versionCode: Number(process.env.RUN_ID),
-              minVersionCode: 1,
-              updateUrl: runUrl,
-              releaseDate: now,
-              releaseNotes: notes,
-              forceUpdate: false
-            };
-            fs.writeFileSync('./website/version.json', JSON.stringify(newVersion, null, 2) + '\n');
-            console.log('Version updated to ' + newVer);
-            var pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-            pkg.version = newVer;
-            fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
-            console.log('package.json version updated to ' + newVer);
-          "
+        run: node scripts/bump-version.js
         env:
           RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
 
       - name: Commit & Push version bump back to repo
         run: |
