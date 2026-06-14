@@ -228,6 +228,12 @@
             </div>
           </div>
 
+          <!-- Refresh My Location Button -->
+          <button class="btn btn-primary btn-sm" id="refreshLocBtn" onclick="refreshMyLocation()" style="width:100%;margin-top:12px;">
+            📍 Refresh My Location
+          </button>
+          <p id="gpsRefreshStatus" style="font-size:11px;color:var(--green);font-weight:600;text-align:center;margin-top:6px;display:none;"></p>
+
           <!-- ETA -->
           <div id="etaSection" style="display:none;">
             <div class="eta-display">
@@ -328,10 +334,13 @@
       const mapEl = document.getElementById('liveMap');
       if (!mapEl) return;
 
+      // Use customer's order location if available, otherwise defer to GPS
+      const initLat = custLat || 17.3850;
+      const initLng = custLng || 78.4867;
       map = L.map('liveMap', {
         zoomControl: true,
         attributionControl: false,
-      }).setView([17.3850, 78.4867], 12);
+      }).setView([initLat, initLng], initLat === 17.3850 ? 12 : 15);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
@@ -820,6 +829,54 @@
           findOrdersByPhone();
         }
       }
+    };
+
+    window.refreshMyLocation = function() {
+      const btn = document.getElementById('refreshLocBtn');
+      const statusEl = document.getElementById('gpsRefreshStatus');
+      if (!navigator.geolocation) {
+        statusEl.textContent = '⚠️ GPS not supported on this device';
+        statusEl.style.display = 'block';
+        statusEl.style.color = 'var(--red)';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Refreshing...';
+      statusEl.textContent = '⏳ Acquiring GPS...';
+      statusEl.style.display = 'block';
+      statusEl.style.color = 'var(--gray)';
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          custLat = lat;
+          custLng = lng;
+
+          // Update map markers with new location
+          updateMapMarkers();
+
+          statusEl.textContent = `✅ Location refreshed (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+          statusEl.style.color = 'var(--green)';
+          btn.disabled = false;
+          btn.innerHTML = '📍 Refresh My Location';
+
+          showToast('📍 Location refreshed successfully!', 'success');
+
+          // Clear status after a few seconds
+          setTimeout(() => {
+            statusEl.style.display = 'none';
+          }, 5000);
+        },
+        (err) => {
+          statusEl.textContent = '⚠️ Could not get location. ' + (err.code === 1 ? 'Please allow location access.' : 'Try again.');
+          statusEl.style.color = 'var(--red)';
+          btn.disabled = false;
+          btn.innerHTML = '📍 Refresh My Location';
+        },
+        { timeout: 10000, enableHighAccuracy: true }
+      );
     };
 
     function showToast(msg, type = 'success') {

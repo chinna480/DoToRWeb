@@ -581,9 +581,13 @@
         </div>
 
         <h3 style="font-size:15px;font-weight:800;color:var(--navy);margin:16px 0 12px;">📍 Your Address</h3>
-        <div class="form-group">
-          <label>Location / Area</label>
-          <input type="text" id="location" class="form-input" placeholder="e.g. Kukatpally, Hyderabad">
+        <div class="form-group" style="position:relative;">
+          <label>Search your repair address</label>
+          <div class="map-picker-search-wrap">
+            <input type="text" id="location" class="form-input" placeholder="Search your home address..." autocomplete="off">
+            <div class="search-autocomplete" id="locationAutocomplete"></div>
+          </div>
+          <p style="font-size:11px;color:var(--gray);margin-top:4px;">🔍 Type to search — or use GPS / map below</p>
         </div>
         <div class="form-group">
           <label>Pincode</label>
@@ -983,7 +987,7 @@
       destroyMapPicker();
     };
 
-    function initMapPicker() {
+    async function initMapPicker() {
       const container = document.getElementById('mapPickerContainer');
       if (!container) return;
 
@@ -993,15 +997,30 @@
         return;
       }
 
-      // Default: user's GPS or Hyderabad
-      let startLat = 17.3850;
-      let startLng = 78.4867;
+      let startLat, startLng;
+      // Priority: 1) GPS from previous use  2) Map picker's last pin  3) Try browser GPS  4) Fallback to Hyderabad
       if (gpsLat && gpsLng) {
         startLat = gpsLat;
         startLng = gpsLng;
       } else if (mapPickerLat && mapPickerLng) {
         startLat = mapPickerLat;
         startLng = mapPickerLng;
+      } else {
+        // Try browser geolocation (async — won't block map from loading)
+        try {
+          if (navigator.geolocation) {
+            const pos = await new Promise((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000, enableHighAccuracy: false });
+            });
+            startLat = pos.coords.latitude;
+            startLng = pos.coords.longitude;
+          }
+        } catch (_) {}
+        // Fallback if GPS didn't work
+        if (!startLat || !startLng) {
+          startLat = 17.3850;
+          startLng = 78.4867;
+        }
       }
 
       mapPickerMap = L.map(container, {
@@ -1350,13 +1369,145 @@
       );
     };
 
-    // ── Search Autocomplete ────────────────────────────────────────
+    // ── Search Autocomplete (for map picker search) ────────────────
     let acDebounce = null;
     let acResults = [];
     let acHighlightIndex = -1;
 
     const searchInput = document.getElementById('mapSearchInput');
     const acDropdown = document.getElementById('searchAutocomplete');
+
+    // ── Location Input Autocomplete (for booking form) ─────────────
+    let locAcDebounce = null;
+    let locAcResults = [];
+    let locAcHighlightIndex = -1;
+
+    const locationInput = document.getElementById('location');
+    const locAcDropdown = document.getElementById('locationAutocomplete');
+
+    if (locationInput && locAcDropdown) {
+      // Wrap location input in a relative container for dropdown positioning
+      const locGroup = locationInput.closest('.form-group');
+      if (locGroup) locGroup.style.position = 'relative';
+
+      locationInput.addEventListener('input', function() {
+        clearTimeout(locAcDebounce);
+        const query = this.value.trim();
+        if (query.length < 2) {
+          locAcDropdown.classList.remove('show');
+          locAcDropdown.innerHTML = '';
+          // User is typing manually — clear GPS to avoid mismatch (office vs home)
+          gpsLat = null;
+          gpsLng = null;
+          return;
+        }
+        locAcDebounce = setTimeout(() => fetchLocationAutocomplete(query), 300);
+      });
+
+      locationInput.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (locAcResults.length === 0) return;
+          locAcHighlightIndex = Math.min(locAcHighlightIndex + 1, locAcResults.length - 1);
+          highlightLocAcItem();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (locAcResults.length === 0) return;
+          locAcHighlightIndex = Math.max(locAcHighlightIndex - 1, -1);
+          highlightLocAcItem();
+        } else if (e.key === 'Enter') {
+          if (locAcHighlightIndex >= 0 && locAcResults[locAcHighlightIndex]) {
+            e.preventDefault();
+            selectLocAcResult(locAcResults[locAcHighlightIndex]);
+          }
+        } else if (e.key === 'Escape') {
+          locAcDropdown.classList.remove('show');
+        }
+      });
+
+      // Close dropdown on click outside
+      document.addEventListener('click', function(e) {
+        if (!e.target.closest('#location') && !e.target.closest('#locationAutocomplete')) {
+          locAcDropdown.classList.remove('show');
+        }
+      });
+    }
+
+    async function fetchLocationAutocomplete(query) {
+      if (!locAcDropdown) return;
+      locAcDropdown.innerHTML = '<div class="ac-loading">⏳ Searching...</div>';
+      locAcDropdown.classList.add('show');
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`
+        );
+        const data = await res.json();
+        locAcResults = data;
+        locAcHighlightIndex = -1;
+        if (data.length === 0) {
+          locAcDropdown.innerHTML = '<div class="ac-no-results">No results found</div>';
+        } else {
+          locAcDropdown.innerHTML = data.map((r, i) => {
+            const displayName = r.display_name || '';
+            const parts = displayName.split(',');
+            const name = parts[0] || '';
+            const address = parts.slice(1, 4).join(',').trim();
+            const type = (r.type || '').toLowerCase();
+            const icon = ['city','town','village','county','state'].includes(type) ? '🏙️' :
+                         ['street','road','highway','neighbourhood'].includes(type) ? '🛣️' :
+                         ['amenity','building','hotel','mall','hospital'].includes(type) ? '🏢' : '📍';
+            const lat = parseFloat(r.lat);
+            const lng = parseFloat(r.lon);
+            return `<div class="ac-item" data-index="${i}" onclick="selectLocAcResult(locAcResults[${i}])" onmouseenter="locAcHighlightIndex=${i};highlightLocAcItem()">
+              <span class="ac-icon">${icon}</span>
+              <div class="ac-info">
+                <div class="ac-name">${name}</div>
+                <div class="ac-address">${address || r.lat.slice(0,6) + ', ' + r.lon.slice(0,6)}</div>
+              </div>
+            </div>`;
+          }).join('');
+        }
+      } catch(e) {
+        locAcDropdown.innerHTML = '<div class="ac-no-results">Search failed. Try again.</div>';
+        locAcResults = [];
+        locAcHighlightIndex = -1;
+      }
+    }
+
+    function highlightLocAcItem() {
+      const items = locAcDropdown ? locAcDropdown.querySelectorAll('.ac-item') : [];
+      items.forEach((item, i) => {
+        item.classList.toggle('highlighted', i === locAcHighlightIndex);
+      });
+      if (locAcHighlightIndex >= 0 && items[locAcHighlightIndex]) {
+        items[locAcHighlightIndex].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    function selectLocAcResult(result) {
+      if (!result) return;
+      // Fill the location input with a short readable address
+      const parts = (result.display_name || '').split(',');
+      const shortAddr = parts.slice(0, 4).join(',').trim();
+      document.getElementById('location').value = shortAddr;
+
+      // Also save GPS coordinates for the order
+      gpsLat = parseFloat(result.lat);
+      gpsLng = parseFloat(result.lon);
+
+      // Try to extract pincode
+      if (result.address && result.address.postcode) {
+        document.getElementById('pincode').value = result.address.postcode;
+      }
+
+      if (locAcDropdown) {
+        locAcDropdown.classList.remove('show');
+        locAcDropdown.innerHTML = '';
+      }
+
+      updateSummary();
+      showToast('✅ Location set: ' + shortAddr, 'success');
+    }
 
     if (searchInput && acDropdown) {
       searchInput.addEventListener('input', function() {

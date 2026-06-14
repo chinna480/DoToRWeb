@@ -50,8 +50,8 @@ export default function TrackingScreen() {
   const router = useRouter()
   const [activeTab, setActiveTab]   = useState('home')
 
-  const [custLat, setCustLat]     = useState(17.3850)
-  const [custLng, setCustLng]     = useState(78.4867)
+  const [custLat, setCustLat]     = useState(null)
+  const [custLng, setCustLng]     = useState(null)
   const [techLat, setTechLat]     = useState(null)
   const [techLng, setTechLng]     = useState(null)
   const [distance, setDistance]   = useState('--')
@@ -66,15 +66,16 @@ export default function TrackingScreen() {
   const [jobDone, setJobDone]     = useState(false)
   const [orderId, setOrderId]     = useState('')
   const [custName, setCustName]   = useState('Customer')
-
-
+  const [refreshingLocation, setRefreshingLocation] = useState(false)
+  const [gpsStatus, setGpsStatus]                   = useState('')
 
   const watchRef    = useRef(null)
   const unsubsRef   = useRef([])
   const mounted     = useRef(true)
-  const custPosRef  = useRef({ lat: 17.3850, lng: 78.4867 })
+  const custPosRef  = useRef(null)
   const techPosRef  = useRef(null)
   const orderIdRef  = useRef('')
+  const gpsTimeoutRef = useRef(null)
 
   useEffect(() => {
     mounted.current = true
@@ -235,6 +236,74 @@ export default function TrackingScreen() {
     }
   }, [custLat, custLng, techLat, techLng])
 
+  const refreshLocation = async () => {
+    setRefreshingLocation(true)
+    setGpsStatus('')
+    try {
+      // Remove existing watcher if any
+      if (watchRef.current) {
+        watchRef.current.remove()
+        watchRef.current = null
+      }
+
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') {
+        setGpsStatus('⚠️ Location permission denied')
+        setRefreshingLocation(false)
+        return
+      }
+
+      // Get a fresh position immediately
+      setGpsStatus('⏳ Acquiring GPS...')
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+        timeout: 10000,
+      })
+
+      if (pos && pos.coords && typeof pos.coords.latitude === 'number') {
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        custPosRef.current = { lat, lng }
+        setCustLat(lat)
+        setCustLng(lng)
+
+        // Write fresh location to Firebase
+        if (orderIdRef.current) {
+          set(ref(db, `orders/${orderIdRef.current}/custLocation`), { lat, lng }).catch(() => {})
+        }
+        setGpsStatus(`✅ Location refreshed (${lat.toFixed(4)}, ${lng.toFixed(4)})`)
+        if (gpsTimeoutRef.current) clearTimeout(gpsTimeoutRef.current)
+        gpsTimeoutRef.current = setTimeout(() => { setGpsStatus(''); gpsTimeoutRef.current = null }, 4000)
+      }
+
+      // Restart the continuous GPS watcher
+      watchRef.current = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, timeInterval: 6000, distanceInterval: 10 },
+        pos => {
+          try {
+            if (!mounted.current) return
+            if (!pos || !pos.coords || typeof pos.coords.latitude !== 'number' || typeof pos.coords.longitude !== 'number') return
+            const lat = pos.coords.latitude
+            const lng = pos.coords.longitude
+            custPosRef.current = { lat, lng }
+            setCustLat(lat)
+            setCustLng(lng)
+            if (orderIdRef.current) {
+              set(ref(db, `orders/${orderIdRef.current}/custLocation`), { lat, lng }).catch(() => {})
+            }
+          } catch (e) {
+            console.log('GPS position callback error:', e)
+          }
+        }
+      )
+    } catch (e) {
+      console.log('Refresh location error:', e)
+      setGpsStatus('⚠️ Could not refresh location. Try again.')
+    } finally {
+      setRefreshingLocation(false)
+    }
+  }
+
   const callTech = () => {
     if (techPhone) {
       const cleanPhone = techPhone.replace(/[^0-9]/g, '')
@@ -361,6 +430,12 @@ export default function TrackingScreen() {
             ))}
           </View>
 
+          {/* REFRESH LOCATION BUTTON */}
+          <TouchableOpacity style={[s.refreshBtn, refreshingLocation && s.refreshBtnDisabled]} onPress={refreshLocation} disabled={refreshingLocation}>
+            <Text style={s.refreshTxt}>{refreshingLocation ? '⏳ Refreshing...' : '📍 Refresh My Location'}</Text>
+          </TouchableOpacity>
+          {gpsStatus ? <Text style={s.gpsStatusTxt}>{gpsStatus}</Text> : null}
+
           {/* CALL BUTTON */}
           <TouchableOpacity style={s.callBtn} onPress={callTech}>
             <Text style={s.callTxt}>📞 Call Technician</Text>
@@ -458,6 +533,10 @@ const s = StyleSheet.create({
   chatBtnTxt:     { color: '#fff', fontSize: 16, fontWeight: '800' },
   reviewBtn:      { backgroundColor: '#2e7d32', padding: 15, borderRadius: 14, alignItems: 'center' },
   reviewTxt:      { color: '#fff', fontSize: 16, fontWeight: '800' },
+  refreshBtn:     { backgroundColor: '#FF6B00', padding: 15, borderRadius: 14, alignItems: 'center', marginBottom: 10, flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  refreshBtnDisabled: { opacity: 0.6 },
+  refreshTxt:     { color: '#fff', fontSize: 14, fontWeight: '800' },
+  gpsStatusTxt:   { fontSize: 11, color: '#2e7d32', fontWeight: '700', textAlign: 'center', marginBottom: 8 },
 
   // ── Bottom Tab Bar ──
   tabBar:        { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },

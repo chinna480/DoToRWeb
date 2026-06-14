@@ -5,13 +5,17 @@ on:
     branches:
       - main
 
+# Prevent infinite loop: skip runs triggered by our own [skip ci] commits
 jobs:
   build:
     runs-on: ubuntu-latest
+    if: "github.event.head_commit == null || !contains(github.event.head_commit.message, '[skip ci]')"
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for version bump & commit message extraction
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -60,8 +64,82 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPO_DOCTOR_SKIP: true
 
-      - name: Upload APK
+      - name: Upload APK as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: DoToR-APK
           path: build-*.apk
+
+      # ── AUTO-UPDATE: Bump version.json so app users see the update popup ──
+      - name: Update version.json with new build info
+        run: |
+          RUN_ID="${{ github.run_id }}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${RUN_ID}"
+          NOW="$(date +%Y-%m-%d)"
+
+          # Read current version from version.json
+          CURRENT_VER=$(node -e "const v=require('./website/version.json'); console.log(v.version)")
+          echo "Current version: $CURRENT_VER"
+
+          # Increment patch version (1.0.0 → 1.0.1)
+          IFS='.' read -r major minor patch <<< "$CURRENT_VER"
+          NEW_VER="${major}.${minor}.$((patch + 1))"
+          echo "New version: $NEW_VER"
+
+          # Extract release notes from recent commit messages
+          # Get all commit messages since last version bump (or last 5 commits)
+          RELEASE_NOTES=$(git log --format="%s" -5 --no-merges | while IFS= read -r msg; do
+            # Skip [skip ci] commits
+            if [[ "$msg" == *"[skip ci]"* ]]; then continue; fi
+            # Clean up common prefixes
+            clean_msg=$(echo "$msg" | sed 's/^feat: //' | sed 's/^fix: //' | sed 's/^chore: //' | sed 's/^refactor: //' | sed 's/^docs: //')
+            # Convert to a nice bullet point
+            echo "    \"✨ ${clean_msg}\","
+          done)
+          # Remove trailing comma
+          RELEASE_NOTES="${RELEASE_NOTES%,}"
+
+          if [ -z "$RELEASE_NOTES" ]; then
+            RELEASE_NOTES='    "🔧 Performance improvements and bug fixes"'
+          fi
+
+          # Write updated version.json
+          cat > website/version.json <<EOF
+        {
+          "version": "${NEW_VER}",
+          "versionCode": ${RUN_ID},
+          "minVersionCode": 1,
+          "updateUrl": "${RUN_URL}",
+          "releaseDate": "${NOW}",
+          "releaseNotes": [
+        ${RELEASE_NOTES}
+          ],
+          "forceUpdate": false
+        }
+        EOF
+
+          # Also update package.json version
+          node -e "const p=require('./package.json'); p.version='${NEW_VER}'; require('fs').writeFileSync('./package.json', JSON.stringify(p, null, 2)+'\n')"
+
+          echo "✅ version.json and package.json updated to ${NEW_VER}"
+          cat website/version.json
+
+      - name: Commit & Push version bump back to repo
+        run: |
+          git config user.name "DoToR Bot"
+          git config user.email "bot@dotor.app"
+
+          # Use GITHUB_TOKEN for push authentication
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+          git add website/version.json package.json
+
+          # Check if there's anything to commit
+          if git diff --cached --quiet; then
+            echo "No changes to commit — skipping"
+          else
+            NEW_VER=$(node -e "console.log(require('./package.json').version)")
+            git commit -m "chore: bump version to ${NEW_VER} [skip ci]"
+            git push origin HEAD:main
+            echo "✅ Version bump committed and pushed: ${NEW_VER}"
+          fi

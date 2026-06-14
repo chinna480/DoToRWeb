@@ -42,6 +42,7 @@ const STEPS = [
 ]
 
 import MapPickerModal from '../../components/MapPickerModal'
+import LocationAutocomplete from '../../components/LocationAutocomplete'
 import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
@@ -173,18 +174,10 @@ export default function HomeScreen() {
         imageUrls = await uploadImages(deviceImages.map(uri => ({ uri })), tempOrderId)
       }
 
-      // Get GPS coords for nearby tech matching if not already captured
+      // Only use GPS coords if the user explicitly used "My Location" or map picker
+      // If user manually typed an address, don't override with current GPS position
+      // (they might be at office but repair is at home)
       let orderLat = custLat, orderLng = custLng
-      if (!orderLat || !orderLng) {
-        try {
-          const { status } = await Location.requestForegroundPermissionsAsync()
-          if (status === 'granted') {
-            const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-            orderLat = pos.coords.latitude
-            orderLng = pos.coords.longitude
-          }
-        } catch (_) {}
-      }
 
       const order = {
         customerName:       name,
@@ -398,10 +391,16 @@ export default function HomeScreen() {
       <View style={s.stepBody}>
         <Text style={s.stepTitle}>📍 Repair Location</Text>
         <Text style={s.stepSubtitle}>Where should the technician come? (e.g. your home, a relative's place, etc.)</Text>
-        <View style={s.inputCard}>
-          <Text style={s.inputLabel}>Address / Area</Text>
-          <TextInput style={s.textInput} placeholder="e.g. Madhapur, Hyderabad" placeholderTextColor="#bbb" value={locationInput} onChangeText={setLocationInput} maxLength={500} />
-        </View>
+        <LocationAutocomplete
+          value={locationInput}
+          onChangeText={(t) => {
+            setLocationInput(t)
+            // User is typing manually, so clear map/GPS coords to avoid mismatch
+            if (!t) { setCustLat(null); setCustLng(null) }
+          }}
+          placeholder="Search your repair address..."
+          icon="📍"
+        />
         <TouchableOpacity style={s.gpsBtn} onPress={useCurrentLocation}>
           <Text style={s.gpsBtnTxt}>📍 Use Current Location</Text>
         </TouchableOpacity>

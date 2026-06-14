@@ -67,8 +67,8 @@ export default function TechHomeScreen() {
   const [completedFilter, setCompletedFilter] = useState('all') // 'all', 'today', 'week', 'month'
   const [custLat, setCustLat]            = useState(null)
   const [custLng, setCustLng]            = useState(null)
-  const [myLat, setMyLat]               = useState(17.3850)
-  const [myLng, setMyLng]               = useState(78.4867)
+  const [myLat, setMyLat]               = useState(null)
+  const [myLng, setMyLng]               = useState(null)
   const [distance, setDistance]          = useState('--')
   const [eta, setEta]                    = useState('--')
   const [currentCustPhone, setCustPhone] = useState('')
