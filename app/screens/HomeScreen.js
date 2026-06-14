@@ -41,7 +41,7 @@ const STEPS = [
   { num: 8, label: 'Confirm',  icon: '✅' },
 ]
 
-import MapPickerModal from '../components/MapPickerModal'
+import MapPickerModal from '../../components/MapPickerModal'
 import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
