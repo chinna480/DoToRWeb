@@ -8,7 +8,8 @@
     "🎨 New: Map picker with animated pin, satellite view, and search autocomplete",
     "📅 New: Order date filters (Today / Week / Month)",
     "🔧 Improved: GPS location accuracy and reverse geocoding",
-    "🐛 Fixed: Various stability improvements"
+    "🐛 Fixed: Various stability improvements",
+    "🚀 Auto-update: version.json now bumps automatically after each build"
   ],
   "forceUpdate": false
 }
