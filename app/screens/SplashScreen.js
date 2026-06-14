@@ -1,11 +1,26 @@
 import { useRouter } from 'expo-router'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Animated, Easing, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { UpdateModal, useUpdateChecker } from '../utils/updateChecker'
+
 export default function SplashScreen() {
   const router = useRouter()
   const progress = useRef(new Animated.Value(0)).current
   const fadeAnim = useRef(new Animated.Value(0)).current
   const taglineFade = useRef(new Animated.Value(0)).current
+
+  // ── Auto update check ──
+  const {
+    latestVersion,
+    releaseNotes,
+    updateUrl,
+    forceUpdate,
+    showUpdateModal,
+    setShowUpdateModal,
+    checking,
+  } = useUpdateChecker()
+
+  const navReadyRef = useRef(false)
 
   useEffect(() => {
     Animated.sequence([
@@ -14,9 +29,26 @@ export default function SplashScreen() {
       Animated.timing(progress, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
     ]).start()
 
-    const t = setTimeout(() => router.replace('/screens/RoleScreen'), 3000)
+    const t = setTimeout(() => {
+      navReadyRef.current = true
+      if (!showUpdateModal) {
+        router.replace('/screens/RoleScreen')
+      }
+    }, 3000)
     return () => clearTimeout(t)
-  }, [])
+  }, []) // Only run once on mount
+
+  // Navigate immediately when modal closes (no extra 3s wait)
+  useEffect(() => {
+    if (!showUpdateModal && navReadyRef.current && !checking) {
+      router.replace('/screens/RoleScreen')
+    }
+  }, [showUpdateModal, checking])
+
+  const handleUpdateClose = () => {
+    setShowUpdateModal(false)
+    // Navigation will happen in the useEffect above
+  }
 
   const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] })
 
@@ -39,6 +71,18 @@ export default function SplashScreen() {
         <Animated.View style={[s.loaderBar, { width: barWidth }]} />
       </View>
       <Animated.Text style={[s.footer, { opacity: taglineFade }]}>Door-to-Door Repair Service</Animated.Text>
+
+      {/* ── Update Modal ── */}
+      {!checking && (
+        <UpdateModal
+          visible={showUpdateModal}
+          onClose={handleUpdateClose}
+          latestVersion={latestVersion || '1.0.0'}
+          releaseNotes={releaseNotes}
+          updateUrl={updateUrl}
+          forceUpdate={forceUpdate}
+        />
+      )}
     </Animated.View>
   )
 }

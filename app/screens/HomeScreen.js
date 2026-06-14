@@ -744,6 +744,7 @@ export default function HomeScreen() {
         initialLat={custLat || mapPickLat || 17.3850}
         initialLng={custLng || mapPickLng || 78.4867}
       />
+
     </View>
   )
 }
