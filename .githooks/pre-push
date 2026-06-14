@@ -1,0 +1,83 @@
+#!/bin/bash
+# ── DoToR Pre-Push Hook ──────────────
+# Runs validation checks before allowing a push.
+# To skip:  git push --no-verify
+# Or set:   SKIP_PRE_PUSH=1
+# ────────────────────────────────────
+
+if [ "$SKIP_PRE_PUSH" = "1" ]; then
+  echo "⚠️  SKIP_PRE_PUSH=1 — skipping pre-push checks."
+  exit 0
+fi
+
+PASS=true
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_DIR" || exit 1
+
+echo ""
+echo "╔══════════════════════════════════════════════╗"
+echo "║  🔍 DoToR Pre-Push Validation               ║"
+echo "║  To skip: git push --no-verify               ║"
+echo "╚══════════════════════════════════════════════╝"
+echo ""
+
+# ── 1. TypeScript Check ──────────────────────────────────
+echo "▶  Step 1/2: TypeScript type check (tsc --noEmit)"
+echo "   ─────────────────────────────────────────────"
+TSC_OUTPUT=$(npx tsc --noEmit 2>&1)
+TSC_EXIT=$?
+
+if [ "$TSC_EXIT" -ne 0 ]; then
+  # Filter out known noise from @types/node
+  ERRORS=$(echo "$TSC_OUTPUT" | grep -v "node_modules/@types/node" | grep -E "error TS" | head -20)
+  if [ -z "$ERRORS" ]; then
+    echo "   ⚠️  TypeScript warnings only (no app-level errors). Continuing."
+  else
+    echo "   ❌ TypeScript errors found:"
+    echo "$ERRORS" | sed 's/^/      /'
+    echo ""
+    echo "   💡 Fix the errors above, then push again."
+    echo "   💡 To skip: git push --no-verify"
+    PASS=false
+  fi
+else
+  echo "   ✅ TypeScript check passed."
+fi
+echo ""
+
+# ── 2. Expo Bundle Check ────────────────────────────────
+echo "▶  Step 2/2: Expo Android bundle check"
+echo "   ─────────────────────────────────────────────"
+echo "   Running: npx expo export --platform=android --output-dir=/tmp/expo-pre-push-check"
+echo ""
+
+EXPO_OUTPUT=$(npx expo export --platform=android --output-dir=/tmp/expo-pre-push-check 2>&1)
+EXPO_EXIT=$?
+
+if [ "$EXPO_EXIT" -eq 0 ]; then
+  echo ""
+  echo "   ✅ Expo Android bundle built successfully."
+  rm -rf /tmp/expo-pre-push-check 2>/dev/null
+else
+  echo "   ❌ Expo bundle check failed:"
+  echo "$EXPO_OUTPUT" | tail -15 | sed 's/^/      /'
+  echo ""
+  echo "   💡 Check the error above — likely a missing import or syntax error."
+  echo "   💡 To skip: git push --no-verify"
+  PASS=false
+fi
+echo ""
+
+# ── Summary ──────────────────────────────────────────────
+if [ "$PASS" = true ]; then
+  echo "╔══════════════════════════════════════════════╗"
+  echo "║  ✅ All checks passed — pushing!            ║"
+  echo "╚══════════════════════════════════════════════╝"
+  exit 0
+else
+  echo "╔══════════════════════════════════════════════╗"
+  echo "║  ❌ Some checks failed — push aborted.      ║"
+  echo "║  To skip: git push --no-verify               ║"
+  echo "╚══════════════════════════════════════════════╝"
+  exit 1
+fi
