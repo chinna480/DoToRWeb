@@ -6,7 +6,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: write  # Required for GITHUB_TOKEN to push version bump back to repo
 
 # Prevent infinite loop: skip runs triggered by our own [skip ci] commits
 jobs:
