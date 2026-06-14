@@ -117,7 +117,17 @@
       </p>
     </div>
 
-    <!-- Filter Bar -->
+    <!-- Date Filter Tabs -->
+    <div id="dateFilterBar" style="display:none;" class="card">
+      <div style="display:flex;gap:4px;padding:4px;background:var(--gray-light);border-radius:10px;">
+        <button class="date-filter-btn active" data-filter="all" onclick="setDateFilter('all')">All</button>
+        <button class="date-filter-btn" data-filter="today" onclick="setDateFilter('today')">Today</button>
+        <button class="date-filter-btn" data-filter="week" onclick="setDateFilter('week')">Week</button>
+        <button class="date-filter-btn" data-filter="month" onclick="setDateFilter('month')">Month</button>
+      </div>
+    </div>
+
+    <!-- Status Filter Bar -->
     <div id="filterBar" style="display:none;" class="card">
       <div class="filter-bar">
         <select id="statusFilter" onchange="applyFilter()">
@@ -181,6 +191,7 @@
     let allOrders = [];
     let currentPhone = '';
     let unsubOrders = null;
+    let dateFilter = 'all'; // 'all', 'today', 'week', 'month'
     const techProfileCache = {}; // phone -> { photo, rating, reviewCount } cache
 
     // ── Init ──────────────────────────────────────────────────────────
@@ -215,18 +226,51 @@
           document.getElementById('noOrdersFound').style.display = 'block';
           document.getElementById('ordersList').style.display = 'none';
           document.getElementById('filterBar').style.display = 'none';
+          document.getElementById('dateFilterBar').style.display = 'none';
           return;
         }
 
         document.getElementById('filterBar').style.display = 'block';
+        document.getElementById('dateFilterBar').style.display = 'block';
         document.getElementById('noOrdersFound').style.display = 'none';
         applyFilter();
       });
     };
 
+    window.setDateFilter = function(filter) {
+      dateFilter = filter;
+      document.querySelectorAll('.date-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === filter);
+      });
+      applyFilter();
+    };
+
     window.applyFilter = function() {
       const filter = document.getElementById('statusFilter').value;
-      const filtered = filter === 'all' ? allOrders : allOrders.filter(o => o.status === filter);
+      let filtered = filter === 'all' ? allOrders : allOrders.filter(o => o.status === filter);
+
+      // Apply date filter
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).getTime();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+      if (dateFilter === 'today') {
+        filtered = filtered.filter(o => {
+          const t = o.createdAt || 0;
+          return t >= todayStart && t < todayStart + 86400000;
+        });
+      } else if (dateFilter === 'week') {
+        filtered = filtered.filter(o => {
+          const t = o.createdAt || 0;
+          return t >= weekStart;
+        });
+      } else if (dateFilter === 'month') {
+        filtered = filtered.filter(o => {
+          const t = o.createdAt || 0;
+          return t >= monthStart;
+        });
+      }
 
       document.getElementById('orderCount').textContent = `${filtered.length} of ${allOrders.length} orders`;
 
@@ -432,6 +476,26 @@
       .tech-rating-sm.new-tech {
         color: var(--primary);
         font-weight: 700;
+      }
+      .date-filter-btn {
+        flex: 1;
+        padding: 8px 12px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--gray);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .date-filter-btn.active {
+        background: var(--primary);
+        color: #fff;
+        box-shadow: 0 2px 6px rgba(255,107,0,0.3);
+      }
+      .date-filter-btn:hover:not(.active) {
+        background: var(--gray-light);
       }
     `;
     document.head.appendChild(styleEl);

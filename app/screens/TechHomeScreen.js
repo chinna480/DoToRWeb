@@ -64,6 +64,7 @@ export default function TechHomeScreen() {
   const [completedJobs, setCompleted]      = useState([])
   const [totalJobs, setTotal]              = useState(0)
   const [dailyCompleted, setDailyCompleted] = useState(0)
+  const [completedFilter, setCompletedFilter] = useState('all') // 'all', 'today', 'week', 'month'
   const [custLat, setCustLat]            = useState(null)
   const [custLng, setCustLng]            = useState(null)
   const [myLat, setMyLat]               = useState(17.3850)
@@ -246,7 +247,11 @@ export default function TechHomeScreen() {
         return
       }
       const allPending = [], completed = []
-      let ongoing = null, count = 0, dailyCount = 0
+      const now = new Date()
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+      const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).getTime()
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+      let ongoing = null, count = 0, dailyCount = 0, weekCount = 0, monthCount = 0
 
       snapshot.forEach(child => {
         const val = child.val()
@@ -263,8 +268,14 @@ export default function TechHomeScreen() {
           if (order.techPhone === techPhoneRef.current) ongoing = order
         }
         if (order.status === 'completed') {
-          completed.push(order); count++
-          dailyCount++
+          // Only count/display jobs completed by THIS technician
+          if (order.techPhone === techPhoneRef.current) {
+            completed.push(order); count++
+            const t = order.completedTime || order.createdAt || 0
+            if (t >= todayStart) dailyCount++
+            if (t >= weekStart) weekCount++
+            if (t >= monthStart) monthCount++
+          }
         }
       })
 
@@ -358,7 +369,7 @@ export default function TechHomeScreen() {
       { text: 'Cancel' },
       {
         text: 'Complete ✅', onPress: async () => {
-          update(ref(db, 'orders/' + orderId), { status: 'completed' })
+          update(ref(db, 'orders/' + orderId), { status: 'completed', completedTime: Date.now() })
           // ✅ FIX: Remove only this order's location data, not global paths
           remove(ref(db, 'orders/' + orderId + '/techLocation'))
           remove(ref(db, 'orders/' + orderId + '/custLocation'))
@@ -647,7 +658,55 @@ export default function TechHomeScreen() {
   )
 
   // ── COMPLETED TAB ──
-  const renderCompletedTab = () => (
+  const renderCompletedTab = () => {
+    // Compute date boundaries for filter
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).getTime()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+
+    // Apply filter to completed jobs
+    let filtered = completedJobs
+    if (completedFilter === 'today') {
+      filtered = completedJobs.filter(j => {
+        const t = j.completedTime || j.createdAt || 0
+        return t >= todayStart && t < todayStart + 86400000
+      })
+    } else if (completedFilter === 'week') {
+      filtered = completedJobs.filter(j => {
+        const t = j.completedTime || j.createdAt || 0
+        return t >= weekStart
+      })
+    } else if (completedFilter === 'month') {
+      filtered = completedJobs.filter(j => {
+        const t = j.completedTime || j.createdAt || 0
+        return t >= monthStart
+      })
+    }
+
+    // Compute counts for each filter tab
+    const allCount = completedJobs.length
+    const todayCount = completedJobs.filter(j => {
+      const t = j.completedTime || j.createdAt || 0
+      return t >= todayStart && t < todayStart + 86400000
+    }).length
+    const weekCount = completedJobs.filter(j => {
+      const t = j.completedTime || j.createdAt || 0
+      return t >= weekStart
+    }).length
+    const monthCount = completedJobs.filter(j => {
+      const t = j.completedTime || j.createdAt || 0
+      return t >= monthStart
+    }).length
+
+    const FILTER_TABS = [
+      { key: 'all', label: `All (${allCount})` },
+      { key: 'today', label: `Today (${todayCount})` },
+      { key: 'week', label: `Week (${weekCount})` },
+      { key: 'month', label: `Month (${monthCount})` },
+    ]
+
+    return (
     <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
       <View style={[s.header, { backgroundColor: '#FF6B00' }]}>
         <View>
@@ -656,14 +715,27 @@ export default function TechHomeScreen() {
         </View>
       </View>
 
-      {completedJobs.length === 0 ? (
+      {/* FILTER TABS */}
+      <View style={s.filterRow}>
+        {FILTER_TABS.map(tab => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[s.filterTab, completedFilter === tab.key && s.filterTabActive]}
+            onPress={() => setCompletedFilter(tab.key)}
+          >
+            <Text style={[s.filterText, completedFilter === tab.key && s.filterTextActive]}>{tab.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {filtered.length === 0 ? (
         <View style={{ padding: 50, alignItems: 'center' }}>
           <Text style={{ fontSize: 50, marginBottom: 15 }}>📦</Text>
           <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3A6B' }}>No completed jobs yet</Text>
           <Text style={{ fontSize: 13, color: '#888', marginTop: 5 }}>Your completed jobs will appear here!</Text>
         </View>
       ) : (
-        completedJobs.map((order, i) => (
+        filtered.map((order, i) => (
           <View key={i} style={s.completedCard}>
             <View style={{ flex: 1 }}>
               <Text style={s.compCust}>👤 {order.customerName}</Text>
@@ -695,6 +767,7 @@ export default function TechHomeScreen() {
       <View style={{ height: 90 }} />
     </ScrollView>
   )
+  }
 
   // Show loading while navigating to profile
   if (activeTab === 'profile') {
@@ -816,6 +889,13 @@ const s = StyleSheet.create({
   quickSub:      { fontSize: 10, color: '#888', marginTop: 2 },
   quickBadge:    { position: 'absolute', top: 6, right: 6, backgroundColor: '#FF6B00', width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   quickBadgeTxt: { fontSize: 10, fontWeight: '800', color: '#fff' },
+
+  // ── Filter Tabs ──
+  filterRow:      { flexDirection: 'row', marginHorizontal: 15, marginTop: 12, marginBottom: 12, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', elevation: 2 },
+  filterTab:      { flex: 1, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  filterTabActive:{ borderBottomColor: '#FF6B00' },
+  filterText:     { fontSize: 11, fontWeight: '700', color: '#888' },
+  filterTextActive:{ color: '#FF6B00', fontWeight: '800' },
 
   // ── Bottom Tab Bar ──
   tabBar:        { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },

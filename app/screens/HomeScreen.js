@@ -41,6 +41,7 @@ const STEPS = [
   { num: 8, label: 'Confirm',  icon: '✅' },
 ]
 
+import MapPickerModal from '../components/MapPickerModal'
 import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
@@ -67,6 +68,10 @@ export default function HomeScreen() {
   const [custLng, setCustLng]               = useState(null)
   const [fsImages, setFsImages]             = useState([])
   const [fsIndex, setFsIndex]               = useState(0)
+  const [orderFilter, setOrderFilter]       = useState('all') // 'all', 'today', 'week', 'month'
+  const [showMapPicker, setShowMapPicker]   = useState(false)
+  const [mapPickLat, setMapPickLat]         = useState(null)
+  const [mapPickLng, setMapPickLng]         = useState(null)
 
   const ordersUnsubRef = useRef(null)
 
@@ -353,6 +358,29 @@ export default function HomeScreen() {
     </View>
   )
 
+  // ── Map picker callback (defined at component level so the modal can access it) ──
+  const handleMapPick = (lat, lng) => {
+    setMapPickLat(lat)
+    setMapPickLng(lng)
+    setCustLat(lat)
+    setCustLng(lng)
+    // Reverse geocode to fill address
+    fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.display_name) {
+          const parts = data.display_name.split(',')
+          const shortAddr = parts.slice(0, 4).join(',')
+          setLocationInput(shortAddr)
+        } else {
+          setLocationInput(`${lat.toFixed(4)}, ${lng.toFixed(4)}`)
+        }
+      })
+      .catch(() => {
+        setLocationInput(`${lat.toFixed(4)}, ${lng.toFixed(4)}`)
+      })
+  }
+
   const renderStep6 = () => {
     const useCurrentLocation = async () => {
       const { status } = await Location.requestForegroundPermissionsAsync()
@@ -365,15 +393,29 @@ export default function HomeScreen() {
         setCustLng(pos.coords.longitude)
       }
     }
+
     return (
       <View style={s.stepBody}>
-        <Text style={s.stepTitle}>📍 Your Location</Text>
-        <Text style={s.stepSubtitle}>Where should the technician come?</Text>
+        <Text style={s.stepTitle}>📍 Repair Location</Text>
+        <Text style={s.stepSubtitle}>Where should the technician come? (e.g. your home, a relative's place, etc.)</Text>
         <View style={s.inputCard}>
           <Text style={s.inputLabel}>Address / Area</Text>
           <TextInput style={s.textInput} placeholder="e.g. Madhapur, Hyderabad" placeholderTextColor="#bbb" value={locationInput} onChangeText={setLocationInput} maxLength={500} />
         </View>
-        <TouchableOpacity style={s.gpsBtn} onPress={useCurrentLocation}><Text style={s.gpsBtnTxt}>📍 Use Current Location</Text></TouchableOpacity>
+        <TouchableOpacity style={s.gpsBtn} onPress={useCurrentLocation}>
+          <Text style={s.gpsBtnTxt}>📍 Use Current Location</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.gpsBtn, { backgroundColor: '#1A3A6B', marginTop: 10, borderWidth: 2, borderColor: '#FF6B00' }]}
+          onPress={() => setShowMapPicker(true)}
+        >
+          <Text style={s.gpsBtnTxt}>🗺️ Select on Map (Search / Satellite / Pin)</Text>
+        </TouchableOpacity>
+        {mapPickLat && mapPickLng && (
+          <View style={s.mapCoordsBadge}>
+            <Text style={s.mapCoordsTxt}>📍 Pinned: {mapPickLat.toFixed(5)}, {mapPickLng.toFixed(5)}</Text>
+          </View>
+        )}
       </View>
     )
   }
@@ -461,7 +503,51 @@ export default function HomeScreen() {
   )
 
   // ── Orders tab (inline for customers) ──
-  const renderOrdersTab = () => (
+  const renderOrdersTab = () => {
+    // Compute date boundaries for filter
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).getTime()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+
+    // Apply date filter to myOrders
+    let filteredOrders = myOrders
+    if (orderFilter === 'today') {
+      filteredOrders = myOrders.filter(o => {
+        const t = o.createdAt || 0
+        return t >= todayStart && t < todayStart + 86400000
+      })
+    } else if (orderFilter === 'week') {
+      filteredOrders = myOrders.filter(o => {
+        const t = o.createdAt || 0
+        return t >= weekStart
+      })
+    } else if (orderFilter === 'month') {
+      filteredOrders = myOrders.filter(o => {
+        const t = o.createdAt || 0
+        return t >= monthStart
+      })
+    }
+
+    // Compute counts for filter tabs
+    const todayCount = myOrders.filter(o => {
+      const t = o.createdAt || 0; return t >= todayStart && t < todayStart + 86400000
+    }).length
+    const weekCount = myOrders.filter(o => {
+      const t = o.createdAt || 0; return t >= weekStart
+    }).length
+    const monthCount = myOrders.filter(o => {
+      const t = o.createdAt || 0; return t >= monthStart
+    }).length
+
+    const FILTER_TABS = [
+      { key: 'all', label: `All (${myOrders.length})` },
+      { key: 'today', label: `Today (${todayCount})` },
+      { key: 'week', label: `Week (${weekCount})` },
+      { key: 'month', label: `Month (${monthCount})` },
+    ]
+
+    return (
     <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
       <View style={s.header}>
         <View>
@@ -470,15 +556,31 @@ export default function HomeScreen() {
           <Text style={s.userLoc}>{myOrders.length} orders total</Text>
         </View>
       </View>
-      {myOrders.length === 0 ? (
+
+      {/* FILTER TABS */}
+      <View style={s.filterRow}>
+        {FILTER_TABS.map(tab => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[s.filterTab, orderFilter === tab.key && s.filterTabActive]}
+            onPress={() => setOrderFilter(tab.key)}
+          >
+            <Text style={[s.filterText, orderFilter === tab.key && s.filterTextActive]}>{tab.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {filteredOrders.length === 0 ? (
         <View style={{ padding: 50, alignItems: 'center' }}>
           <Text style={{ fontSize: 50, marginBottom: 15 }}>📦</Text>
-          <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3A6B' }}>No orders yet</Text>
-          <Text style={{ fontSize: 13, color: '#888', marginTop: 5 }}>Book your first repair and it will appear here!</Text>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A3A6B' }}>No orders found</Text>
+          <Text style={{ fontSize: 13, color: '#888', marginTop: 5 }}>
+            {orderFilter !== 'all' ? 'No orders in this time period' : 'Book your first repair and it will appear here!'}
+          </Text>
         </View>
       ) : (() => {
-        const ongoingOrders = myOrders.filter(o => o.status !== 'completed')
-        const completedOrders = myOrders.filter(o => o.status === 'completed')
+        const ongoingOrders = filteredOrders.filter(o => o.status !== 'completed')
+        const completedOrders = filteredOrders.filter(o => o.status === 'completed')
         return (
           <>
             {/* Ongoing orders section */}
@@ -585,6 +687,7 @@ export default function HomeScreen() {
       <View style={{ height: 90 }} />
     </ScrollView>
   )
+  }
 
   /* ── Full-Screen Image Viewer Modal (with forward/backward nav) ── */
   const renderImageModal = () => (
@@ -632,6 +735,15 @@ export default function HomeScreen() {
           </View>
         </>
       )}
+
+      {/* Map Picker Modal */}
+      <MapPickerModal
+        visible={showMapPicker}
+        onClose={() => setShowMapPicker(false)}
+        onLocationSelected={handleMapPick}
+        initialLat={custLat || mapPickLat || 17.3850}
+        initialLng={custLng || mapPickLng || 78.4867}
+      />
     </View>
   )
 }
@@ -698,6 +810,8 @@ const s = StyleSheet.create({
   charCount:        { fontSize: 11, color: '#bbb', textAlign: 'right', marginTop: 6 },
   gpsBtn:           { backgroundColor: '#1A3A6B', padding: 14, borderRadius: 14, alignItems: 'center', elevation: 2 },
   gpsBtnTxt:        { color: '#fff', fontSize: 14, fontWeight: '800' },
+  mapCoordsBadge:   { backgroundColor: '#e8f5e9', padding: 10, borderRadius: 10, marginTop: 10, alignItems: 'center', borderWidth: 1, borderColor: '#c8e6c9' },
+  mapCoordsTxt:     { fontSize: 12, fontWeight: '700', color: '#2e7d32' },
   // Images
   imageList:        { paddingVertical: 8, gap: 10 },
   imageThumbWrap:   { position: 'relative' },
@@ -721,6 +835,13 @@ const s = StyleSheet.create({
   nextBtn:          { backgroundColor: '#FF6B00', padding: 16, borderRadius: 14, alignItems: 'center', elevation: 3 },
   nextBtnDisabled:  { opacity: 0.6 },
   nextBtnTxt:       { color: '#fff', fontSize: 16, fontWeight: '800' },
+  // ── Filter Tabs ──
+  filterRow:      { flexDirection: 'row', marginHorizontal: 15, marginTop: 12, marginBottom: 12, backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', elevation: 2 },
+  filterTab:      { flex: 1, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  filterTabActive:{ borderBottomColor: '#FF6B00' },
+  filterText:     { fontSize: 11, fontWeight: '700', color: '#888' },
+  filterTextActive:{ color: '#FF6B00', fontWeight: '800' },
+
   // Tab bar
   // Order cards
   orderCard:        { backgroundColor: '#fff', borderRadius: 14, padding: 15, marginHorizontal: 15, marginBottom: 10, elevation: 2, borderLeftWidth: 4, borderLeftColor: '#FF6B00', flexDirection: 'row', justifyContent: 'space-between' },
