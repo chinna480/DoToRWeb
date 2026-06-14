@@ -105,6 +105,17 @@ export default function TechHomeScreen() {
     }
   }, [])
 
+  // Separate ref for profile navigation timer (cleaned up on unmount)
+  const profileNavRef = useRef(null)
+  useEffect(() => {
+    return () => {
+      if (profileNavRef.current) {
+        clearTimeout(profileNavRef.current)
+        profileNavRef.current = null
+      }
+    }
+  }, [])
+
   const custLocUnsubRef = useRef(null)
 
   useEffect(() => {
@@ -772,7 +783,7 @@ export default function TechHomeScreen() {
   // Show loading while navigating to profile
   if (activeTab === 'profile') {
     // Navigate to profile screen when tab is selected
-    setTimeout(() => {
+    profileNavRef.current = setTimeout(() => {
       router.push('/screens/TechProfileScreen')
       setActiveTab('home')
     }, 50)

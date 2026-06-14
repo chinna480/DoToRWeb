@@ -20,7 +20,7 @@ export default function SplashScreen() {
     checking,
   } = useUpdateChecker()
 
-  const navReadyRef = useRef(false)
+  const [navReady, setNavReady] = useState(false)
 
   useEffect(() => {
     Animated.sequence([
@@ -29,21 +29,16 @@ export default function SplashScreen() {
       Animated.timing(progress, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
     ]).start()
 
-    const t = setTimeout(() => {
-      navReadyRef.current = true
-      if (!showUpdateModal) {
-        router.replace('/screens/RoleScreen')
-      }
-    }, 3000)
+    const t = setTimeout(() => setNavReady(true), 3000)
     return () => clearTimeout(t)
   }, []) // Only run once on mount
 
-  // Navigate immediately when modal closes (no extra 3s wait)
+  // Navigate when: splash time elapsed, no update modal showing, and check complete
   useEffect(() => {
-    if (!showUpdateModal && navReadyRef.current && !checking) {
+    if (navReady && !showUpdateModal && !checking) {
       router.replace('/screens/RoleScreen')
     }
-  }, [showUpdateModal, checking])
+  }, [navReady, showUpdateModal, checking])
 
   const handleUpdateClose = () => {
     setShowUpdateModal(false)
@@ -66,7 +61,7 @@ export default function SplashScreen() {
           <Text style={s.logoSub}>Device Doctor</Text>
         </View>
       </Animated.View>
-      <Animated.Text style={[s.caption, { opacity: taglineFade }]}>We are the Doctor of your Device</Animated.Text>
+      <Animated.Text style={[s.caption, { opacity: taglineFade }]}>We are the doctors of your device</Animated.Text>
       <View style={s.loaderBg}>
         <Animated.View style={[s.loaderBar, { width: barWidth }]} />
       </View>
