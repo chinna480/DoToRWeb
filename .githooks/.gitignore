@@ -1,0 +1,2 @@
+# Ignore temp/build artifacts from the pre-push hook
+tmp/
