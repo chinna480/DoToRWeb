@@ -28,4 +28,3 @@ const db = getDatabase(app)
 // ─────────────────────────────────────────────────────────────────────────
 
 export { db }
-export default app

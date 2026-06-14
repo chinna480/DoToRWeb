@@ -3,7 +3,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { useFocusEffect } from '@react-navigation/native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ref, update } from 'firebase/database'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import {
   Alert,
   Image,

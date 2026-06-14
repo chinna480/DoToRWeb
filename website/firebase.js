@@ -8,13 +8,9 @@ import {
   push,
   set,
   update,
-  remove,
   onValue,
   off,
   get,
-  query,
-  orderByChild,
-  limitToLast,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
 // ── Firebase Configuration (same as mobile app) ───────────────────────────
@@ -586,11 +582,7 @@ export {
   push,
   set,
   update,
-  remove,
   get,
-  query,
-  orderByChild,
-  limitToLast,
   PHONE_BRANDS,
   LAPTOP_BRANDS,
   TIME_SLOTS,

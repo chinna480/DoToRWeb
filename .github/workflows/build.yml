@@ -6,7 +6,7 @@ on:
       - main
 
 permissions:
-  contents: write  # Required for GITHUB_TOKEN to push version bump back to repo
+  contents: read
 
 # Prevent infinite loop: skip runs triggered by our own [skip ci] commits
 jobs:
@@ -18,7 +18,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for version bump & commit message extraction
+          fetch-depth: 1
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -73,29 +73,3 @@ jobs:
           name: DoToR-APK
           path: build-*.apk
 
-      # ── AUTO-UPDATE: Bump version.json so app users see the update popup ──
-      - name: Update version.json with new build info
-        run: node scripts/bump-version.js
-        env:
-          RUN_ID: ${{ github.run_id }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-
-      - name: Commit & Push version bump back to repo
-        run: |
-          git config user.name "DoToR Bot"
-          git config user.email "bot@dotor.app"
-
-          # Use GITHUB_TOKEN for push authentication
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-
-          git add website/version.json package.json
-
-          # Check if there's anything to commit
-          if git diff --cached --quiet; then
-            echo "No changes to commit — skipping"
-          else
-            NEW_VER=$(node -e "console.log(require('./package.json').version)")
-            git commit -m "chore: bump version to ${NEW_VER} [skip ci]"
-            git push origin HEAD:main
-            echo "✅ Version bump committed and pushed: ${NEW_VER}"
-          fi

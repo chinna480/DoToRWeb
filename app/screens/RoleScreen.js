@@ -27,7 +27,6 @@ export default function RoleScreen() {
 
 const s = StyleSheet.create({
   container:   { flex: 1, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', padding: 30 },
-  logo:        { width: 120, height: 120, marginBottom: 10 },
   brand:       { fontSize: 40, color: '#FF6B00', fontWeight: '800' },
   brandSub:    { fontSize: 12, color: '#1A3A6B', letterSpacing: 2, fontWeight: '700', marginTop: 4 },
   question:    { fontSize: 22, color: '#1A3A6B', fontWeight: '800', marginTop: 25, marginBottom: 35 },
