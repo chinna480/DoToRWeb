@@ -13,7 +13,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native'
-import MiniMap from '../components/MiniMap'
+import MiniMap from '../../components/MiniMap'
 import { db } from '../firebase/config'
 import { calcDistance } from '../utils/distance'
 
