@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import MiniMap from '../components/MiniMap';
 import { db } from '../firebase/config';
 import { calcDistance } from '../utils/distance';
 import {
@@ -21,6 +22,8 @@ import {
   notifyCustomerTechNearby,
   notifyTechJobDone,
   notifyTechNewJob,
+  playTechJobAlertSound,
+  playJobCompleteSound,
 } from '../utils/notifications';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -71,10 +74,24 @@ export default function TechHomeScreen() {
   const [myLng, setMyLng]               = useState(null)
   const [distance, setDistance]          = useState('--')
   const [eta, setEta]                    = useState('--')
-  const [currentCustPhone, setCustPhone] = useState('')
+  const [etaSeconds, setEtaSeconds]        = useState(null)
+  const [countdown, setCountdown]          = useState('--')
+  const [currentCustPhone, setCustPhone]   = useState('')
+
+  // Format seconds into readable countdown
+  const formatCountdown = (s) => {
+    if (s == null || s < 0) return '--'
+    if (s === 0) return 'Arriving now!'
+    if (s < 60) return s + ' sec'
+    const m = Math.floor(s / 60)
+    const sec = s % 60
+    if (m < 5) return m + ' min ' + sec + ' sec'
+    return '~' + m + ' mins'
+  }
   const [fsImages, setFsImages]          = useState([])
   const [fsIndex, setFsIndex]            = useState(0)
   const [liveOrderData, setLiveOrderData] = useState(null)
+  const miniMapRef = useRef(null)
 
 
   const watchRef          = useRef(null)
@@ -90,6 +107,7 @@ export default function TechHomeScreen() {
   const sentArrived       = useRef(false)
   const prevPendingIds    = useRef(new Set())
   const areaAssignments   = useRef({})
+  const storedEtaRef      = useRef(null)
 
   useEffect(() => {
     let unsub
@@ -158,8 +176,13 @@ export default function TechHomeScreen() {
     if (isNaN(d)) return
     const SPEED = 0.3 // km/min (~18 km/h — realistic city speed)
     const etaMins = Math.round(d / SPEED)
+    const mins = Math.max(1, etaMins)
     setDistance(d + ' km')
-    setEta('~' + Math.max(1, etaMins) + ' mins')
+    setEta('~' + mins + ' mins')
+    // Reset countdown from latest ETA estimate
+    const secs = mins * 60
+    storedEtaRef.current = secs
+    setEtaSeconds(secs)
     const custToken = ongoingJob?.customerPushToken
     if (etaMins <= 5 && !sentNearby.current) {
       sentNearby.current = true
@@ -170,6 +193,27 @@ export default function TechHomeScreen() {
       notifyCustomerTechArrived(custToken)
     }
   }, [custLat, myLat, ongoingJob])
+
+  // ── Live countdown timer ────────────────────────────────────────────────
+  // Ticks down every second from the latest ETA estimate.
+  // Whenever etaSeconds is recalculated (via GPS update), the interval restarts.
+  useEffect(() => {
+    if (etaSeconds == null) return
+
+    setCountdown(formatCountdown(etaSeconds))
+
+    const interval = setInterval(() => {
+      const remaining = Math.max(0, (storedEtaRef.current || 0) - 1)
+      storedEtaRef.current = remaining
+      setEtaSeconds(remaining)
+      setCountdown(formatCountdown(remaining))
+      if (remaining <= 0) {
+        clearInterval(interval)
+      }
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [etaSeconds])
 
   const loadTech = async () => {
     const n = await AsyncStorage.getItem('techName')
@@ -190,7 +234,8 @@ export default function TechHomeScreen() {
       { text: 'Cancel' },
       {
         text: 'Logout', style: 'destructive', onPress: async () => {
-          await AsyncStorage.clear()
+          const keys = ['techPhone','techName','techLocation','techPincode','techExp','techSkills','techPhoto','currentOrderId','digilockerVerified','digilockerName']
+          await AsyncStorage.multiRemove(keys)
           router.replace('/screens/RoleScreen')
         }
       }
@@ -325,6 +370,8 @@ export default function TechHomeScreen() {
       pending.forEach(order => {
         if (!prevPendingIds.current.has(order.id)) {
           notifyTechNewJob(techPushToken.current, order.customerName, order.brand, order.modelName || order.description || 'repair')
+          // 🔔 Play distinct in-app sound alert for new jobs
+          playTechJobAlertSound()
         }
       })
       prevPendingIds.current = new Set(pending.map(o => o.id))
@@ -390,6 +437,8 @@ export default function TechHomeScreen() {
             await notifyCustomerJobDone(ongoingJob.customerPushToken)
           }
           await notifyTechJobDone()
+          // 🔊 Play job completion celebration sound
+          playJobCompleteSound()
           Alert.alert('🎉 Job Complete!', 'Great work! Customer will be asked to review.')
         }
       }
@@ -494,11 +543,19 @@ export default function TechHomeScreen() {
           )}
 
           <View style={s.distBanner}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={s.distLabel}>Distance to Customer</Text>
               <Text style={s.distVal}>{distance}</Text>
             </View>
-            <View style={s.etaPill}><Text style={s.etaTxt}>{eta}</Text></View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <View style={s.countdownRow}>
+                <Text style={s.countdownIcon}>⏱️</Text>
+                <Text style={s.countdown} numberOfLines={1}>{countdown}</Text>
+              </View>
+              <View style={s.etaRefreshBadge}>
+                <Text style={s.etaRefreshTxt}>LIVE</Text>
+              </View>
+            </View>
           </View>
 
           <View style={s.locRow}>
@@ -514,22 +571,27 @@ export default function TechHomeScreen() {
             </View>
           </View>
 
-          {/* MAP PLACEHOLDER — stable, no native module crash risk */}
-          <TouchableOpacity style={s.mapPlaceholder} onPress={() => navigate()} activeOpacity={0.8}>
-            <Text style={s.mapPlaceholderIcon}>{custLat ? '🛵' : '🗺️'}</Text>
-            <Text style={s.mapPlaceholderTxt}>
-              {custLat ? '📍 Customer location available — tap to open in Maps!' : '⏳ Waiting for customer location...'}
-            </Text>
-            {custLat && (
-              <View style={s.mapOpenBtn}>
-                <Text style={s.mapOpenTxt}>🗺️ Open in Google Maps</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          {/* LIVE INTERACTIVE MAP — zoomable, pannable for tech navigation */}
+          <MiniMap
+            ref={miniMapRef}
+            myLat={myLat}
+            myLng={myLng}
+            targetLat={custLat}
+            targetLng={custLng}
+            myLabel="You"
+            targetLabel={custLat ? 'Customer' : 'Waiting...'}
+            distance={distance}
+            eta={eta}
+            interactive={true}
+          />
 
           <View style={s.btnRow}>
             <TouchableOpacity style={s.navBtn} onPress={navigate}>
               <Text style={s.navTxt}>🗺️ Navigate</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.expandBtn} onPress={() => miniMapRef.current?.openFullScreen()}>
+              <Text style={s.expandBtnIcon}>⛶</Text>
+              <Text style={s.expandBtnTxt}>Full Screen</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.callBtn} onPress={callCustomer}>
               <Text style={s.callTxt}>📞 Call</Text>
@@ -861,22 +923,24 @@ const s = StyleSheet.create({
   distBanner:    { backgroundColor: '#f5f5f5', borderRadius: 12, padding: 12, marginVertical: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   distLabel:     { fontSize: 11, color: '#888', fontWeight: '700' },
   distVal:       { fontSize: 20, fontWeight: '800', color: '#1A3A6B', marginTop: 2 },
-  etaPill:       { backgroundColor: '#FF6B00', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
-  etaTxt:        { color: '#fff', fontSize: 11, fontWeight: '800' },
+  countdownRow:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  countdownIcon: { fontSize: 14 },
+  countdown:     { color: '#FF6B00', fontSize: 14, fontWeight: '800' },
+  etaRefreshBadge:{ backgroundColor: 'rgba(255,107,0,0.15)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginTop: 2, alignSelf: 'flex-end' },
+  etaRefreshTxt: { color: '#FF6B00', fontSize: 9, fontWeight: '800', letterSpacing: 1 },
   locRow:        { flexDirection: 'row', gap: 8, marginBottom: 12 },
   locCard:       { flex: 1, backgroundColor: '#f5f5f5', borderRadius: 12, padding: 10, alignItems: 'center' },
   locIcon:       { fontSize: 22 },
   locLabel:      { fontSize: 10, fontWeight: '800', color: '#888', marginTop: 3, letterSpacing: 1 },
   locName:       { fontSize: 11, fontWeight: '800', color: '#1A3A6B', marginTop: 2 },
-  mapPlaceholder:     { width: '100%', height: 200, borderRadius: 12, marginBottom: 12, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  mapPlaceholderIcon: { fontSize: 50 },
-  mapPlaceholderTxt:  { color: '#fff', fontSize: 13, fontWeight: '700', marginTop: 10, textAlign: 'center', paddingHorizontal: 20 },
-  mapOpenBtn:         { marginTop: 12, backgroundColor: '#FF6B00', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 },
-  mapOpenTxt:         { color: '#fff', fontSize: 12, fontWeight: '800' },
+
   map:           { width: '100%', height: 200, borderRadius: 12, marginBottom: 12, overflow: 'hidden' },
   btnRow:        { flexDirection: 'row', gap: 8, marginBottom: 8 },
   navBtn:        { flex: 1, backgroundColor: '#FF6B00', padding: 12, borderRadius: 12, alignItems: 'center' },
   navTxt:        { color: '#fff', fontSize: 13, fontWeight: '800' },
+  expandBtn:     { flex: 1, backgroundColor: '#1A3A6B', padding: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 4 },
+  expandBtnIcon: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  expandBtnTxt:  { color: '#fff', fontSize: 11, fontWeight: '800' },
   callBtn:       { flex: 1, backgroundColor: '#2e7d32', padding: 12, borderRadius: 12, alignItems: 'center' },
   callTxt:       { color: '#fff', fontSize: 13, fontWeight: '800' },
   chatBtn:       { flex: 1, backgroundColor: '#FF6B00', padding: 12, borderRadius: 12, alignItems: 'center' },

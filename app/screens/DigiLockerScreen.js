@@ -46,7 +46,7 @@ export default function DigiLockerScreen() {
         })();
         true;
       `)
-    } catch (e) {
+    } catch (_e) {
       setVerifying(false)
       Alert.alert('Error', 'Could not capture page. Try again.')
     }
@@ -88,12 +88,7 @@ export default function DigiLockerScreen() {
           await AsyncStorage.setItem('digilockerVerified', 'true')
           await AsyncStorage.setItem('digilockerName', valid.name || 'Verified')
 
-          // Set params BEFORE navigating back (params may not propagate, AsyncStorage is the backup)
-          router.setParams({
-            aadharVerified: 'true',
-            aadharName: valid.name || '',
-            aadharNumber: valid.number || '',
-          })
+          // Params are stored in AsyncStorage — the parent screen reads them on focus
           router.back()
 
           Alert.alert(

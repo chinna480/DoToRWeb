@@ -19,11 +19,6 @@
       },
       "package": "com.dotor.app",
       "googleServicesFile": "./google-services.json",
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyD5ecLfVJ9t15XhnEQgMjyJC1YbOPJIXEg"
-        }
-      },
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -42,9 +37,6 @@
         "NSLocationWhenInUseUsageDescription": "DoToR needs your location to show technician tracking",
         "NSCameraUsageDescription": "DoToR needs camera to upload photos",
         "NSPhotoLibraryUsageDescription": "DoToR needs gallery access to upload photos"
-      },
-      "config": {
-        "googleMapsApiKey": "AIzaSyD5ecLfVJ9t15XhnEQgMjyJC1YbOPJIXEg"
       }
     },
     "plugins": [

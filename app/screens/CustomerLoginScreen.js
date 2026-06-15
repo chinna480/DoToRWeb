@@ -19,7 +19,7 @@ import {
   View
 } from 'react-native'
 import * as Location from 'expo-location'
-import { db, GOOGLE_PLACES_API_KEY } from '../firebase/config'
+import { db } from '../firebase/config'
 import { registerForNotifications } from '../utils/notifications'
 import LocationAutocomplete from '../../components/LocationAutocomplete'
 
@@ -136,11 +136,15 @@ export default function CustomerLoginScreen() {
   // ── Map Picker Functions ──
   const reverseGeocode = async (lat, lng) => {
     try {
-      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_PLACES_API_KEY}`
-      const res = await fetch(url)
+      // Use free Nominatim API (no key needed) — same as MapPicker
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'DoToR/1.0 (doorstep-repair)' },
+      })
       const data = await res.json()
-      if (data.status === 'OK' && data.results.length > 0) {
-        return data.results[0].formatted_address
+      if (data.display_name) {
+        const parts = data.display_name.split(',')
+        return parts.slice(0, 4).join(',')
       }
     } catch (e) {}
     return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
@@ -177,7 +181,7 @@ export default function CustomerLoginScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
         style={s.container}

@@ -481,7 +481,7 @@ export default function HomeScreen() {
   )
 
   const renderWizard = () => (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={s.wizardHeader}>
         <TouchableOpacity onPress={goBack} style={s.wizardBackBtn}><Text style={s.wizardBackTxt}>← Back</Text></TouchableOpacity>
         <Text style={s.wizardTitle}>Book Repair</Text>

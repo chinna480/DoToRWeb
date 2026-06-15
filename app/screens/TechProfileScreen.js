@@ -109,7 +109,8 @@ export default function TechProfileScreen() {
       { text: 'Cancel' },
       {
         text: 'Logout', style: 'destructive', onPress: async () => {
-          await AsyncStorage.clear()
+          const keys = ['techPhone','techName','techLocation','techPincode','techExp','techSkills','techPhoto','currentOrderId','digilockerVerified','digilockerName']
+          await AsyncStorage.multiRemove(keys)
           router.replace('/screens/RoleScreen')
         }
       }

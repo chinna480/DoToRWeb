@@ -110,7 +110,8 @@ export default function CustomerProfileScreen() {
       { text: 'Cancel' },
       {
         text: 'Logout', style: 'destructive', onPress: async () => {
-          await AsyncStorage.clear()
+          const keys = ['custPhone','custName','custEmail','custLocation','custPincode','custPhoto','lastOrderId','lastBrand','lastModelName','lastDescription','lastCustName','digilockerVerified','digilockerName']
+          await AsyncStorage.multiRemove(keys)
           router.replace('/screens/RoleScreen')
         }
       }

@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native'
-import { GOOGLE_PLACES_API_KEY } from '../app/firebase/config'
+import { LOCATIONIQ_API_KEY } from '../app/firebase/config'
 
 const DEBOUNCE_MS = 400
 
@@ -35,13 +35,13 @@ export default function LocationAutocomplete({
 
     setLoading(true)
     try {
-      const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query.trim())}&key=${GOOGLE_PLACES_API_KEY}&components=country:in`
+      const url = `https://api.locationiq.com/v1/autocomplete?key=${LOCATIONIQ_API_KEY}&q=${encodeURIComponent(query.trim())}&countrycodes=in&limit=5&dedupe=1`
       const res = await fetch(url)
       const data = await res.json()
 
-      if (data.status === 'OK' && data.predictions) {
-        setSuggestions(data.predictions)
-        setShowSuggestions(data.predictions.length > 0)
+      if (data && Array.isArray(data)) {
+        setSuggestions(data)
+        setShowSuggestions(data.length > 0)
       } else {
         setSuggestions([])
         setShowSuggestions(false)
@@ -62,7 +62,8 @@ export default function LocationAutocomplete({
   }
 
   const handleSelect = (item) => {
-    onChangeText(item.description)
+    const address = item.display_name || item.address?.name || ''
+    onChangeText(address)
     setShowSuggestions(false)
     setSuggestions([])
     inputRef.current?.blur()
@@ -101,7 +102,7 @@ export default function LocationAutocomplete({
         <View style={styles.dropdown}>
           <FlatList
             data={suggestions}
-            keyExtractor={(item) => item.place_id}
+            keyExtractor={(item) => item.place_id || item.osm_id || item.lat + item.lon}
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <TouchableOpacity
@@ -112,10 +113,10 @@ export default function LocationAutocomplete({
                 <Text style={styles.suggestionIcon}>📍</Text>
                 <View style={styles.suggestionTextWrap}>
                   <Text style={styles.suggestionMain} numberOfLines={1}>
-                    {item.structured_formatting?.main_text || item.description.split(',')[0]}
+                    {item.display_name ? item.display_name.split(',')[0] : item.address?.name || ''}
                   </Text>
                   <Text style={styles.suggestionSub} numberOfLines={1}>
-                    {item.structured_formatting?.secondary_text || item.description}
+                    {item.display_name ? item.display_name.split(',').slice(1, 4).join(',').trim() : item.display_place || ''}
                   </Text>
                 </View>
               </TouchableOpacity>

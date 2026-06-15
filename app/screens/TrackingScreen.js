@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native'
+import MiniMap from '../components/MiniMap'
 import { db } from '../firebase/config'
 import { calcDistance } from '../utils/distance'
 
@@ -56,7 +57,20 @@ export default function TrackingScreen() {
   const [techLng, setTechLng]     = useState(null)
   const [distance, setDistance]   = useState('--')
   const [eta, setEta]             = useState('--')
+  const [etaSeconds, setEtaSeconds] = useState(null)
+  const [countdown, setCountdown]   = useState('--')
   const [techName, setTechName]   = useState('Connecting...')
+
+  // Format seconds into readable countdown
+  const formatCountdown = (s) => {
+    if (s == null || s < 0) return '--'
+    if (s === 0) return 'Arriving now!'
+    if (s < 60) return s + ' sec'
+    const m = Math.floor(s / 60)
+    const sec = s % 60
+    if (m < 5) return m + ' min ' + sec + ' sec'
+    return '~' + m + ' mins'
+  }
   const [techPhone, setTechPhone] = useState('')
   const [statusMsg, setStatusMsg] = useState('⏳ Waiting for technician...')
   const [brand, setBrand]         = useState('-')
@@ -76,6 +90,7 @@ export default function TrackingScreen() {
   const techPosRef  = useRef(null)
   const orderIdRef  = useRef('')
   const gpsTimeoutRef = useRef(null)
+  const storedEtaRef   = useRef(null)
 
   useEffect(() => {
     mounted.current = true
@@ -214,7 +229,12 @@ export default function TrackingScreen() {
     setDistance(d + ' km')
     const SPEED = 0.3 // km/min (~18 km/h — realistic city speed)
     const etaMins = Math.round(d / SPEED)
-    setEta('~' + Math.max(1, etaMins) + ' mins')
+    const mins = Math.max(1, etaMins)
+    setEta('~' + mins + ' mins')
+    // Reset countdown from latest ETA estimate
+    const secs = mins * 60
+    storedEtaRef.current = secs
+    setEtaSeconds(secs)
   }
 
   const openMapsDirections = () => {
@@ -235,6 +255,27 @@ export default function TrackingScreen() {
       recalcDistance({ lat: custLat, lng: custLng }, { lat: techLat, lng: techLng })
     }
   }, [custLat, custLng, techLat, techLng])
+
+  // ── Live countdown timer ────────────────────────────────────────────────
+  // Ticks down every second from the latest ETA estimate.
+  // Whenever etaSeconds is recalculated (via GPS update), the interval restarts.
+  useEffect(() => {
+    if (etaSeconds == null) return
+
+    setCountdown(formatCountdown(etaSeconds))
+
+    const interval = setInterval(() => {
+      const remaining = Math.max(0, (storedEtaRef.current || 0) - 1)
+      storedEtaRef.current = remaining
+      setEtaSeconds(remaining)
+      setCountdown(formatCountdown(remaining))
+      if (remaining <= 0) {
+        clearInterval(interval)
+      }
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [etaSeconds]) // re-runs on every etaSeconds change (inc. fresh GPS calc)
 
   const refreshLocation = async () => {
     setRefreshingLocation(true)
@@ -352,29 +393,37 @@ export default function TrackingScreen() {
           </View>
         </View>
 
-        {/* MAP PLACEHOLDER — stable, no native module */}
-        <TouchableOpacity style={s.mapPlaceholder} onPress={openMapsDirections} activeOpacity={0.8}>
-          <Text style={s.mapIcon}>{techLat ? '🛵' : '🗺️'}</Text>
-          <Text style={s.mapTxt}>
-            {techLat ? '🛵 Live tracking active — tap to open in Maps!' : '⏳ Waiting for technician...'}
-          </Text>
-          {techLat && (
-            <View style={s.mapOpenBtn}>
-              <Text style={s.mapOpenTxt}>🗺️ Open in Google Maps</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        {/* LIVE MINI MAP CARD — like Rapido/Swiggy, static view with info overlay */}
+        <MiniMap
+          myLat={custLat}
+          myLng={custLng}
+          targetLat={techLat}
+          targetLng={techLng}
+          myLabel="You"
+          targetLabel={techLat ? 'Technician' : 'Waiting...'}
+          distance={distance}
+          eta={eta}
+          onPress={openMapsDirections}
+        />
 
         <View style={s.content}>
 
-          {/* DISTANCE BANNER */}
+          {/* DISTANCE BANNER with live countdown */}
           <View style={s.distBanner}>
-            <View>
+            <View style={s.distBannerLeft}>
               <Text style={s.distLabel}>Distance</Text>
               <Text style={s.distVal}>{distance}</Text>
             </View>
-            <View style={s.etaPill}>
-              <Text style={s.etaTxt}>ETA: {eta}</Text>
+            <View style={s.distBannerRight}>
+              <View style={s.countdownRow}>
+                <Text style={s.countdownIcon}>⏱️</Text>
+                <Text style={s.countdown} numberOfLines={1}>
+                  {countdown}
+                </Text>
+              </View>
+              <View style={s.etaRefreshBadge}>
+                <Text style={s.etaRefreshTxt}>LIVE</Text>
+              </View>
             </View>
           </View>
 
@@ -491,18 +540,19 @@ const s = StyleSheet.create({
   sub:            { fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 3 },
   pill:           { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   pillTxt:        { color: '#fff', fontSize: 11, fontWeight: '800' },
-  map:            { width: '100%', height: 260 },
-  mapPlaceholder: { height: 200, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' },
-  mapIcon:        { fontSize: 50 },
-  mapTxt:         { color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 10, textAlign: 'center', paddingHorizontal: 20 },
-  mapOpenBtn:     { marginTop: 14, backgroundColor: '#FF6B00', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
-  mapOpenTxt:     { color: '#fff', fontSize: 12, fontWeight: '800' },
+
+
   content:        { padding: 15 },
   distBanner:     { backgroundColor: '#1A3A6B', borderRadius: 16, padding: 15, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  distBannerLeft: {},
+  distBannerRight:{ alignItems: 'flex-end' },
   distLabel:      { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '700' },
   distVal:        { fontSize: 24, fontWeight: '800', color: '#fff', marginTop: 2 },
-  etaPill:        { backgroundColor: '#FF6B00', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
-  etaTxt:         { color: '#fff', fontSize: 12, fontWeight: '800' },
+  countdownRow:   { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  countdownIcon:  { fontSize: 14 },
+  countdown:      { color: '#FF6B00', fontSize: 15, fontWeight: '800' },
+  etaRefreshBadge:{ backgroundColor: 'rgba(255,107,0,0.2)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginTop: 3, alignSelf: 'flex-end' },
+  etaRefreshTxt:  { color: '#FF6B00', fontSize: 9, fontWeight: '800', letterSpacing: 1 },
   locRow:         { flexDirection: 'row', gap: 10, marginBottom: 12 },
   locCard:        { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', elevation: 2 },
   locIcon:        { fontSize: 28 },

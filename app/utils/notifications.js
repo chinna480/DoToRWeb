@@ -7,6 +7,7 @@
 
 import { Audio } from 'expo-av'
 import * as Device from 'expo-device'
+import * as FileSystem from 'expo-file-system'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import { db } from '../firebase/config'
@@ -23,55 +24,55 @@ Notifications.setNotificationHandler({
 })
 
 // ── Sound Alert System ────────────────────────────────────────────────────────
-// Plays a distinct sound when a new job arrives for a technician.
-// Uses expo-av to generate tones — no audio files needed.
+// Plays distinct sounds for tech job alerts, job completion, etc.
+// Uses expo-av + expo-file-system to write WAV files to temp storage (reliable in RN).
 // ─────────────────────────────────────────────────────────────────────────────
 
 let soundObject = null
 
 /**
- * Play a new-job alert sound (two ascending beeps).
- * Call this in TechHomeScreen when a NEW pending order appears.
+ * Minimal Base64 encoder for Uint8Array.
+ * Replaces btoa() which is not available in React Native Hermes engine.
  */
-export async function playNewJobSound() {
+function uint8ArrayToBase64(bytes) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+  let result = ''
+  let i = 0
+  const len = bytes.length
+  while (i < len) {
+    const b1 = bytes[i++]
+    const b2 = i < len ? bytes[i++] : 0
+    const b3 = i < len ? bytes[i++] : 0
+    result += chars[b1 >> 2] +
+      chars[((b1 & 3) << 4) | (b2 >> 4)] +
+      (i > len + 1 ? '=' : chars[((b2 & 15) << 2) | (b3 >> 6)]) +
+      (i > len ? '=' : chars[b3 & 63])
+  }
+  return result
+}
+
+/**
+ * Generate a WAV file and save it to a temp file, then play it via expo-av.
+ * Uses custom base64 encoder (no btoa dependency).
+ */
+async function playWavFromSamples(samples, sampleRate) {
   try {
     if (soundObject) {
       await soundObject.unloadAsync()
       soundObject = null
     }
-    // Generate a simple sine-wave beep using expo-av
-    // We create a short audio file programmatically via a base64 WAV
-    const sampleRate = 8000
-    const duration = 0.15 // seconds per beep
-    const numSamples = Math.floor(sampleRate * duration)
-    
-    // Generate two beeps: 660Hz then 880Hz
-    const buffer1 = new ArrayBuffer(numSamples * 2)
-    const view1 = new Int16Array(buffer1)
-    for (let i = 0; i < numSamples; i++) {
-      const t = i / sampleRate
-      view1[i] = Math.sin(2 * Math.PI * 660 * t) * 8000
-    }
-    
-    const buffer2 = new ArrayBuffer(numSamples * 2)
-    const view2 = new Int16Array(buffer2)
-    for (let i = 0; i < numSamples; i++) {
-      const t = i / sampleRate
-      view2[i] = Math.sin(2 * Math.PI * 880 * t) * 8000
-    }
-    
-    // Create WAV blob from the two buffers combined (with small gap)
-    const gap = new Int16Array(Math.floor(sampleRate * 0.1)) // 100ms gap
-    const combined = new Int16Array(numSamples + gap.length + numSamples)
-    combined.set(view1)
-    combined.set(gap, numSamples)
-    combined.set(view2, numSamples + gap.length)
-    
-    const wav = createWav(combined, sampleRate)
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(wav)))
-    
+
+    const wavData = createWav(samples, sampleRate)
+    const wavPath = `${FileSystem.cacheDirectory}sound_${Date.now()}.wav`
+
+    // Convert binary WAV bytes to base64 using our own encoder (no btoa!)
+    const base64 = uint8ArrayToBase64(wavData)
+    await FileSystem.writeAsStringAsync(wavPath, base64, {
+      encoding: FileSystem.EncodingType.Base64,
+    })
+
     const { sound } = await Audio.Sound.createAsync(
-      { uri: `data:audio/wav;base64,${base64}` },
+      { uri: wavPath },
       { shouldPlay: true }
     )
     soundObject = sound
@@ -79,21 +80,101 @@ export async function playNewJobSound() {
       if (status.didJustFinish) {
         sound.unloadAsync()
         soundObject = null
+        // Clean up temp file
+        FileSystem.deleteAsync(wavPath, { idempotent: true }).catch(() => {})
       }
     })
   } catch (e) {
-    // Sound not critical, fail silently
-    console.log('Sound alert failed:', e.message)
+    console.log('Sound play failed:', e.message)
   }
 }
 
-/** Play a job-complete celebration sound */
+/**
+ * Play a tech job alert sound — distinct 3-note ascending chime.
+ * This is DIFFERENT from any other sound in the app.
+ * Pitches: 440Hz → 660Hz → 880Hz (like a "ding-ding-ding!")
+ * Call this in TechHomeScreen when a NEW pending order appears.
+ */
+export async function playTechJobAlertSound() {
+  try {
+    const sampleRate = 8000
+    const noteDuration = 0.12 // seconds per note
+    const gapDuration = 0.06  // 60ms gap between notes
+    const noteSamples = Math.floor(sampleRate * noteDuration)
+    const gapSamples = Math.floor(sampleRate * gapDuration)
+
+    // Three ascending notes
+    const frequencies = [440, 660, 880]
+    const allPieces = []
+
+    frequencies.forEach((freq, i) => {
+      const note = new Int16Array(noteSamples)
+      for (let j = 0; j < noteSamples; j++) {
+        const t = j / sampleRate
+        note[j] = Math.sin(2 * Math.PI * freq * t) * 8000
+      }
+      allPieces.push(note)
+      if (i < frequencies.length - 1) {
+        allPieces.push(new Int16Array(gapSamples)) // gap between notes
+      }
+    })
+
+    // Combine all pieces
+    const totalLen = allPieces.reduce((sum, p) => sum + p.length, 0)
+    const combined = new Int16Array(totalLen)
+    let offset = 0
+    allPieces.forEach(p => {
+      combined.set(p, offset)
+      offset += p.length
+    })
+
+    await playWavFromSamples(combined, sampleRate)
+  } catch (e) {
+    console.log('Tech job alert sound failed:', e.message)
+  }
+}
+
+/**
+ * Play a new-job alert sound (two ascending beeps: 660Hz → 880Hz).
+ * Call this when a new order first appears.
+ */
+export async function playNewJobSound() {
+  try {
+    const sampleRate = 8000
+    const duration = 0.15 // seconds per beep
+    const numSamples = Math.floor(sampleRate * duration)
+
+    // Generate two beeps: 660Hz then 880Hz
+    const view1 = new Int16Array(numSamples)
+    for (let i = 0; i < numSamples; i++) {
+      view1[i] = Math.sin(2 * Math.PI * 660 * (i / sampleRate)) * 8000
+    }
+
+    const view2 = new Int16Array(numSamples)
+    for (let i = 0; i < numSamples; i++) {
+      view2[i] = Math.sin(2 * Math.PI * 880 * (i / sampleRate)) * 8000
+    }
+
+    // Create WAV blob from the two buffers combined (with small gap)
+    const gapSamples = Math.floor(sampleRate * 0.1) // 100ms gap
+    const combined = new Int16Array(numSamples + gapSamples + numSamples)
+    combined.set(view1)
+    combined.set(new Int16Array(gapSamples), numSamples)
+    combined.set(view2, numSamples + gapSamples)
+
+    await playWavFromSamples(combined, sampleRate)
+  } catch (e) {
+    console.log('New job sound failed:', e.message)
+  }
+}
+
+/** Play a job-complete celebration sound (descending: 880Hz → 660Hz) */
 export async function playJobCompleteSound() {
   try {
     const sampleRate = 8000
     const duration = 0.2
     const numSamples = Math.floor(sampleRate * duration)
-    
+
     // Descending tones: 880Hz then 660Hz
     const buffer1 = new Int16Array(numSamples)
     for (let i = 0; i < numSamples; i++) {
@@ -103,20 +184,14 @@ export async function playJobCompleteSound() {
     for (let i = 0; i < numSamples; i++) {
       buffer2[i] = Math.sin(2 * Math.PI * 660 * (i / sampleRate)) * 8000
     }
-    
-    const combined = new Int16Array(numSamples + numSamples + Math.floor(sampleRate * 0.15))
+
+    const gapSamples = Math.floor(sampleRate * 0.15)
+    const combined = new Int16Array(numSamples + gapSamples + numSamples)
     combined.set(buffer1)
-    combined.set(new Int16Array(Math.floor(sampleRate * 0.15)), numSamples) // gap
-    combined.set(buffer2, numSamples + Math.floor(sampleRate * 0.15))
-    
-    const wav = createWav(combined, sampleRate)
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(wav)))
-    
-    const { sound } = await Audio.Sound.createAsync(
-      { uri: `data:audio/wav;base64,${base64}` },
-      { shouldPlay: true }
-    )
-    setTimeout(() => sound.unloadAsync(), 1000)
+    combined.set(new Int16Array(gapSamples), numSamples)
+    combined.set(buffer2, numSamples + gapSamples)
+
+    await playWavFromSamples(combined, sampleRate)
   } catch (e) {
     console.log('Complete sound failed:', e.message)
   }
@@ -131,11 +206,11 @@ function createWav(samples, sampleRate) {
   const dataSize = samples.length * blockAlign
   const buffer = new ArrayBuffer(44 + dataSize)
   const view = new DataView(buffer)
-  
+
   const writeStr = (off, str) => {
     for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i))
   }
-  
+
   writeStr(0, 'RIFF')
   view.setUint32(4, 36 + dataSize, true)
   writeStr(8, 'WAVE')
@@ -149,7 +224,7 @@ function createWav(samples, sampleRate) {
   view.setUint16(34, bitsPerSample, true)
   writeStr(36, 'data')
   view.setUint32(40, dataSize, true)
-  
+
   for (let i = 0; i < samples.length; i++) {
     view.setInt16(44 + i * 2, samples[i], true)
   }
