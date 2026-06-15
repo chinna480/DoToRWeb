@@ -318,7 +318,7 @@ const MiniMap = forwardRef(function MiniMap({
   eta,
   interactive = false,
   onPress,
-}) {
+}, ref) {
   const webViewRef = useRef(null)
   const fsWebViewRef = useRef(null)
   const initSent = useRef(false)

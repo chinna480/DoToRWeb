@@ -118,6 +118,23 @@
     }
     .order-id-input input { flex: 1; }
     .tracking-timeline { margin-top: 20px; }
+
+    /* ── Animated marker keyframes (matching MiniMap.js) ── */
+    @keyframes bouncePop {
+      0% { transform: scale(0); }
+      50% { transform: scale(1.25); }
+      70% { transform: scale(0.92); }
+      100% { transform: scale(1); }
+    }
+    @keyframes pulse {
+      0% { opacity: 0.6; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.15); }
+      100% { opacity: 0.6; transform: scale(1); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
   </style>
 </head>
 <body>
@@ -234,7 +251,7 @@
           </button>
           <p id="gpsRefreshStatus" style="font-size:11px;color:var(--green);font-weight:600;text-align:center;margin-top:6px;display:none;"></p>
 
-          <!-- ETA -->
+          <!-- ETA with live countdown -->
           <div id="etaSection" style="display:none;">
             <div class="eta-display">
               <div>
@@ -244,6 +261,10 @@
               <div style="text-align:right;">
                 <div class="eta-label">Estimated Arrival</div>
                 <div class="eta-value" id="techEta">—</div>
+                <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;margin-top:2px;">
+                  <span style="font-size:12px;">⏱️</span>
+                  <span style="font-size:13px;font-weight:800;color:#FF6B00;" id="techCountdown"></span>
+                </div>
               </div>
             </div>
           </div>
@@ -324,10 +345,80 @@
 
     // ── Leaflet map state ────────────────────────────────────────────────
     let map = null;
+    let fsMap = null;
     let techMarker = null;
     let custMarker = null;
-    let routeLine = null;
+    let techMarkerFs = null;
+    let custMarkerFs = null;
+    let routePolyline = null;
+    let routePolylineFs = null;
+    let fallbackLine = null;
     let mapInitialized = false;
+    let lastRouteFetch = 0;
+    let countdownInterval = null;
+    let storedEtaSeconds = null;
+
+    function formatCountdown(s) {
+      if (s == null || s < 0) return '';
+      if (s === 0) return 'Arriving now!';
+      if (s < 60) return s + ' sec';
+      const m = Math.floor(s / 60);
+      const sec = s % 60;
+      if (m < 5) return m + ' min ' + sec + ' sec';
+      return '~' + m + ' mins';
+    }
+
+    function startCountdown(seconds) {
+      if (countdownInterval) clearInterval(countdownInterval);
+      storedEtaSeconds = seconds;
+      const el = document.getElementById('techCountdown');
+      if (!el) return;
+      el.textContent = formatCountdown(seconds);
+      countdownInterval = setInterval(() => {
+        const remaining = Math.max(0, (storedEtaSeconds || 0) - 1);
+        storedEtaSeconds = remaining;
+        el.textContent = formatCountdown(remaining);
+        if (remaining <= 0) {
+          clearInterval(countdownInterval);
+          countdownInterval = null;
+        }
+      }, 1000);
+    }
+
+    // ── Custom animated marker icons ──
+    function createMyIcon(label) {
+      return L.divIcon({
+        className: '',
+        html: '<div style="display:flex;align-items:center;justify-content:center">' +
+          '<div style="position:absolute;top:-20px;white-space:nowrap;font-size:10px;font-weight:800;color:#fff;padding:3px 8px;border-radius:10px;background:#FF6B00;letter-spacing:0.3px;box-shadow:0 2px 6px rgba(0,0,0,0.3)">' + label + '</div>' +
+          '<div style="animation:bouncePop 0.35s cubic-bezier(0.68,-0.55,0.265,1.55)">' +
+            '<svg width="24" height="32" viewBox="0 0 24 32" fill="none">' +
+              '<path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20C24 5.37 18.63 0 12 0z" fill="#FF6B00" stroke="#fff" stroke-width="2.5"/>' +
+              '<circle cx="12" cy="11" r="5" fill="#fff"/>' +
+            '</svg>' +
+          '</div></div>',
+        iconSize: [24, 32],
+        iconAnchor: [12, 32],
+        popupAnchor: [0, -38],
+      });
+    }
+
+    function createTargetIcon(label) {
+      return L.divIcon({
+        className: '',
+        html: '<div style="display:flex;align-items:center;justify-content:center">' +
+          '<div style="position:absolute;top:-20px;white-space:nowrap;font-size:10px;font-weight:800;color:#fff;padding:3px 8px;border-radius:10px;background:#1A3A6B;letter-spacing:0.3px;box-shadow:0 2px 6px rgba(0,0,0,0.3)">' + label + '</div>' +
+          '<div style="animation:pulse 2s ease-in-out infinite">' +
+            '<svg width="24" height="32" viewBox="0 0 24 32" fill="none">' +
+              '<path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 20 12 20s12-11 12-20C24 5.37 18.63 0 12 0z" fill="#1A3A6B" stroke="#fff" stroke-width="2.5"/>' +
+              '<circle cx="12" cy="11" r="5" fill="#fff"/>' +
+            '</svg>' +
+          '</div></div>',
+        iconSize: [24, 32],
+        iconAnchor: [12, 32],
+        popupAnchor: [0, -38],
+      });
+    }
 
     function initMap() {
       if (mapInitialized) return;
@@ -340,6 +431,8 @@
       map = L.map('liveMap', {
         zoomControl: true,
         attributionControl: false,
+        dragging: true,
+        tap: true,
       }).setView([initLat, initLng], initLat === 17.3850 ? 12 : 15);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -347,7 +440,177 @@
       }).addTo(map);
 
       mapInitialized = true;
+
+      // Double-tap to open full-screen
+      map.on('dblclick', function() {
+        openFullScreenMap();
+      });
     }
+
+    // ── OSRM Route Fetching ──
+    function fetchOSRMRoute(lat1, lng1, lat2, lng2, isFullScreen) {
+      var now = Date.now();
+      if (now - lastRouteFetch < 5000) return;
+      lastRouteFetch = now;
+
+      var url = 'https://router.project-osrm.org/route/v1/driving/' +
+        lng1 + ',' + lat1 + ';' + lng2 + ',' + lat2 +
+        '?geometries=geojson&overview=full&alternatives=false&steps=false';
+
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.timeout = 8000;
+      xhr.onload = function() {
+        if (xhr.status !== 200) { showFallbackLine(isFullScreen); return; }
+        try {
+          var data = JSON.parse(xhr.responseText);
+          if (!data || data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+            showFallbackLine(isFullScreen);
+            return;
+          }
+          var coords = data.routes[0].geometry.coordinates;
+          var latlngs = coords.map(function(c) { return [c[1], c[0]] });
+          drawRoutePolyline(latlngs, isFullScreen);
+        } catch(e) {
+          showFallbackLine(isFullScreen);
+        }
+      };
+      xhr.onerror = function() { showFallbackLine(isFullScreen); };
+      xhr.ontimeout = function() { showFallbackLine(isFullScreen); };
+      xhr.send();
+    }
+
+    function drawRoutePolyline(latlngs, isFullScreen) {
+      var line = isFullScreen ? routePolylineFs : routePolyline;
+      if (line) {
+        line.setLatLngs(latlngs);
+      } else {
+        var polyline = L.polyline(latlngs, {
+          color: '#FF6B00',
+          weight: 4,
+          opacity: 0.9,
+          lineCap: 'round',
+          lineJoin: 'round',
+        });
+        if (isFullScreen) {
+          routePolylineFs = polyline.addTo(fsMap);
+        } else {
+          routePolyline = polyline.addTo(map);
+        }
+      }
+    }
+
+    function showFallbackLine(isFullScreen) {
+      var m = isFullScreen ? fsMap : map;
+      var rl = isFullScreen ? routePolylineFs : routePolyline;
+
+      if (rl) {
+        m.removeLayer(rl);
+        if (isFullScreen) routePolylineFs = null;
+        else routePolyline = null;
+      }
+
+      var points = [];
+      if (techLat != null && techLng != null) points.push([techLat, techLng]);
+      if (custLat != null && custLng != null) points.push([custLat, custLng]);
+
+      if (points.length === 2 && !isFullScreen) {
+        if (fallbackLine) {
+          fallbackLine.setLatLngs(points);
+        } else {
+          fallbackLine = L.polyline(points, {
+            color: '#FF6B00', weight: 3, opacity: 0.6,
+            dashArray: '8, 8', lineCap: 'round', lineJoin: 'round',
+          }).addTo(map);
+        }
+      } else if (fallbackLine && !isFullScreen) {
+        map.removeLayer(fallbackLine);
+        fallbackLine = null;
+      }
+    }
+
+    let fullScreenActive = false;
+
+    function openFullScreenMap() {
+      if (fullScreenActive) return;
+      fullScreenActive = true;
+
+      var overlay = document.createElement('div');
+      overlay.id = 'fsMapOverlay';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#1A3A6B;z-index:500;display:flex;flex-direction:column;animation:fadeIn 0.25s ease-out;';
+
+      // Header
+      var header = document.createElement('div');
+      header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:16px;padding-top:' + (window.innerWidth < 600 ? '45px' : '20px') + ';background:#1A3A6B;';
+      header.innerHTML = '<button onclick="closeFullScreenMap()" style="width:36px;height:36px;border-radius:18px;background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:18px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>' +
+        '<span style="color:#fff;font-size:16px;font-weight:800;">📍 Live Map</span>' +
+        '<div style="width:36px;"></div>';
+
+      // Map container
+      var mapWrap = document.createElement('div');
+      mapWrap.id = 'fsMapContainer';
+      mapWrap.style.cssText = 'flex:1;background:#e8e4df;position:relative;';
+
+      // Info bar
+      var infoBar = document.createElement('div');
+      infoBar.id = 'fsInfoBar';
+      infoBar.style.cssText = 'position:absolute;bottom:0;left:0;right:0;background:rgba(26,58,107,0.92);padding:14px 16px;padding-bottom:' + (window.innerWidth < 600 ? '25px' : '20px') + ';display:flex;justify-content:space-between;align-items:center;';
+
+      var hasTarget = techLat != null && techLng != null;
+      infoBar.innerHTML = '<div style="display:flex;align-items:center;gap:10px;flex:1;">' +
+        '<span style="font-size:22px;">📍</span>' +
+        '<div><div style="color:rgba(255,255,255,0.7);font-size:10px;font-weight:700;letter-spacing:0.3px;">' + (hasTarget ? 'Distance to destination' : 'Waiting for location...') + '</div>' +
+        '<div style="color:#fff;font-size:15px;font-weight:800;margin-top:1px;">' + (document.getElementById('techDistance')?.textContent || '--') + ' · ' + (document.getElementById('techEta')?.textContent || '--') + '</div></div></div>' +
+        '<a href="' + (custLat && custLng ? 'https://www.google.com/maps/dir/?api=1&destination=' + custLat + ',' + custLng : '#') + '" target="_blank" style="display:flex;align-items:center;gap:6px;background:#FF6B00;padding:8px 14px;border-radius:10px;color:#fff;text-decoration:none;font-size:12px;font-weight:800;">🗺️ Navigate</a>';
+
+      overlay.appendChild(header);
+      mapWrap.appendChild(infoBar);
+      overlay.appendChild(mapWrap);
+      document.body.appendChild(overlay);
+
+      // Init full-screen map
+      setTimeout(function() {
+        var initLat = custLat || 17.3850;
+        var initLng = custLng || 78.4867;
+        fsMap = L.map('fsMapContainer', {
+          zoomControl: true,
+          attributionControl: false,
+          dragging: true,
+          tap: true,
+        }).setView([initLat, initLng], 14);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(fsMap);
+
+        if (techLat && techLng) {
+          techMarkerFs = L.marker([techLat, techLng], { icon: createTargetIcon('Technician') }).addTo(fsMap);
+        }
+        if (custLat && custLng) {
+          custMarkerFs = L.marker([custLat, custLng], { icon: createMyIcon('You') }).addTo(fsMap);
+        }
+
+        // Fit bounds
+        var pts = [];
+        if (techLat && techLng) pts.push([techLat, techLng]);
+        if (custLat && custLng) pts.push([custLat, custLng]);
+        if (pts.length >= 2) {
+          fsMap.fitBounds(L.latLngBounds(pts), { padding: [50, 50], maxZoom: 15 });
+        } else if (pts.length === 1) {
+          fsMap.setView(pts[0], 14);
+        }
+
+        setTimeout(function() { fsMap.invalidateSize(); }, 200);
+
+        // Fetch OSRM route for full-screen
+        if (techLat && techLng && custLat && custLng) {
+          fetchOSRMRoute(techLat, techLng, custLat, custLng, true);
+        }
+      }, 200);
+    }
+
+    window.closeFullScreenMap = function() {
+      var overlay = document.getElementById('fsMapOverlay');
+      if (overlay) { overlay.remove(); fullScreenActive = false; fsMap = null; }
+    };
 
     function updateMapMarkers() {
       if (!mapInitialized) initMap();
@@ -361,46 +624,32 @@
         mapEl.style.display = 'block';
         placeholder.style.display = 'none';
 
-        // Update or create tech marker
+        // Update or create tech marker with animated icon
         if (techMarker) {
           techMarker.setLatLng([techLat, techLng]);
+          techMarker.setIcon(createTargetIcon('Technician'));
         } else {
           techMarker = L.marker([techLat, techLng], {
-            icon: L.divIcon({
-              className: 'custom-marker-icon tech',
-              html: '🛵',
-              iconSize: [40, 40],
-              iconAnchor: [20, 20],
-            }),
+            icon: createTargetIcon('Technician'),
             zIndexOffset: 1000,
           }).addTo(map).bindPopup('🛵 Technician');
         }
 
-        // Update or create customer marker
+        // Update or create customer marker with animated icon
         if (custLat && custLng) {
           if (custMarker) {
             custMarker.setLatLng([custLat, custLng]);
+            custMarker.setIcon(createMyIcon('You'));
           } else {
             custMarker = L.marker([custLat, custLng], {
-              icon: L.divIcon({
-                className: 'custom-marker-icon cust',
-                html: '🏠',
-                iconSize: [40, 40],
-                iconAnchor: [20, 20],
-              }),
+              icon: createMyIcon('You'),
             }).addTo(map).bindPopup('🏠 Your Location');
           }
         }
 
-        // Update or create route line
+        // Fetch OSRM driving route (falls back to dashed line)
         if (custLat && custLng) {
-          if (routeLine) {
-            map.removeLayer(routeLine);
-          }
-          routeLine = L.polyline(
-            [[techLat, techLng], [custLat, custLng]],
-            { color: '#FF6B00', weight: 3, dashArray: '8, 8' }
-          ).addTo(map);
+          fetchOSRMRoute(techLat, techLng, custLat, custLng, false);
         }
 
         // Fit bounds to show both markers
@@ -408,6 +657,31 @@
         bounds.push([techLat, techLng]);
         if (custLat && custLng) bounds.push([custLat, custLng]);
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+
+        // Update full-screen map if active
+        if (fullScreenActive && fsMap) {
+          if (techMarkerFs) techMarkerFs.setLatLng([techLat, techLng]);
+          else techMarkerFs = L.marker([techLat, techLng], { icon: createTargetIcon('Technician') }).addTo(fsMap);
+          if (custLat && custLng) {
+            if (custMarkerFs) custMarkerFs.setLatLng([custLat, custLng]);
+            else custMarkerFs = L.marker([custLat, custLng], { icon: createMyIcon('You') }).addTo(fsMap);
+          }
+          var pts = [];
+          if (techLat && techLng) pts.push([techLat, techLng]);
+          if (custLat && custLng) pts.push([custLat, custLng]);
+          if (pts.length >= 2) {
+            fsMap.fitBounds(L.latLngBounds(pts), { padding: [50, 50], maxZoom: 15 });
+          }
+          // Update info bar
+          var infoBar = document.getElementById('fsInfoBar');
+          if (infoBar) {
+            infoBar.innerHTML = '<div style="display:flex;align-items:center;gap:10px;flex:1;">' +
+              '<span style="font-size:22px;">📍</span>' +
+              '<div><div style="color:rgba(255,255,255,0.7);font-size:10px;font-weight:700;letter-spacing:0.3px;">Distance to destination</div>' +
+              '<div style="color:#fff;font-size:15px;font-weight:800;margin-top:1px;">' + (document.getElementById('techDistance')?.textContent || '--') + ' · ' + (document.getElementById('techEta')?.textContent || '--') + '</div></div></div>' +
+              '<a href="' + (custLat && custLng ? 'https://www.google.com/maps/dir/?api=1&destination=' + custLat + ',' + custLng : '#') + '" target="_blank" style="display:flex;align-items:center;gap:6px;background:#FF6B00;padding:8px 14px;border-radius:10px;color:#fff;text-decoration:none;font-size:12px;font-weight:800;">🗺️ Navigate</a>';
+          }
+        }
 
         // Invalidate size after showing (fixes rendering)
         setTimeout(() => map.invalidateSize(), 100);
@@ -776,6 +1050,11 @@
         const etaMins = Math.round(d / SPEED);
         document.getElementById('techDistance').textContent = d.toFixed(1) + ' km';
         document.getElementById('techEta').textContent = '~' + Math.max(1, etaMins) + ' mins';
+
+        // Start live countdown timer (ticks down every second)
+        const mins = Math.max(1, etaMins);
+        const secs = mins * 60;
+        startCountdown(secs);
       }
 
       // Update map info

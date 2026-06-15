@@ -969,7 +969,20 @@
     };
 
     // ── Map Picker Functions ────────────────────────────────────────
-    window.openMapPicker = function() {
+    window.openMapPicker = async function() {
+      // Pre-fetch GPS before opening so the map starts at user's real location
+      try {
+        if (navigator.geolocation && !gpsLat) {
+          const pos = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              timeout: 5000, enableHighAccuracy: false
+            });
+          });
+          gpsLat = pos.coords.latitude;
+          gpsLng = pos.coords.longitude;
+        }
+      } catch (_) { /* fallback to defaults */ }
+
       const overlay = document.getElementById('mapPickerOverlay');
       overlay.classList.add('show');
       document.body.style.overflow = 'hidden';

@@ -406,7 +406,20 @@ export default function HomeScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={[s.gpsBtn, { backgroundColor: '#1A3A6B', marginTop: 10, borderWidth: 2, borderColor: '#FF6B00' }]}
-          onPress={() => setShowMapPicker(true)}
+          onPress={async () => {
+            // Pre-fetch user's current GPS so the map opens at their real location
+            try {
+              const { status } = await Location.requestForegroundPermissionsAsync()
+              if (status === 'granted') {
+                const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced, timeout: 8000 })
+                if (pos && pos.coords) {
+                  setCustLat(pos.coords.latitude)
+                  setCustLng(pos.coords.longitude)
+                }
+              }
+            } catch (_) { /* fallback to default coordinates */ }
+            setShowMapPicker(true)
+          }}
         >
           <Text style={s.gpsBtnTxt}>🗺️ Select on Map (Search / Satellite / Pin)</Text>
         </TouchableOpacity>
