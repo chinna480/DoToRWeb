@@ -392,23 +392,42 @@ export default function TechHomeScreen() {
 
   const acceptJob = async (orderId, order) => {
     const name  = await AsyncStorage.getItem('techName')     || 'Technician'
-    const loc   = await AsyncStorage.getItem('techLocation') || ''
     const phone = await AsyncStorage.getItem('techPhone')    || ''
     await AsyncStorage.setItem('currentOrderId', orderId)
-    // ✅ FIX: Removed global techInfo — tech details stored on order directly
+
     update(ref(db, 'orders/' + orderId), { status: 'accepted', techPhone: phone, techName: name })
-      .then(async () => {
-        // Claim this area for this technician so future jobs here come to them
-        const area = (order.location || '').toLowerCase().trim()
-        if (area) {
-          set(ref(db, 'areaAssignments/' + area), { name, phone, location: loc })
-        }
+      .then(() => {
         Alert.alert('✅ Job Accepted!', 'Customer can now track you!')
-        if (order.customerPushToken) {
-          await notifyCustomerTechAccepted(order.customerPushToken, name)
-        }
+        // Non-critical post-accept tasks (area claim + push notification).
+        // Errors here are logged but do NOT show a failure alert to the user,
+        // because the order was already successfully accepted.
+        acceptJobPostProcess(order, name, phone)
       })
       .catch(() => Alert.alert('Error', 'Failed to accept. Try again!'))
+  }
+
+  // Separate function: non-critical tasks after a successful accept.
+  // Will NOT throw to the caller — errors are caught internally.
+  const acceptJobPostProcess = async (order, name, phone) => {
+    try {
+      // Claim this area for this technician so future jobs here come to them
+      // Sanitize the key to remove characters invalid in Firebase paths (., $, [, ], #, /)
+      let area = (order.location || '').toLowerCase().trim()
+      area = area.replace(/[.$\[\]#\/]/g, '_')
+      if (area) {
+        await set(ref(db, 'areaAssignments/' + area), { name, phone, location: order.location || '' })
+      }
+    } catch (e) {
+      console.log('Area claim failed (non-critical):', e.message)
+    }
+
+    try {
+      if (order.customerPushToken) {
+        await notifyCustomerTechAccepted(order.customerPushToken, name)
+      }
+    } catch (e) {
+      console.log('Accept notification failed (non-critical):', e.message)
+    }
   }
 
   const rejectJob = (orderId) => {
@@ -447,7 +466,8 @@ export default function TechHomeScreen() {
 
   const navigate = () => {
     if (custLat && custLng) {
-      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${custLat},${custLng}`)
+      const origin = (myLat && myLng) ? `&origin=${myLat},${myLng}` : ''
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1${origin}&destination=${custLat},${custLng}`)
     } else {
       Alert.alert('Not Available', 'Customer location not available yet!')
     }
@@ -580,9 +600,12 @@ export default function TechHomeScreen() {
             targetLng={custLng}
             myLabel="You"
             targetLabel={custLat ? 'Customer' : 'Waiting...'}
+            myAddress={techLoc}
+            targetAddress={(liveOrderData || ongoingJob)?.location}
             distance={distance}
             eta={eta}
             interactive={true}
+            onPress={navigate}
           />
 
           <View style={s.btnRow}>

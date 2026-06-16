@@ -239,7 +239,7 @@ export default function TrackingScreen() {
 
   const openMapsDirections = () => {
     if (techLat && techLng && custLat && custLng) {
-      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${custLat},${custLng}`)
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&origin=${techLat},${techLng}&destination=${custLat},${custLng}`)
         .catch(() => Alert.alert('Error', 'Could not open Google Maps'))
     } else if (custLat && custLng) {
       Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${custLat},${custLng}`)

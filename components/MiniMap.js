@@ -418,24 +418,23 @@ const MiniMap = forwardRef(function MiniMap({
     })
   }, [myLat, myLng, targetLat, targetLng, myLabel, targetLabel, sendUpdate])
 
-  // Sync positions/labels whenever they change (for BOTH card and full-screen)
+  // Sync positions/labels whenever they change (for BOTH card and full-screen).
+  // No gate on initSent — the WebView handleUpdate() already handles receiving
+  // data before the map is ready (calls initMap() if !isReady).
+  // This ensures positions still arrive even if onLoad doesn't fire.
   useEffect(() => {
-    if (!initSent.current) return
     sendPositions(webViewRef)
   }, [myLat, myLng, targetLat, targetLng, sendPositions])
 
   useEffect(() => {
-    if (!fsInitSent.current) return
     sendPositions(fsWebViewRef)
   }, [myLat, myLng, targetLat, targetLng, sendPositions])
 
   useEffect(() => {
-    if (!initSent.current) return
     sendLabels(webViewRef)
   }, [myLabel, targetLabel, sendLabels])
 
   useEffect(() => {
-    if (!fsInitSent.current) return
     sendLabels(fsWebViewRef)
   }, [myLabel, targetLabel, sendLabels])
 
