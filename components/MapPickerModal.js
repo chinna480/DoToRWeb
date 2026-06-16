@@ -1,4 +1,4 @@
-sfadsdfsd// MapPickerModal.js — WebView-based Leaflet map picker for the app
+// MapPickerModal.js — WebView-based Leaflet map picker for the app
 // Allows: search, satellite/standard toggle, draggable pin, GPS locate
 import { useEffect, useRef, useState } from 'react'
 import {
