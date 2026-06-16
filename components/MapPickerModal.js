@@ -1,6 +1,6 @@
 // MapPickerModal.js — WebView-based Leaflet map picker for the app
 // Allows: search, satellite/standard toggle, draggable pin, GPS locate
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Modal,
@@ -50,6 +50,8 @@ html,body,#map{width:100%;height:100%;overflow:hidden;font-family:-apple-system,
 
 /* ── Coords display ── */
 .coords-bar{position:absolute;bottom:52px;left:12px;right:12px;z-index:1000;background:rgba(26,58,107,0.9);border-radius:8px;padding:8px 12px;text-align:center;color:#fff;font-size:12px;font-weight:600}
+.coords-bar.hint{background:#fff5ee;color:#888;font-weight:600}
+.coords-bar.hint strong{color:#FF6B00;font-weight:800}
 
 /* ── Confirm button ── */
 .confirm-btn{position:absolute;bottom:8px;left:12px;right:12px;z-index:1000;background:#FF6B00;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:800;color:#fff;cursor:pointer;box-shadow:0 3px 10px rgba(255,107,0,0.4)}
@@ -112,9 +114,12 @@ html,body,#map{width:100%;height:100%;overflow:hidden;font-family:-apple-system,
 <script>
 var map, marker, tileLayer, currentLayer = 'standard';
 var selectedLat = null, selectedLng = null;
-var isReady = false;
+var isReady = false, gpsFound = false;
 
 function initMap(lat, lng) {
+  // If the coordinates match the default Hyderabad fallback, GPS was NOT acquired
+  gpsFound = (lat !== 17.3850 || lng !== 78.4867);
+
   map = L.map('map', {
     zoomControl: true,
     attributionControl: false
@@ -161,6 +166,7 @@ function initMap(lat, lng) {
     var pos = marker.getLatLng();
     selectedLat = pos.lat;
     selectedLng = pos.lng;
+    gpsFound = true;
     updateCoords();
     enableConfirm();
     updateMarkerPopup();
@@ -171,6 +177,7 @@ function initMap(lat, lng) {
     selectedLat = e.latlng.lat;
     selectedLng = e.latlng.lng;
     marker.setLatLng([selectedLat, selectedLng]);
+    gpsFound = true;
     // Trigger bounce animation
     var pinEl = marker.getElement();
     if (pinEl) {
@@ -187,11 +194,18 @@ function initMap(lat, lng) {
     marker.openPopup();
   });
 
-  // Show popup after init and fetch address
+  // Show popup after init
   setTimeout(function() {
     if (marker) {
       marker.openPopup();
-      updateMarkerPopup();
+      if (gpsFound) {
+        updateMarkerPopup();
+      } else {
+        marker.setPopupContent(
+          '<div class="popup-title">📍 Set Your Repair Location</div>' +
+          '<div class="popup-coords" style="color:#FF6B00;">Tap the map, search, or use "My Location"</div>'
+        );
+      }
     }
   }, 600);
 
@@ -224,8 +238,13 @@ async function updateMarkerPopup() {
 
 function updateCoords() {
   var el = document.getElementById('coordsBar');
-  if (el && selectedLat && selectedLng) {
+  if (!el) return;
+  if (gpsFound && selectedLat && selectedLng) {
     el.innerHTML = '📍 <strong>' + selectedLat.toFixed(5) + ', ' + selectedLng.toFixed(5) + '</strong>';
+    el.className = 'coords-bar';
+  } else if (!gpsFound) {
+    el.innerHTML = '📍 <strong>Tap the map or use "My Location" to set your address</strong>';
+    el.className = 'coords-bar hint';
   }
 }
 
@@ -252,23 +271,38 @@ function switchLayer(layer) {
 function goToMyLocation() {
   if (!navigator.geolocation) return;
   document.getElementById('myLocBtn').textContent = '⏳ Locating...';
-  navigator.geolocation.getCurrentPosition(function(pos) {
-    var lat = pos.coords.latitude;
-    var lng = pos.coords.longitude;
-    map.flyTo([lat, lng], 16, { duration: 1.2 });
-    setTimeout(function() {
-      marker.setLatLng([lat, lng]);
-      selectedLat = lat;
-      selectedLng = lng;
-      updateCoords();
-      enableConfirm();
-      updateMarkerPopup();
-      marker.openPopup();
-      document.getElementById('myLocBtn').textContent = '📍 My Location';
-    }, 300);
-  }, function() {
-    document.getElementById('myLocBtn').textContent = '📍 My Location';
-  }, { timeout: 10000, enableHighAccuracy: true });
+
+  function locate(highAccuracy) {
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      var lat = pos.coords.latitude;
+      var lng = pos.coords.longitude;
+      map.flyTo([lat, lng], 16, { duration: 1.2 });
+      setTimeout(function() {
+        marker.setLatLng([lat, lng]);
+        selectedLat = lat;
+        selectedLng = lng;
+        gpsFound = true;
+        updateCoords();
+        enableConfirm();
+        updateMarkerPopup();
+        marker.openPopup();
+        document.getElementById('myLocBtn').textContent = '📍 My Location';
+      }, 300);
+    }, function(err) {
+      if (highAccuracy) {
+        // Fall back to low-accuracy (WiFi/IP based)
+        locate(false);
+      } else {
+        // Both GPS attempts failed — show brief feedback
+        document.getElementById('myLocBtn').textContent = '⚠️ GPS failed';
+        setTimeout(function() {
+          document.getElementById('myLocBtn').textContent = '📍 My Location';
+        }, 2000);
+      }
+    }, { timeout: highAccuracy ? 8000 : 5000, enableHighAccuracy: highAccuracy });
+  }
+
+  locate(true);
 }
 
 // ── Search Autocomplete ──
@@ -341,6 +375,7 @@ function pickSuggestion(result) {
   setTimeout(function() {
     marker.setLatLng([lat, lng]);
     selectedLat = lat; selectedLng = lng;
+    gpsFound = true;
     updateCoords(); enableConfirm(); updateMarkerPopup(); marker.openPopup();
   }, 300);
 }
@@ -366,6 +401,7 @@ async function searchLocation() {
         marker.setLatLng([lat, lng]);
         selectedLat = lat;
         selectedLng = lng;
+        gpsFound = true;
         updateCoords();
         enableConfirm();
         updateMarkerPopup();
@@ -414,7 +450,23 @@ window.addEventListener('message', function(e) {
 
 export default function MapPickerModal({ visible, onClose, onLocationSelected, initialLat, initialLng }) {
   const [loading, setLoading] = useState(true)
+  const [webviewError, setWebviewError] = useState(false)
   const webViewRef = useRef(null)
+  const [webviewKey, setWebviewKey] = useState(0)
+
+  // Safety timeout: if WebView doesn't signal MAP_READY within 10s, clear loading
+  const loadingTimeoutRef = useRef(null)
+  useEffect(() => {
+    if (visible) {
+      setLoading(true)
+      setWebviewError(false)
+      setWebviewKey(k => k + 1)
+      loadingTimeoutRef.current = setTimeout(() => setLoading(false), 10000)
+    }
+    return () => {
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current)
+    }
+  }, [visible])
 
   const handleMessage = (event) => {
     try {
@@ -425,6 +477,7 @@ export default function MapPickerModal({ visible, onClose, onLocationSelected, i
       } else if (data.type === 'MAP_READY') {
         // WebView JS is ready — now send the INIT with coordinates
         setLoading(false)
+        if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current)
         if (webViewRef.current) {
           const msg = JSON.stringify({
             type: 'INIT',
@@ -439,9 +492,17 @@ export default function MapPickerModal({ visible, onClose, onLocationSelected, i
     }
   }
 
-  const handleLoadEnd = () => {
-    // Map will init when it sends MAP_READY; just keep loading state until then
-    // The fallback in WebView handles the case where MAP_READY doesn't arrive
+  const handleWebviewError = () => {
+    setLoading(false)
+    setWebviewError(true)
+    if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current)
+  }
+
+  const retryWebview = () => {
+    setWebviewError(false)
+    setLoading(true)
+    setWebviewKey(k => k + 1)
+    loadingTimeoutRef.current = setTimeout(() => setLoading(false), 10000)
   }
 
   return (
@@ -463,12 +524,23 @@ export default function MapPickerModal({ visible, onClose, onLocationSelected, i
               <Text style={styles.loadingTxt}>Loading map...</Text>
             </View>
           )}
+          {webviewError && (
+            <View style={styles.errorOverlay}>
+              <Text style={styles.errorIcon}>⚠️</Text>
+              <Text style={styles.errorTxt}>Failed to load map</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={retryWebview}>
+                <Text style={styles.retryTxt}>Tap to retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           <WebView
+            key={webviewKey}
             ref={webViewRef}
             source={{ html: MAP_HTML }}
             style={styles.webview}
             onMessage={handleMessage}
-            onLoadEnd={handleLoadEnd}
+            onError={handleWebviewError}
+            onHttpError={handleWebviewError}
             javaScriptEnabled
             domStorageEnabled
             geolocationEnabled
@@ -538,5 +610,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginTop: 12,
+  },
+  errorOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#1A3A6B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  errorIcon: {
+    fontSize: 40,
+    marginBottom: 10,
+  },
+  errorTxt: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  retryBtn: {
+    marginTop: 14,
+    backgroundColor: '#FF6B00',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  retryTxt: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
   },
 })

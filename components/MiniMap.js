@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   View,
   SafeAreaView,
-  StatusBar,
 } from 'react-native'
 import { WebView } from 'react-native-webview'
 
@@ -343,11 +342,11 @@ const MiniMap = forwardRef(function MiniMap({
 }, ref) {
   const webViewRef = useRef(null)
   const fsWebViewRef = useRef(null)
-  const initSent = useRef(false)
-  const fsInitSent = useRef(false)
   const lastTapRef = useRef(0)
   const singleTapTimer = useRef(null)
   const [fullscreen, setFullscreen] = useState(false)
+  const [webviewError, setWebviewError] = useState(false)
+  const [fsWebviewError, setFsWebviewError] = useState(false)
 
   // Expose openFullScreen to parent via ref
   useImperativeHandle(ref, () => ({
@@ -399,8 +398,9 @@ const MiniMap = forwardRef(function MiniMap({
 
   // ── WebView onLoad: fires when the page finishes loading (reliable).
   // Sends INIT with current positions + labels so the map starts correctly.
+  // Also resets any previous WebView error state on successful load.
   const handleLoad = useCallback(() => {
-    initSent.current = true
+    setWebviewError(false)
     sendUpdate(webViewRef, {
       type: 'INIT',
       myLat, myLng, targetLat, targetLng,
@@ -410,7 +410,7 @@ const MiniMap = forwardRef(function MiniMap({
 
   // ── Full-screen WebView: same approach ──
   const handleFsLoad = useCallback(() => {
-    fsInitSent.current = true
+    setFsWebviewError(false)
     sendUpdate(fsWebViewRef, {
       type: 'INIT',
       myLat, myLng, targetLat, targetLng,
@@ -422,21 +422,25 @@ const MiniMap = forwardRef(function MiniMap({
   // No gate on initSent — the WebView handleUpdate() already handles receiving
   // data before the map is ready (calls initMap() if !isReady).
   // This ensures positions still arrive even if onLoad doesn't fire.
+  // Full-screen effects gate on fullscreen to avoid unnecessary callback calls
+  // when the fullscreen WebView is not mounted.
   useEffect(() => {
     sendPositions(webViewRef)
   }, [myLat, myLng, targetLat, targetLng, sendPositions])
 
   useEffect(() => {
+    if (!fullscreen) return
     sendPositions(fsWebViewRef)
-  }, [myLat, myLng, targetLat, targetLng, sendPositions])
+  }, [myLat, myLng, targetLat, targetLng, sendPositions, fullscreen])
 
   useEffect(() => {
     sendLabels(webViewRef)
   }, [myLabel, targetLabel, sendLabels])
 
   useEffect(() => {
+    if (!fullscreen) return
     sendLabels(fsWebViewRef)
-  }, [myLabel, targetLabel, sendLabels])
+  }, [myLabel, targetLabel, sendLabels, fullscreen])
 
   // ── Double-tap detection ──
   // Single tap → open Google Maps (after 360ms if no second tap follows)
@@ -473,11 +477,14 @@ const MiniMap = forwardRef(function MiniMap({
   )
 
   // ── Full-screen Modal ──
+  // Fully conditionally rendered — Modal + all children are only mounted
+  // when fullscreen is true. This avoids ANY rendering of the fullscreen
+  // UI (SafeAreaView, header, address panel, info bar, WebView) during
+  // initial component mount, preventing Fabric/dual-WebView conflicts.
+  // Trade-off: slide-out animation is skipped on close (Modal unmounts).
   const renderFullScreen = () => (
-    <Modal visible={fullscreen} animationType="slide" statusBarTranslucent>
+    <Modal animationType="slide" statusBarTranslucent>
       <SafeAreaView style={styles.fsSafeArea}>
-        <StatusBar barStyle="light-content" backgroundColor="#1A3A6B" />
-
         {/* Header bar */}
         <View style={styles.fsHeader}>
           <TouchableOpacity
@@ -508,13 +515,15 @@ const MiniMap = forwardRef(function MiniMap({
               <Text style={styles.fsAddressValue} numberOfLines={1}>{myAddress || myLabel || 'You'}</Text>
             </View>
           </View>
-        </View>            {/* Full-screen interactive map */}
+        </View>
           <View style={styles.fsMapWrap}>
             <WebView
               ref={fsWebViewRef}
               source={{ html: fullscreenHTML }}
               style={styles.fsWebView}
               onLoad={handleFsLoad}
+              onError={() => setFsWebviewError(true)}
+              onHttpError={() => setFsWebviewError(true)}
               javaScriptEnabled
               domStorageEnabled
               geolocationEnabled
@@ -524,6 +533,12 @@ const MiniMap = forwardRef(function MiniMap({
               scrollEnabled={false}
               bounces={false}
             />
+
+          {fsWebviewError && (
+            <View style={styles.fsMapError}>
+              <Text style={styles.fsMapErrorTxt}>⚠️ Map unavailable</Text>
+            </View>
+          )}
 
           {/* Distance/ETA bar */}
           <View style={styles.fsInfoBar}>
@@ -561,6 +576,8 @@ const MiniMap = forwardRef(function MiniMap({
               source={{ html: mapHTML }}
               style={styles.webview}
               onLoad={handleLoad}
+              onError={() => setWebviewError(true)}
+              onHttpError={() => setWebviewError(true)}
               javaScriptEnabled
               domStorageEnabled
               geolocationEnabled
@@ -574,6 +591,13 @@ const MiniMap = forwardRef(function MiniMap({
 
             {/* Expand button at top-right */}
             {expandBtn}
+
+            {/* Error overlay when map fails to load */}
+            {webviewError && (
+              <View style={styles.cardError}>
+                <Text style={styles.cardErrorTxt}>⚠️ Map unavailable</Text>
+              </View>
+            )}
 
             {/* Info overlay at bottom — like Swiggy/Rapido */}
             <View style={styles.infoOverlay}>
@@ -595,12 +619,12 @@ const MiniMap = forwardRef(function MiniMap({
           </View>
         </TouchableOpacity>
 
-        {renderFullScreen()}
-      </>
-    )
-  }
+        {fullscreen && renderFullScreen()}
+    </>
+  )
+}
 
-  // ── Interactive Mode (tech navigation) ──
+// ── Interactive Mode (tech navigation) ──
   return (
     <>
       <View style={styles.wrapper}>
@@ -610,6 +634,8 @@ const MiniMap = forwardRef(function MiniMap({
             source={{ html: mapHTML }}
             style={styles.webview}
             onLoad={handleLoad}
+            onError={() => setWebviewError(true)}
+            onHttpError={() => setWebviewError(true)}
             javaScriptEnabled
             domStorageEnabled
             geolocationEnabled
@@ -622,6 +648,13 @@ const MiniMap = forwardRef(function MiniMap({
 
           {/* Expand button at top-right */}
           {expandBtn}
+
+          {/* Error overlay when map fails to load */}
+          {webviewError && (
+            <View style={styles.cardError}>
+              <Text style={styles.cardErrorTxt}>⚠️ Map unavailable</Text>
+            </View>
+          )}
 
           {/* Distance/ETA info bar at bottom with Open Maps button */}
           <View style={styles.interactiveInfoBar}>
@@ -640,7 +673,7 @@ const MiniMap = forwardRef(function MiniMap({
         </View>
       </View>
 
-      {renderFullScreen()}
+      {fullscreen && renderFullScreen()}
     </>
   )
 })
@@ -922,5 +955,43 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: '800',
+  },
+
+  // ── WebView Error Overlay (fullscreen) ──
+  fsMapError: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#e8e4df',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  fsMapErrorTxt: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  // ── Card Error Overlay (static + interactive modes) ──
+  cardError: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#e8e4df',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+  },
+  cardErrorTxt: {
+    color: '#888',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
 })
