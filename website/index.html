@@ -864,6 +864,7 @@
     let mapPickerLng = null;
     let mapPickerLayer = 'standard';
     let mapPickerTileLayer = null;
+    let mapPickerGpsFound = false; // true when GPS was successfully acquired
 
     const dates = generateDates();
 
@@ -929,10 +930,26 @@
     window.getCurrentLocation = async function() {
       const statusEl = document.getElementById('gpsStatus');
       statusEl.textContent = '📍 Getting your location...';
+
       try {
+        // Try high-accuracy GPS first (mobile GPS chip); fall back to low-accuracy (WiFi/IP) on failure
         const pos = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+          function locate(highAccuracy) {
+            navigator.geolocation.getCurrentPosition(
+              (p) => resolve(p),
+              (err) => {
+                if (highAccuracy) {
+                  locate(false);
+                } else {
+                  reject(err);
+                }
+              },
+              { timeout: highAccuracy ? 8000 : 5000, enableHighAccuracy: highAccuracy }
+            );
+          }
+          locate(true);
         });
+
         gpsLat = pos.coords.latitude;
         gpsLng = pos.coords.longitude;
         statusEl.textContent = `✅ Location found! (${gpsLat.toFixed(4)}, ${gpsLng.toFixed(4)})`;
@@ -969,19 +986,16 @@
     };
 
     // ── Map Picker Functions ────────────────────────────────────────
-    window.openMapPicker = async function() {
-      // Pre-fetch GPS before opening so the map starts at user's real location
-      try {
-        if (navigator.geolocation && !gpsLat) {
-          const pos = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              timeout: 5000, enableHighAccuracy: false
-            });
-          });
-          gpsLat = pos.coords.latitude;
-          gpsLng = pos.coords.longitude;
-        }
-      } catch (_) { /* fallback to defaults */ }
+    window.openMapPicker = function() {
+      // Pre-fetch GPS in background (don't block overlay from showing)
+      // initMapPicker will use gpsLat/gpsLng if available by then
+      if (navigator.geolocation && !gpsLat) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => { gpsLat = pos.coords.latitude; gpsLng = pos.coords.longitude; },
+          () => {},
+          { timeout: 8000, enableHighAccuracy: false }
+        );
+      }
 
       const overlay = document.getElementById('mapPickerOverlay');
       overlay.classList.add('show');
@@ -1011,35 +1025,39 @@
       }
 
       let startLat, startLng;
-      // Priority: 1) GPS from previous use  2) Map picker's last pin  3) Try browser GPS  4) Fallback to Hyderabad
+      mapPickerGpsFound = false;
+      // Priority: 1) GPS from previous use  2) Map picker's last pin  3) Try browser GPS  4) Fallback to India center
       if (gpsLat && gpsLng) {
         startLat = gpsLat;
         startLng = gpsLng;
+        mapPickerGpsFound = true;
       } else if (mapPickerLat && mapPickerLng) {
         startLat = mapPickerLat;
         startLng = mapPickerLng;
+        mapPickerGpsFound = true;
       } else {
-        // Try browser geolocation (async — won't block map from loading)
+        // Try browser geolocation
         try {
           if (navigator.geolocation) {
             const pos = await new Promise((resolve, reject) => {
-              navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000, enableHighAccuracy: false });
+              navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000, enableHighAccuracy: false });
             });
             startLat = pos.coords.latitude;
             startLng = pos.coords.longitude;
+            mapPickerGpsFound = true;
           }
         } catch (_) {}
-        // Fallback if GPS didn't work
+        // Fallback if GPS didn't work — use India center instead of specific Hyderabad address
         if (!startLat || !startLng) {
-          startLat = 17.3850;
-          startLng = 78.4867;
+          startLat = 20.5937;
+          startLng = 78.9629;
         }
       }
 
       mapPickerMap = L.map(container, {
         zoomControl: true,
         attributionControl: false,
-      }).setView([startLat, startLng], 15);
+      }).setView([startLat, startLng], mapPickerGpsFound ? 15 : 5);
 
       // Default tile layer (standard)
       mapPickerTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1083,6 +1101,7 @@
         const pos = mapPickerMarker.getLatLng();
         mapPickerLat = pos.lat;
         mapPickerLng = pos.lng;
+        mapPickerGpsFound = true;
         updateMapPickerCoords();
         enableConfirmBtn();
         updateMarkerPopup();
@@ -1094,6 +1113,7 @@
         mapPickerLat = e.latlng.lat;
         mapPickerLng = e.latlng.lng;
         mapPickerMarker.setLatLng([mapPickerLat, mapPickerLng]);
+        mapPickerGpsFound = true;
 
         // Trigger bounce animation on the pin wrapper
         const pinEl = mapPickerMarker.getElement();
@@ -1112,17 +1132,25 @@
         mapPickerMarker.openPopup();
       });
 
-      // Set initial coords and show popup
+      // Set initial coords
       mapPickerLat = startLat;
       mapPickerLng = startLng;
       updateMapPickerCoords();
       enableConfirmBtn();
 
-      // Animate popup open after a short delay and fetch address
+      // Animate popup open after a short delay
       setTimeout(() => {
         if (mapPickerMarker) {
           mapPickerMarker.openPopup();
-          updateMarkerPopup();
+          // Only reverse-geocode if GPS was found; otherwise show a neutral hint
+          if (mapPickerGpsFound) {
+            updateMarkerPopup();
+          } else {
+            mapPickerMarker.setPopupContent(
+              '<div class="popup-title">📍 Set Your Repair Location</div>' +
+              '<div class="popup-address" style="color:#FF6B00;border-top:none;padding-top:0;margin-top:4px;">Tap the map, search above, or click "My Location" to set your repair address</div>'
+            );
+          }
         }
       }, 600);
 
@@ -1183,11 +1211,19 @@
     function updateMapPickerCoords() {
       const el = document.getElementById('mapPickerCoords');
       if (el && mapPickerLat && mapPickerLng) {
-        el.innerHTML = `📍 <strong>${mapPickerLat.toFixed(5)}, ${mapPickerLng.toFixed(5)}</strong>`;
-        el.style.color = '#fff';
-        el.style.background = 'rgba(26,58,107,0.9)';
-        el.style.borderRadius = '8px';
-        el.style.padding = '8px 14px';
+        if (mapPickerGpsFound) {
+          el.innerHTML = `📍 <strong>${mapPickerLat.toFixed(5)}, ${mapPickerLng.toFixed(5)}</strong>`;
+          el.style.color = '#fff';
+          el.style.background = 'rgba(26,58,107,0.9)';
+          el.style.borderRadius = '8px';
+          el.style.padding = '8px 14px';
+        } else {
+          el.innerHTML = '📍 Tap on the map, search above, or click "My Location" to set your repair address';
+          el.style.color = '#888';
+          el.style.background = '#fff5ee';
+          el.style.borderRadius = '8px';
+          el.style.padding = '8px 14px';
+        }
       }
     }
 
@@ -1349,37 +1385,50 @@
       btn.innerHTML = '⏳ Locating...';
       btn.disabled = true;
 
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
+      // Try high-accuracy GPS first; fall back to low-accuracy (WiFi/IP) on failure
+      function locate(highAccuracy) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            gpsLat = lat;
+            gpsLng = lng;
 
-          if (mapPickerMap) {
-            mapPickerMap.flyTo([lat, lng], 16, { duration: 1.2 });
-            setTimeout(() => {
-              if (mapPickerMarker) {
-                mapPickerMarker.setLatLng([lat, lng]);
-              }
-              mapPickerLat = lat;
-              mapPickerLng = lng;
-              updateMapPickerCoords();
-              enableConfirmBtn();
-              updateMarkerPopup();
-              if (mapPickerMarker) mapPickerMarker.openPopup();
-            }, 300);
-          }
+            if (mapPickerMap) {
+              mapPickerMap.flyTo([lat, lng], 16, { duration: 1.2 });
+              setTimeout(() => {
+                if (mapPickerMarker) {
+                  mapPickerMarker.setLatLng([lat, lng]);
+                }
+                mapPickerLat = lat;
+                mapPickerLng = lng;
+                mapPickerGpsFound = true;
+                updateMapPickerCoords();
+                enableConfirmBtn();
+                updateMarkerPopup();
+                if (mapPickerMarker) mapPickerMarker.openPopup();
+              }, 300);
+            }
 
-          btn.innerHTML = '📍 My Location';
-          btn.disabled = false;
-          showToast('📍 Moved to your current location', 'success');
-        },
-        (err) => {
-          btn.innerHTML = '📍 My Location';
-          btn.disabled = false;
-          showToast('⚠️ Could not get GPS location', 'error');
-        },
-        { timeout: 10000, enableHighAccuracy: true }
-      );
+            btn.innerHTML = '📍 My Location';
+            btn.disabled = false;
+            showToast('📍 Moved to your current location (' + lat.toFixed(4) + ', ' + lng.toFixed(4) + ')', 'success');
+          },
+          (err) => {
+            if (highAccuracy) {
+              // Fall back to low-accuracy (WiFi/IP based) which works on desktop
+              locate(false);
+            } else {
+              btn.innerHTML = '📍 My Location';
+              btn.disabled = false;
+              showToast('⚠️ Could not get your location. ' + (err.code === 1 ? 'Please allow location access.' : 'Check your browser/device location settings.'), 'error');
+            }
+          },
+          { timeout: highAccuracy ? 8000 : 5000, enableHighAccuracy: highAccuracy }
+        );
+      }
+
+      locate(true);
     };
 
     // ── Search Autocomplete (for map picker search) ────────────────
@@ -1634,6 +1683,7 @@
         }
         mapPickerLat = lat;
         mapPickerLng = lng;
+        mapPickerGpsFound = true;
         updateMapPickerCoords();
         enableConfirmBtn();
         updateMarkerPopup();

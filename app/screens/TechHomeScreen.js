@@ -149,12 +149,9 @@ export default function TechHomeScreen() {
         }
         // Store full live order data so the ongoing card stays current (images, status, etc.)
         setLiveOrderData(order)
-        // Prioritize nested custLocation (live GPS from customer's TrackingScreen)
-        if (order.custLocation && typeof order.custLocation.lat === 'number' && typeof order.custLocation.lng === 'number') {
-          setCustLat(order.custLocation.lat)
-          setCustLng(order.custLocation.lng)
-        } else if (order.custLat != null && order.custLng != null) {
-          // Fallback to top-level fields from initial booking
+        // Use booking coords (custLat/custLng) — these are the repair destination.
+        // Do NOT use custLocation (was live GPS that overwrote booking location).
+        if (order.custLat != null && order.custLng != null) {
           setCustLat(order.custLat)
           setCustLng(order.custLng)
         }
@@ -449,7 +446,6 @@ export default function TechHomeScreen() {
           update(ref(db, 'orders/' + orderId), { status: 'completed', completedTime: Date.now() })
           // ✅ FIX: Remove only this order's location data, not global paths
           remove(ref(db, 'orders/' + orderId + '/techLocation'))
-          remove(ref(db, 'orders/' + orderId + '/custLocation'))
           if (custLocUnsubRef.current) { custLocUnsubRef.current(); custLocUnsubRef.current = null }
           if (watchRef.current) { watchRef.current.remove(); watchRef.current = null }
           if (ongoingJob?.customerPushToken) {

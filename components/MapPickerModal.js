@@ -1,4 +1,4 @@
-// MapPickerModal.js — WebView-based Leaflet map picker for the app
+sfadsdfsd// MapPickerModal.js — WebView-based Leaflet map picker for the app
 // Allows: search, satellite/standard toggle, draggable pin, GPS locate
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -11,6 +11,7 @@ import {
   View
 } from 'react-native'
 import { WebView } from 'react-native-webview'
+import * as Location from 'expo-location'
 
 const MAP_HTML = `<!DOCTYPE html>
 <html>
@@ -114,7 +115,7 @@ html,body,#map{width:100%;height:100%;overflow:hidden;font-family:-apple-system,
 <script>
 var map, marker, tileLayer, currentLayer = 'standard';
 var selectedLat = null, selectedLng = null;
-var isReady = false, gpsFound = false;
+var isReady = false, gpsFound = false, gpsProcessing = false;
 
 function initMap(lat, lng) {
   // If the coordinates match the default Hyderabad fallback, GPS was NOT acquired
@@ -269,40 +270,9 @@ function switchLayer(layer) {
 }
 
 function goToMyLocation() {
-  if (!navigator.geolocation) return;
   document.getElementById('myLocBtn').textContent = '⏳ Locating...';
-
-  function locate(highAccuracy) {
-    navigator.geolocation.getCurrentPosition(function(pos) {
-      var lat = pos.coords.latitude;
-      var lng = pos.coords.longitude;
-      map.flyTo([lat, lng], 16, { duration: 1.2 });
-      setTimeout(function() {
-        marker.setLatLng([lat, lng]);
-        selectedLat = lat;
-        selectedLng = lng;
-        gpsFound = true;
-        updateCoords();
-        enableConfirm();
-        updateMarkerPopup();
-        marker.openPopup();
-        document.getElementById('myLocBtn').textContent = '📍 My Location';
-      }, 300);
-    }, function(err) {
-      if (highAccuracy) {
-        // Fall back to low-accuracy (WiFi/IP based)
-        locate(false);
-      } else {
-        // Both GPS attempts failed — show brief feedback
-        document.getElementById('myLocBtn').textContent = '⚠️ GPS failed';
-        setTimeout(function() {
-          document.getElementById('myLocBtn').textContent = '📍 My Location';
-        }, 2000);
-      }
-    }, { timeout: highAccuracy ? 8000 : 5000, enableHighAccuracy: highAccuracy });
-  }
-
-  locate(true);
+  // Ask React Native to get GPS via expo-location (more reliable than navigator.geolocation in WebView)
+  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_GPS' }));
 }
 
 // ── Search Autocomplete ──
@@ -424,15 +394,42 @@ function confirmLocation() {
   }));
 }
 
-// Listen for initial data from React Native
-window.addEventListener('message', function(e) {
+// Unified message handler for messages from React Native
+// Register on both window and document for WebView compatibility
+document.addEventListener('message', handleRNMessage);
+window.addEventListener('message', handleRNMessage);
+function handleRNMessage(e) {
   try {
     var data = JSON.parse(e.data);
     if (data.type === 'INIT') {
-      initMap(data.lat, data.lng);
+      if (!isReady) initMap(data.lat, data.lng);
+    } else if (data.type === 'GPS_RESULT' && !gpsProcessing) {
+      gpsProcessing = true;
+      setTimeout(function() { gpsProcessing = false; }, 500);
+      if (data.success && data.lat != null && data.lng != null) {
+        var lat = data.lat;
+        var lng = data.lng;
+        map.flyTo([lat, lng], 16, { duration: 1.2 });
+        setTimeout(function() {
+          marker.setLatLng([lat, lng]);
+          selectedLat = lat;
+          selectedLng = lng;
+          gpsFound = true;
+          updateCoords();
+          enableConfirm();
+          updateMarkerPopup();
+          marker.openPopup();
+          document.getElementById('myLocBtn').textContent = '📍 My Location';
+        }, 300);
+      } else {
+        document.getElementById('myLocBtn').textContent = '⚠️ GPS failed';
+        setTimeout(function() {
+          document.getElementById('myLocBtn').textContent = '📍 My Location';
+        }, 2000);
+      }
     }
-  } catch(e) {}
-});
+  } catch(err) {}
+}
 
 // Signal to React Native that the WebView JS is ready, then it will send INIT
 (function signalReady() {
@@ -486,10 +483,45 @@ export default function MapPickerModal({ visible, onClose, onLocationSelected, i
           })
           webViewRef.current.postMessage(msg)
         }
+      } else if (data.type === 'REQUEST_GPS') {
+        // WebView requests GPS — use expo-location (more reliable than navigator.geolocation in WebView)
+        handleRequestGPS()
       }
     } catch (e) {
       console.warn('MapPickerModal message error:', e)
     }
+  }
+
+  const handleRequestGPS = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') {
+        sendGPSResult(false)
+        return
+      }
+      // Try high-accuracy first, fall back to balanced
+      let pos
+      try {
+        pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+      } catch (_) {
+        pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+      }
+      sendGPSResult(true, pos.coords.latitude, pos.coords.longitude)
+    } catch (e) {
+      console.warn('MapPickerModal GPS error:', e)
+      sendGPSResult(false)
+    }
+  }
+
+  const sendGPSResult = (success, lat, lng) => {
+    if (!webViewRef.current) return
+    const msg = JSON.stringify({
+      type: 'GPS_RESULT',
+      success,
+      lat: lat != null ? lat : null,
+      lng: lng != null ? lng : null,
+    })
+    webViewRef.current.postMessage(msg)
   }
 
   const handleWebviewError = () => {

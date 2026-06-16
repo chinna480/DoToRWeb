@@ -152,9 +152,9 @@ export default function TrackingScreen() {
             custPosRef.current = { lat, lng }
             setCustLat(lat)
             setCustLng(lng)
-            if (orderIdRef.current) {
-              set(ref(db, `orders/${orderIdRef.current}/custLocation`), { lat, lng }).catch(() => {})
-            }
+            // NOTE: Do NOT write custLocation here — the booking coords (custLat/custLng on the order)
+            // are the repair destination. Live GPS would overwrite them with the customer's current
+            // position (e.g., office), making the technician navigate to the wrong place.
           } catch (e) {
             console.log('GPS position callback error:', e)
           }
@@ -308,10 +308,6 @@ export default function TrackingScreen() {
         setCustLat(lat)
         setCustLng(lng)
 
-        // Write fresh location to Firebase
-        if (orderIdRef.current) {
-          set(ref(db, `orders/${orderIdRef.current}/custLocation`), { lat, lng }).catch(() => {})
-        }
         setGpsStatus(`✅ Location refreshed (${lat.toFixed(4)}, ${lng.toFixed(4)})`)
         if (gpsTimeoutRef.current) clearTimeout(gpsTimeoutRef.current)
         gpsTimeoutRef.current = setTimeout(() => { setGpsStatus(''); gpsTimeoutRef.current = null }, 4000)
@@ -329,9 +325,6 @@ export default function TrackingScreen() {
             custPosRef.current = { lat, lng }
             setCustLat(lat)
             setCustLng(lng)
-            if (orderIdRef.current) {
-              set(ref(db, `orders/${orderIdRef.current}/custLocation`), { lat, lng }).catch(() => {})
-            }
           } catch (e) {
             console.log('GPS position callback error:', e)
           }
