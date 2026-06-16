@@ -7,7 +7,6 @@ import { db } from '../firebase/config'
 
 export default function ReviewScreen() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState('home')
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -31,34 +30,6 @@ export default function ReviewScreen() {
     setSubmitted(true)
   }
 
-  const CUST_TABS = [
-    { key: 'home',     icon: '🏠', label: 'Home' },
-    { key: 'orders',   icon: '📋', label: 'Orders' },
-    { key: 'profile',  icon: '👤', label: 'Profile' },
-  ]
-
-  const switchTab = (key) => {
-    if (key === 'home') { setActiveTab('home'); return }
-    if (key === 'orders') { router.push('/screens/HomeScreen'); return }
-    if (key === 'profile') { router.push('/screens/CustomerProfileScreen'); return }
-  }
-
-  const renderTabBar = () => (
-    <View style={s.tabBar}>
-      {CUST_TABS.map(tab => (
-        <TouchableOpacity
-          key={tab.key}
-          style={[s.tabItem, activeTab === tab.key && s.tabItemActive]}
-          onPress={() => switchTab(tab.key)}
-        >
-          <Text style={[s.tabIcon, activeTab === tab.key && s.tabIconActive]}>{tab.icon}</Text>
-          <Text style={[s.tabLabel, activeTab === tab.key && s.tabLabelActive]}>{tab.label}</Text>
-          {activeTab === tab.key && <View style={s.tabIndicator} />}
-        </TouchableOpacity>
-      ))}
-    </View>
-  )
-
   if (submitted) {
     return (
       <View style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -70,7 +41,6 @@ export default function ReviewScreen() {
             <Text style={s.homeBtnTxt}>Back to Home</Text>
           </TouchableOpacity>
         </View>
-        {renderTabBar()}
       </View>
     )
   }
@@ -116,7 +86,6 @@ export default function ReviewScreen() {
 
         <View style={{ height: 90 }} />
       </ScrollView>
-      {renderTabBar()}
     </View>
   )
 }

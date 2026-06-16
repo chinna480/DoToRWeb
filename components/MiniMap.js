@@ -18,7 +18,15 @@ import { WebView } from 'react-native-webview'
 
 // ── HTML Template ────────────────────────────────────────────────────────
 // Injected at two zoom levels — with zoom controls (interactive) or without (static)
-function buildHTML(interactive) {
+// Initial position/label data is embedded directly so the map starts correctly
+// without relying on postMessage (which can be unreliable in RN WebView).
+function buildHTML(interactive, initData) {
+  const initMyLat      = initData?.myLat ?? null
+  const initMyLng      = initData?.myLng ?? null
+  const initTargetLat  = initData?.targetLat ?? null
+  const initTargetLng  = initData?.targetLng ?? null
+  const initMyLabel    = initData?.myLabel || 'You'
+  const initTargetLabel = initData?.targetLabel || 'Destination'
   const zoomControlsCSS = interactive
     ? '/* show zoom controls */ .leaflet-control-zoom { display: flex !important; border-radius: 8px !important; overflow: hidden !important; border: 2px solid rgba(0,0,0,0.08) !important; box-shadow: 0 2px 8px rgba(0,0,0,0.12) !important; } .leaflet-control-zoom a { width: 36px !important; height: 36px !important; line-height: 36px !important; font-size: 18px !important; font-weight: 700 !important; color: #1A3A6B !important; background: #fff !important; } .leaflet-control-zoom a:hover { background: #f5f5f5 !important; } .leaflet-control-zoom a.leaflet-control-zoom-in { border-bottom: 1px solid #eee !important; }'
     : '.leaflet-control-zoom{display:none !important}'
@@ -66,8 +74,8 @@ ${zoomControlsCSS}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 var map, routePolyline, fallbackLine, myMarker, targetMarker;
-var myLat = null, myLng = null, targetLat = null, targetLng = null;
-var myLabel = 'You', targetLabel = 'Destination';
+var myLat = ${initMyLat}, myLng = ${initMyLng}, targetLat = ${initTargetLat}, targetLng = ${initTargetLng};
+var myLabel = '${initMyLabel}', targetLabel = '${initTargetLabel}';
 var isReady = false;
 var isInteractive = ${interactive ? 'true' : 'false'};
 var lastRouteFetch = 0;
@@ -113,7 +121,7 @@ function initMap() {
     attributionControl: false,
     dragging: ${interactive ? 'true' : 'false'},
     tap: ${interactive ? 'true' : 'false'},
-  }).setView([17.3850, 78.4867], 13)
+  }).setView([20, 0], 2)
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19
@@ -126,6 +134,46 @@ function initMap() {
   isReady = true
   updateAll()
 }
+
+// ── Update handler — called directly via injectJavaScript (reliable) ──
+// Also registered as a message listener below (backup channel).
+function handleUpdate(data) {
+  try {
+    if (data.type === 'INIT') {
+      if (data.myLabel) myLabel = data.myLabel
+      if (data.targetLabel) targetLabel = data.targetLabel
+      if (data.myLat != null && data.myLng != null) { myLat = data.myLat; myLng = data.myLng }
+      if (data.targetLat != null && data.targetLng != null) { targetLat = data.targetLat; targetLng = data.targetLng }
+      if (!isReady) { initMap(); return }
+      updateAll()
+    } else if (data.type === 'UPDATE_POSITIONS') {
+      var changed = false
+      if (data.myLat != null && data.myLng != null) {
+        myLat = data.myLat; myLng = data.myLng; changed = true
+      }
+      if (data.targetLat != null && data.targetLng != null) {
+        targetLat = data.targetLat; targetLng = data.targetLng; changed = true
+      }
+      if (changed) {
+        if (!isReady) { initMap(); return }
+        updateAll()
+      }
+    } else if (data.type === 'UPDATE_LABELS') {
+      if (data.myLabel) myLabel = data.myLabel
+      if (data.targetLabel) targetLabel = data.targetLabel
+      if (!isReady) { initMap(); return }
+      updateAll()
+    }
+  } catch(e) {}
+}
+
+// ── Listen for messages from React Native (both channels for reliability) ──
+// RN WebView may dispatch on window or document depending on version.
+window.addEventListener('message', function(e) { try { handleUpdate(JSON.parse(e.data)) } catch(e) {} });
+document.addEventListener('message', function(e) { try { handleUpdate(JSON.parse(e.data)) } catch(e) {} });
+
+// Also expose globally so injectJavaScript() can call it directly
+window.handleUpdate = handleUpdate;
 
 function updateMarkers() {
   if (myLat != null && myLng != null) {
@@ -264,31 +312,6 @@ function updateAll() {
   fitBounds()
 }
 
-// ── Listen for messages from React Native ──
-window.addEventListener('message', function(e) {
-  try {
-    var data = JSON.parse(e.data)
-    if (data.type === 'INIT') {
-      myLabel = data.myLabel || 'You'
-      targetLabel = data.targetLabel || 'Destination'
-      initMap()
-    } else if (data.type === 'UPDATE_POSITIONS') {
-      var changed = false
-      if (data.myLat != null && data.myLng != null) {
-        myLat = data.myLat; myLng = data.myLng; changed = true
-      }
-      if (data.targetLat != null && data.targetLng != null) {
-        targetLat = data.targetLat; targetLng = data.targetLng; changed = true
-      }
-      if (changed) updateAll()
-    } else if (data.type === 'UPDATE_LABELS') {
-      if (data.myLabel) myLabel = data.myLabel
-      if (data.targetLabel) targetLabel = data.targetLabel
-      updateAll()
-    }
-  } catch(e) {}
-});
-
 // Signal ready
 (function signalReady() {
   try {
@@ -303,9 +326,6 @@ window.addEventListener('message', function(e) {
 </html>`
 }
 
-// ── Full-screen map modal HTML (always interactive) ──
-const fullscreenHTML = buildHTML(true)
-
 // ── Component ────────────────────────────────────────────────────────────
 const MiniMap = forwardRef(function MiniMap({
   myLat,
@@ -314,6 +334,8 @@ const MiniMap = forwardRef(function MiniMap({
   targetLng,
   myLabel = 'You',
   targetLabel = 'Destination',
+  myAddress,
+  targetAddress,
   distance,
   eta,
   interactive = false,
@@ -332,79 +354,86 @@ const MiniMap = forwardRef(function MiniMap({
     openFullScreen: () => setFullscreen(true),
   }), [])
 
-  // Build HTML based on interactive prop
-  const mapHTML = useMemo(() => buildHTML(interactive), [interactive])
+  // Build HTML with initial positions embedded directly
+  // Note: on first render positions may be null (GPS not yet acquired),
+  // but this ensures the map starts correctly when they ARE available.
+  const initData = useMemo(() => ({
+    myLat, myLng, targetLat, targetLng, myLabel, targetLabel,
+  }), []) // empty deps: capture initial values only; updates use injectJavaScript
 
-  // ── Message helpers (shared between card and full-screen WebViews) ──
-  const sendMessage = useCallback((ref, data) => {
-    if (ref.current) {
-      try {
-        ref.current.postMessage(JSON.stringify(data))
-      } catch (e) {}
+  const mapHTML = useMemo(() => buildHTML(interactive, initData), [interactive, initData])
+  const fullscreenHTML = useMemo(() => buildHTML(true, initData), [initData])
+
+  // ── Reliable message sender: uses injectJavaScript (direct JS execution)
+  // instead of postMessage (event dispatch, unreliable in RN WebView).
+  // Falls back to postMessage if injectJavaScript is unavailable.
+  const sendUpdate = useCallback((ref, data) => {
+    if (!ref.current) return
+    const json = JSON.stringify(data)
+    const script = `window.handleUpdate(${json}); true;`
+    try {
+      ref.current.injectJavaScript(script)
+    } catch (e) {
+      // Fallback to postMessage if injectJavaScript isn't available
+      try { ref.current.postMessage(json) } catch(e2) {}
     }
   }, [])
 
   const sendPositions = useCallback((ref) => {
-    sendMessage(ref, {
+    sendUpdate(ref, {
       type: 'UPDATE_POSITIONS',
       myLat,
       myLng,
       targetLat,
       targetLng,
     })
-  }, [myLat, myLng, targetLat, targetLng, sendMessage])
+  }, [myLat, myLng, targetLat, targetLng, sendUpdate])
 
   const sendLabels = useCallback((ref) => {
-    sendMessage(ref, {
+    sendUpdate(ref, {
       type: 'UPDATE_LABELS',
       myLabel,
       targetLabel,
     })
-  }, [myLabel, targetLabel, sendMessage])
+  }, [myLabel, targetLabel, sendUpdate])
 
-  // ── Card WebView message handler ──
-  const handleMessage = useCallback((event) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data)
-      if (data.type === 'MAP_READY') {
-        initSent.current = true
-        sendMessage(webViewRef, { type: 'INIT', myLabel, targetLabel })
-      }
-    } catch (e) {}
-  }, [myLabel, targetLabel, sendMessage])
+  // ── WebView onLoad: fires when the page finishes loading (reliable).
+  // Sends INIT with current positions + labels so the map starts correctly.
+  const handleLoad = useCallback(() => {
+    initSent.current = true
+    sendUpdate(webViewRef, {
+      type: 'INIT',
+      myLat, myLng, targetLat, targetLng,
+      myLabel, targetLabel,
+    })
+  }, [myLat, myLng, targetLat, targetLng, myLabel, targetLabel, sendUpdate])
 
-  // ── Full-screen WebView message handler ──
-  const handleFsMessage = useCallback((event) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data)
-      if (data.type === 'MAP_READY') {
-        fsInitSent.current = true
-        sendMessage(fsWebViewRef, { type: 'INIT', myLabel, targetLabel })
-        // Immediately send positions
-        sendPositions(fsWebViewRef)
-      }
-    } catch (e) {}
-  }, [myLabel, targetLabel, sendMessage, sendPositions])
+  // ── Full-screen WebView: same approach ──
+  const handleFsLoad = useCallback(() => {
+    fsInitSent.current = true
+    sendUpdate(fsWebViewRef, {
+      type: 'INIT',
+      myLat, myLng, targetLat, targetLng,
+      myLabel, targetLabel,
+    })
+  }, [myLat, myLng, targetLat, targetLng, myLabel, targetLabel, sendUpdate])
 
-  // Sync card positions
+  // Sync positions/labels whenever they change (for BOTH card and full-screen)
   useEffect(() => {
     if (!initSent.current) return
     sendPositions(webViewRef)
   }, [myLat, myLng, targetLat, targetLng, sendPositions])
 
-  // Sync full-screen positions
   useEffect(() => {
     if (!fsInitSent.current) return
     sendPositions(fsWebViewRef)
   }, [myLat, myLng, targetLat, targetLng, sendPositions])
 
-  // Sync card labels
   useEffect(() => {
     if (!initSent.current) return
     sendLabels(webViewRef)
   }, [myLabel, targetLabel, sendLabels])
 
-  // Sync full-screen labels
   useEffect(() => {
     if (!fsInitSent.current) return
     sendLabels(fsWebViewRef)
@@ -463,22 +492,39 @@ const MiniMap = forwardRef(function MiniMap({
           <View style={{ width: 36 }} />
         </View>
 
-        {/* Full-screen interactive map */}
-        <View style={styles.fsMapWrap}>
-          <WebView
-            ref={fsWebViewRef}
-            source={{ html: fullscreenHTML }}
-            style={styles.fsWebView}
-            onMessage={handleFsMessage}
-            javaScriptEnabled
-            domStorageEnabled
-            geolocationEnabled
-            allowFileAccess
-            mixedContentMode="always"
-            originWhitelist={['*']}
-            scrollEnabled={false}
-            bounces={false}
-          />
+        {/* Address info panel */}
+        <View style={styles.fsAddressPanel}>
+          <View style={styles.fsAddressRow}>
+            <Text style={styles.fsAddressIcon}>📍</Text>
+            <View style={styles.fsAddressTextWrap}>
+              <Text style={styles.fsAddressLabel}>Customer</Text>
+              <Text style={styles.fsAddressValue} numberOfLines={3}>{targetAddress || targetLabel || 'Waiting...'}</Text>
+            </View>
+          </View>
+          <View style={styles.fsAddressDivider} />
+          <View style={styles.fsAddressRow}>
+            <Text style={styles.fsAddressIcon}>🛵</Text>
+            <View style={styles.fsAddressTextWrap}>
+              <Text style={styles.fsAddressLabel}>Your Location</Text>
+              <Text style={styles.fsAddressValue} numberOfLines={1}>{myAddress || myLabel || 'You'}</Text>
+            </View>
+          </View>
+        </View>            {/* Full-screen interactive map */}
+          <View style={styles.fsMapWrap}>
+            <WebView
+              ref={fsWebViewRef}
+              source={{ html: fullscreenHTML }}
+              style={styles.fsWebView}
+              onLoad={handleFsLoad}
+              javaScriptEnabled
+              domStorageEnabled
+              geolocationEnabled
+              allowFileAccess
+              mixedContentMode="always"
+              originWhitelist={['*']}
+              scrollEnabled={false}
+              bounces={false}
+            />
 
           {/* Distance/ETA bar */}
           <View style={styles.fsInfoBar}>
@@ -515,7 +561,7 @@ const MiniMap = forwardRef(function MiniMap({
               ref={webViewRef}
               source={{ html: mapHTML }}
               style={styles.webview}
-              onMessage={handleMessage}
+              onLoad={handleLoad}
               javaScriptEnabled
               domStorageEnabled
               geolocationEnabled
@@ -564,7 +610,7 @@ const MiniMap = forwardRef(function MiniMap({
             ref={webViewRef}
             source={{ html: mapHTML }}
             style={styles.webview}
-            onMessage={handleMessage}
+            onLoad={handleLoad}
             javaScriptEnabled
             domStorageEnabled
             geolocationEnabled
@@ -578,7 +624,7 @@ const MiniMap = forwardRef(function MiniMap({
           {/* Expand button at top-right */}
           {expandBtn}
 
-          {/* Distance/ETA info bar at bottom */}
+          {/* Distance/ETA info bar at bottom with Open Maps button */}
           <View style={styles.interactiveInfoBar}>
             <View style={styles.interactiveInfoLeft}>
               <Text style={styles.interactiveInfoIcon}>📍</Text>
@@ -587,9 +633,10 @@ const MiniMap = forwardRef(function MiniMap({
                 <Text style={styles.interactiveInfoValue}>{distance || '--'} · {eta || '--'}</Text>
               </View>
             </View>
-            <View style={styles.interactiveInfoRight}>
-              <Text style={styles.interactiveInfoHint}>Pinch to zoom · Drag to pan</Text>
-            </View>
+            <TouchableOpacity style={styles.interactiveMapsBtn} onPress={onPress} activeOpacity={0.7}>
+              <Text style={styles.interactiveMapsBtnIcon}>🗺️</Text>
+              <Text style={styles.interactiveMapsBtnTxt}>Open Maps</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -707,13 +754,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
-  interactiveInfoRight: {
-    alignItems: 'flex-end',
+  interactiveMapsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FF6B00',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
-  interactiveInfoHint: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 9,
-    fontWeight: '600',
+  interactiveMapsBtnIcon: {
+    fontSize: 14,
+  },
+  interactiveMapsBtnTxt: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
   },
 
   // ── Expand Button (top-right corner) ──
@@ -767,6 +823,47 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
+  // ── Address Panel (full-screen) ──
+  fsAddressPanel: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  fsAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  fsAddressIcon: {
+    fontSize: 16,
+    marginTop: 2,
+  },
+  fsAddressTextWrap: {
+    flex: 1,
+  },
+  fsAddressLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#888',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  fsAddressValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A3A6B',
+    marginTop: 1,
+  },
+  fsAddressDivider: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginVertical: 4,
+    marginLeft: 26,
+  },
+
   fsMapWrap: {
     flex: 1,
     backgroundColor: '#e8e4df',
