@@ -67,6 +67,7 @@ export default function TechHomeScreen() {
   const [completedJobs, setCompleted]      = useState([])
   const [totalJobs, setTotal]              = useState(0)
   const [dailyCompleted, setDailyCompleted] = useState(0)
+  const [techCategories, setTechCategories] = useState([]) // tech's service categories
   const [completedFilter, setCompletedFilter] = useState('all') // 'all', 'today', 'week', 'month'
   const [custLat, setCustLat]            = useState(null)
   const [custLng, setCustLng]            = useState(null)
@@ -103,6 +104,7 @@ export default function TechHomeScreen() {
   const techLocRef        = useRef('')
   const techPincodeRef    = useRef('')
   const techPhoneRef      = useRef('')
+  const techCatRef        = useRef([]) // e.g. ['mobile', 'tv', 'ac']
   const sentNearby        = useRef(false)
   const sentArrived       = useRef(false)
   const prevPendingIds    = useRef(new Set())
@@ -224,6 +226,18 @@ export default function TechHomeScreen() {
     techPincodeRef.current = (pi || '').toLowerCase().trim()
     techPhoneRef.current = p || ''
     if (t) techPushToken.current = t
+
+    // Load tech's service categories from AsyncStorage
+    try {
+      const cats = await AsyncStorage.getItem('techCategories')
+      if (cats) {
+        const parsed = JSON.parse(cats)
+        if (Array.isArray(parsed)) {
+          setTechCategories(parsed)
+          techCatRef.current = parsed
+        }
+      }
+    } catch (_) {}
   }
 
   const logout = () => {
@@ -332,14 +346,24 @@ export default function TechHomeScreen() {
         }
       })
 
-      // Filter pending jobs by technician's pincode + GPS proximity (20 km radius)
+      // Filter pending jobs by technician's service categories + pincode + GPS proximity
       const filterPincode = techPincodeRef.current
-      const techLat = techLatRef.current  // use refs — state is stale in closures
+      const techLat = techLatRef.current
       const techLng = techLngRef.current
       const myPhone       = techPhoneRef.current
       const assignments   = areaAssignments.current
+      const myCats        = techCatRef.current
 
       let pending = allPending
+
+      // Filter by service category — only show jobs matching tech's selected categories
+      if (myCats.length > 0) {
+        pending = pending.filter(o => {
+          const orderCat = o.serviceCategory
+          return orderCat && myCats.includes(orderCat)
+        })
+      }
+
       if (filterPincode) {
         pending = pending.filter(o => (o.pincode || '').toLowerCase().trim() === filterPincode)
       }

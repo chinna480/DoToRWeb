@@ -431,20 +431,39 @@ export async function notifyCustomerBookingConfirmed(brand, repair) {
  */
 export async function notifyTechsForNewOrder(order, orderId) {
   const RADIUS_KM = 10;
+  const orderCat = order.serviceCategory; // e.g. 'mobile', 'tv', 'ac'
 
   const orderLat = order.custLat;
   const orderLng = order.custLng;
 
-  console.log('🔍 [Client] Notifying techs for new order:', order.customerName);
+  console.log('🔍 [Client] Notifying techs for new order:', order.customerName, `cat: ${orderCat}`);
 
   let notifiedTechs = 0;
 
   try {
+    // ── Helper: filter techs by their service categories ──
+    const filterByCategory = async (techsList) => {
+      if (!orderCat) return techsList; // No category filter — notify all
+      const filtered = [];
+      for (const tech of techsList) {
+        try {
+          const profileSnap = await get(ref(db, `techUsers/${tech.phone}`));
+          if (profileSnap.exists()) {
+            const cats = profileSnap.val().serviceCategories || [];
+            if (cats.includes(orderCat)) {
+              filtered.push(tech);
+            }
+          }
+        } catch (_) {}
+      }
+      return filtered;
+    };
+
     // ── STEP 1: Try to find nearby techs via GPS (techsOnline) ──
     const techsSnap = await get(ref(db, 'techsOnline'));
 
     if (techsSnap.exists() && orderLat && orderLng) {
-      const nearbyTechs = [];
+      let nearbyTechs = [];
 
       techsSnap.forEach(child => {
         const techPhone = child.key;
@@ -458,8 +477,11 @@ export async function notifyTechsForNewOrder(order, orderId) {
         }
       });
 
+      // Filter by service category
+      nearbyTechs = await filterByCategory(nearbyTechs);
+
       if (nearbyTechs.length > 0) {
-        console.log(`✅ Found ${nearbyTechs.length} nearby technician(s)`);
+        console.log(`✅ Found ${nearbyTechs.length} nearby & matching technician(s)`);
         await notifyTechList(nearbyTechs, order, orderId);
         notifiedTechs += nearbyTechs.length;
       }
@@ -468,7 +490,7 @@ export async function notifyTechsForNewOrder(order, orderId) {
     // ── STEP 2: Fallback — notify ALL registered techs (app-closed scenario) ──
     if (notifiedTechs === 0) {
       console.log('📡 No online/nearby techs — falling back to ALL registered techs');
-      const allTechs = [];
+      let allTechs = [];
 
       // Try techUsers first (primary path where tokens are saved)
       const usersSnap = await get(ref(db, 'techUsers'));
@@ -489,17 +511,20 @@ export async function notifyTechsForNewOrder(order, orderId) {
         });
       }
 
+      // Filter by service category
+      allTechs = await filterByCategory(allTechs);
+
       if (allTechs.length > 0) {
-        console.log(`📡 Notifying ${allTechs.length} registered tech(s)`);
+        console.log(`📡 Notifying ${allTechs.length} registered & matching tech(s)`);
         await notifyTechList(allTechs, order, orderId);
         notifiedTechs = allTechs.length;
       }
     }
 
     if (notifiedTechs === 0) {
-      console.log('⏭️ No technicians could be notified');
+      console.log('⏭️ No matching technicians could be notified');
     } else {
-      console.log(`🎉 ${notifiedTechs} tech(s) notified!`);
+      console.log(`🎉 ${notifiedTechs} matching tech(s) notified!`);
     }
   } catch (err) {
     console.error('❌ Error notifying techs:', err);

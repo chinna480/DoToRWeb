@@ -150,11 +150,10 @@ export default function TrackingScreen() {
             const lat = pos.coords.latitude
             const lng = pos.coords.longitude
             custPosRef.current = { lat, lng }
-            setCustLat(lat)
-            setCustLng(lng)
-            // NOTE: Do NOT write custLocation here — the booking coords (custLat/custLng on the order)
+            // NOTE: Do NOT set custLat/custLng here — the booking coords (order.custLat/order.custLng)
             // are the repair destination. Live GPS would overwrite them with the customer's current
             // position (e.g., office), making the technician navigate to the wrong place.
+            // Booking coords are set from the order listener below.
           } catch (e) {
             console.log('GPS position callback error:', e)
           }
@@ -206,6 +205,9 @@ export default function TrackingScreen() {
           if (o.modelName) setModelName(o.modelName)
           if (o.description) setDescription(o.description)
           if (o.location) setLocation(o.location)
+          // Always use the booking address coordinates (not live GPS) as the destination
+          if (o.custLat != null) { setCustLat(o.custLat); custPosRef.current = { ...custPosRef.current, lat: o.custLat } }
+          if (o.custLng != null) { setCustLng(o.custLng); custPosRef.current = { ...custPosRef.current, lng: o.custLng } }
           if (o.status === 'completed') {
             setJobDone(true)
             setStatusMsg('✅ Repair Completed!')
@@ -305,10 +307,8 @@ export default function TrackingScreen() {
         const lat = pos.coords.latitude
         const lng = pos.coords.longitude
         custPosRef.current = { lat, lng }
-        setCustLat(lat)
-        setCustLng(lng)
-
-        setGpsStatus(`✅ Location refreshed (${lat.toFixed(4)}, ${lng.toFixed(4)})`)
+        // Do NOT set custLat/custLng — the booking destination must remain from the order
+        setGpsStatus(`✅ GPS refreshed (${lat.toFixed(4)}, ${lng.toFixed(4)})`)
         if (gpsTimeoutRef.current) clearTimeout(gpsTimeoutRef.current)
         gpsTimeoutRef.current = setTimeout(() => { setGpsStatus(''); gpsTimeoutRef.current = null }, 4000)
       }
@@ -323,8 +323,7 @@ export default function TrackingScreen() {
             const lat = pos.coords.latitude
             const lng = pos.coords.longitude
             custPosRef.current = { lat, lng }
-            setCustLat(lat)
-            setCustLng(lng)
+            // Do NOT set custLat/custLng — the booking destination must remain from the order
           } catch (e) {
             console.log('GPS position callback error:', e)
           }

@@ -31,6 +31,34 @@ const db = getDatabase(app);
 // When booking, we create the same order structure as HomeScreen.js
 const PHONE_BRANDS  = ['iPhone','Samsung','OnePlus','Redmi','Vivo','Oppo','Realme','Nokia'];
 const LAPTOP_BRANDS = ['Dell','HP','Lenovo','MacBook','Asus','Acer','MSI','Sony'];
+const TV_BRANDS = ['Samsung','LG','Sony','Panasonic','Toshiba','MI','OnePlus','TCL'];
+const AC_BRANDS = ['Voltas','LG','Samsung','Blue Star','Daikin','Hitachi','Panasonic','Lloyd'];
+const FRIDGE_BRANDS = ['Samsung','LG','Whirlpool','Godrej','Haier','Panasonic','Bosch','Hitachi'];
+const WM_BRANDS = ['Samsung','LG','Whirlpool','Bosch','IFB','Godrej','Panasonic','Haier'];
+
+const SERVICE_CATEGORIES = [
+  { key: 'mobile',       icon: '📱', label: 'Mobile Repair',             hasDeviceFlow: true },
+  { key: 'laptop',       icon: '💻', label: 'Laptop & PC Repair',        hasDeviceFlow: true },
+  { key: 'tv',           icon: '📺', label: 'TV Repair',                 hasDeviceFlow: true },
+  { key: 'ac',           icon: '❄️', label: 'AC Service & Repair',       hasDeviceFlow: true },
+  { key: 'refrigerator', icon: '🧊', label: 'Refrigerator Repair',       hasDeviceFlow: true },
+  { key: 'washing',      icon: '🧺', label: 'Washing Machine Repair',     hasDeviceFlow: true },
+  { key: 'electrician',  icon: '🔌', label: 'Electrician Services',      hasDeviceFlow: false },
+  { key: 'plumbing',     icon: '🚰', label: 'Plumbing Services',          hasDeviceFlow: false },
+  { key: 'cctv',         icon: '📡', label: 'CCTV Installation & Service', hasDeviceFlow: false },
+  { key: 'wifi',         icon: '🌐', label: 'Wi-Fi Router Setup',        hasDeviceFlow: false },
+  { key: 'ro',           icon: '💧', label: 'RO Water Purifier Service', hasDeviceFlow: false },
+  { key: 'inverter',     icon: '🔋', label: 'Inverter & UPS Service',    hasDeviceFlow: false },
+]
+
+const SERVICE_BRANDS = {
+  mobile: PHONE_BRANDS,
+  laptop: LAPTOP_BRANDS,
+  tv: TV_BRANDS,
+  ac: AC_BRANDS,
+  refrigerator: FRIDGE_BRANDS,
+  washing: WM_BRANDS,
+}
 
 const TIME_SLOTS = [
   '09:00 - 10:00', '10:00 - 11:00', '11:00 - 12:00', '12:00 - 13:00',
@@ -47,19 +75,21 @@ export async function createOrder(orderData) {
     const orderId = orderRef.key;
 
     const order = {
-      customerName:  orderData.name,
-      customerPhone: orderData.phone,
-      location:      orderData.location || '',
-      pincode:       orderData.pincode || '',
-      device:        orderData.device || '',
-      brand:         orderData.brand,
-      modelName:     orderData.modelName || orderData.model || '',
-      description:   (orderData.description || '').trim(),
-      status:        'pending',
-      time:          orderData.time || new Date().toLocaleTimeString(),
-      custLat:       orderData.lat || null,
-      custLng:       orderData.lng || null,
-      images:        orderData.images || [],
+      customerName:    orderData.name,
+      customerPhone:   orderData.phone,
+      location:        orderData.location || '',
+      pincode:         orderData.pincode || '',
+      serviceCategory: orderData.serviceCategory || null,
+      serviceLabel:    orderData.serviceLabel || null,
+      device:          orderData.device || null,
+      brand:           orderData.brand || null,
+      modelName:       orderData.modelName || orderData.model || '',
+      description:     (orderData.description || '').trim(),
+      status:          'pending',
+      time:            orderData.time || new Date().toLocaleTimeString(),
+      custLat:         orderData.lat || null,
+      custLng:         orderData.lng || null,
+      images:          orderData.images || [],
       ...(orderData.isAppointment && {
         isAppointment: true,
         appointmentTime: orderData.appointmentTime,
@@ -585,6 +615,12 @@ export {
   get,
   PHONE_BRANDS,
   LAPTOP_BRANDS,
+  TV_BRANDS,
+  AC_BRANDS,
+  FRIDGE_BRANDS,
+  WM_BRANDS,
+  SERVICE_CATEGORIES,
+  SERVICE_BRANDS,
   TIME_SLOTS,
   MONTHS,
   DAYS,

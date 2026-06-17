@@ -10,9 +10,11 @@ const CLOUDINARY_CLOUD_NAME    = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME |
 const CLOUDINARY_UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'dotor_orders'
 // ─────────────────────────────────────────────────────────────────────────
 
-const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`
+const CLOUDINARY_IMAGE_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`
+const CLOUDINARY_VIDEO_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`
 const MAX_RETRIES    = 3
-const MAX_FILE_SIZE  = 5 * 1024 * 1024 // 5 MB
+const MAX_IMAGE_SIZE  = 5 * 1024 * 1024 // 5 MB
+const MAX_VIDEO_SIZE  = 50 * 1024 * 1024 // 50 MB
 
 /**
  * Upload a single image to Cloudinary using React Native's native file upload.
@@ -34,7 +36,7 @@ export async function uploadImage(uri, folder) {
         fileSize = info.size || 0
       } catch (_) {}
 
-      if (fileSize > MAX_FILE_SIZE) {
+      if (fileSize > MAX_IMAGE_SIZE) {
         throw new Error(`File too large (${(fileSize / 1024 / 1024).toFixed(1)} MB > 5 MB)`)
       }
 
@@ -45,8 +47,6 @@ export async function uploadImage(uri, folder) {
                      : 'image/jpeg'
 
       // ⭐ Use React Native native file upload — NOT base64 data URI.
-      // React Native's FormData handles { uri, type, name } objects natively,
-      // streaming the file directly without loading it all into memory.
       const formData = new FormData()
       formData.append('file', {
         uri,
@@ -58,11 +58,9 @@ export async function uploadImage(uri, folder) {
 
       console.log(`   📡 Sending to Cloudinary (native file upload)...`)
 
-      const response = await fetch(CLOUDINARY_URL, {
+      const response = await fetch(CLOUDINARY_IMAGE_URL, {
         method: 'POST',
         body: formData,
-        // ⚠️ No Content-Type header — React Native sets it automatically
-        // with the correct boundary when body is FormData.
       })
 
       const responseText = await response.text()
@@ -127,6 +125,117 @@ export async function uploadImages(assets, orderId) {
     console.error(`📸 ALL ${assets.length} upload(s) FAILED:`, errors)
   } else {
     console.log(`📸 ${urls.length}/${assets.length} uploaded ✅`)
+  }
+
+  return urls.length > 0 ? urls : null
+}
+
+// ── VIDEO UPLOAD (Cloudinary video endpoint) ──────────────────────────────
+
+/**
+ * Upload a single video to Cloudinary.
+ */
+export async function uploadVideo(uri, folder) {
+  let lastError = null
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`🎥 Cloudinary video upload attempt ${attempt}/${MAX_RETRIES}`)
+
+      let fileSize = 0
+      try {
+        const info = await FileSystem.getInfoAsync(uri, { size: true })
+        fileSize = info.size || 0
+      } catch (_) {}
+
+      if (fileSize > MAX_VIDEO_SIZE) {
+        throw new Error(`File too large (${(fileSize / 1024 / 1024).toFixed(1)} MB > 50 MB)`)
+      }
+
+      const lower    = uri.toLowerCase()
+      const ext      = lower.endsWith('.mp4')  ? 'mp4'
+                     : lower.endsWith('.mov')  ? 'mov'
+                     : lower.endsWith('.avi')  ? 'avi'
+                     : lower.endsWith('.mkv')  ? 'mkv'
+                     : 'mp4'
+      const mimeType = `video/${ext}`
+
+      const formData = new FormData()
+      formData.append('file', {
+        uri,
+        type: mimeType,
+        name: `video_${Date.now()}.${ext}`,
+      })
+      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET)
+      formData.append('folder', folder)
+
+      console.log(`   📡 Sending video to Cloudinary...`)
+
+      const response = await fetch(CLOUDINARY_VIDEO_URL, {
+        method: 'POST',
+        body: formData,
+      })
+
+      const responseText = await response.text()
+
+      if (!response.ok) {
+        throw new Error(`Cloudinary video ${response.status}: ${responseText.substring(0, 200)}`)
+      }
+
+      const data = JSON.parse(responseText)
+
+      if (!data.secure_url) {
+        throw new Error(`No secure_url in video response`)
+      }
+
+      console.log(`   ✅ Video upload success: ${data.secure_url.substring(0, 80)}`)
+      return data.secure_url
+
+    } catch (e) {
+      lastError = e
+      console.error(`   ❌ Video attempt ${attempt} failed: ${e.message || e}`)
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, attempt * 1000))
+      }
+    }
+  }
+
+  throw lastError
+}
+
+/**
+ * Upload multiple videos sequentially.
+ */
+export async function uploadVideos(assets, orderId) {
+  if (!assets || assets.length === 0) return null
+
+  const folder = `orders/${orderId}`
+  const urls   = []
+  const errors = []
+
+  console.log(`🎥 Uploading ${assets.length} video(s) → folder: ${folder}`)
+
+  for (let i = 0; i < assets.length; i++) {
+    const asset = assets[i]
+    if (!asset?.uri) {
+      console.warn(`   ⚠️ Video ${i}: skipped (no URI)`)
+      continue
+    }
+
+    try {
+      const url = await uploadVideo(asset.uri, folder)
+      urls.push(url)
+      console.log(`   ✅ Video ${i}: done`)
+    } catch (e) {
+      errors.push(`Video ${i}: ${e.message || e}`)
+      console.error(`   ❌ Video ${i}: failed — ${e.message || e}`)
+    }
+  }
+
+  if (urls.length === 0) {
+    console.error(`🎥 ALL ${assets.length} upload(s) FAILED:`, errors)
+  } else {
+    console.log(`🎥 ${urls.length}/${assets.length} uploaded ✅`)
   }
 
   return urls.length > 0 ? urls : null

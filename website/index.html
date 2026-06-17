@@ -41,6 +41,31 @@
       transition: all 0.2s;
     }
     .get-location-btn:hover { background: #ffe0cc; }
+    .service-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .service-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      padding: 14px 8px;
+      text-align: center;
+      cursor: pointer;
+      border: 2px solid transparent;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .service-card:hover { border-color: var(--primary-light); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+    .service-card.active { border-color: var(--primary); background: var(--primary-light); }
+    .service-card .icon { font-size: 26px; }
+    .service-card .name { font-size: 10px; font-weight: 700; color: var(--navy); line-height: 1.3; }
+    .service-card .badge { font-size: 8px; color: var(--primary); font-weight: 700; background: #FFF0E6; padding: 2px 6px; border-radius: 6px; margin-top: 2px; }
     .why-section { margin-top: 30px; }
     .success-box {
       text-align: center;
@@ -518,31 +543,25 @@
         </div>
       </div>
 
-      <!-- STEP 2: Device & Brand -->
+      <!-- STEP 2: Select Service -->
       <div id="step2" class="form-step" style="display:none;">
-        <h3 style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:16px;">📱 Select Device & Brand</h3>
-        <p style="font-size:13px;color:var(--gray);margin-bottom:12px;">Choose your device type</p>
-        <div class="device-grid">
-          <div class="device-card" onclick="selectDevice('phone')" id="devPhone">
-            <div class="icon">📱</div>
-            <div class="name">Phone</div>
-          </div>
-          <div class="device-card" onclick="selectDevice('laptop')" id="devLaptop">
-            <div class="icon">💻</div>
-            <div class="name">Laptop</div>
-          </div>
-        </div>
+        <h3 style="font-size:15px;font-weight:800;color:var(--navy);margin-bottom:16px;">🔧 Select Service</h3>
+        <p style="font-size:13px;color:var(--gray);margin-bottom:12px;">What do you need help with?</p>
 
+        <!-- Service Grid (rendered by JS) -->
+        <div class="service-grid" id="serviceGrid"></div>
+
+        <!-- Brand Section (shown only for device-flow services) -->
         <div id="brandSection" style="display:none;">
-          <p style="font-size:13px;color:var(--gray);margin-bottom:12px;margin-top:8px;">Select your brand</p>
+          <p style="font-size:13px;color:var(--gray);margin-bottom:12px;">Select your brand</p>
           <div class="brand-grid" id="brandGrid"></div>
 
           <!-- Device Model -->
           <div id="modelSection" style="display:none;margin-top:16px;">
             <div class="form-group">
-              <label>Device Model (optional but helpful)</label>
-              <input type="text" id="deviceModel" class="form-input" placeholder="e.g. iPhone 15 Pro Max, Galaxy S24, Dell XPS 15...">
-              <p class="form-hint">Helps the technician know exactly what device you have and bring the right parts</p>
+              <label>Device Model (helpful for technician)</label>
+              <input type="text" id="deviceModel" class="form-input" placeholder="e.g. iPhone 15 Pro Max, Samsung Galaxy S24...">
+              <p class="form-hint">Helps the technician bring the right parts</p>
             </div>
           </div>
         </div>
@@ -571,7 +590,7 @@
             </div>
           </div>
 
-          <input type="file" id="fileInput" accept="image/*" multiple>
+          <input type="file" id="fileInput" accept="image/*,video/*" multiple>
           <button class="photo-upload-btn" onclick="document.getElementById('fileInput').click()" type="button">
             📷 Upload Photos
           </button>
@@ -835,14 +854,18 @@
 
   <script type="module">
     import {
-      createOrder, PHONE_BRANDS, LAPTOP_BRANDS, TIME_SLOTS, MONTHS, DAYS
+      createOrder, PHONE_BRANDS, LAPTOP_BRANDS, TV_BRANDS, AC_BRANDS, FRIDGE_BRANDS, WM_BRANDS,
+      SERVICE_CATEGORIES, SERVICE_BRANDS, TIME_SLOTS, MONTHS, DAYS
     } from './firebase.js';
 
     // ── Cloudinary Config (same as mobile app) ─────────────────────
-    const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/dxyp1sblk/image/upload';
+    const CLOUDINARY_IMAGE_URL = 'https://api.cloudinary.com/v1_1/dxyp1sblk/image/upload';
+    const CLOUDINARY_VIDEO_URL = 'https://api.cloudinary.com/v1_1/dxyp1sblk/video/upload';
     const CLOUDINARY_PRESET = 'dotor_orders';
     const MAX_IMAGES = 6;
+    const MAX_VIDEOS = 2;
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+    const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
 
     // ── State ────────────────────────────────────────────────────────
     let selectedDevice = null;
@@ -854,7 +877,8 @@
     let selectedDate = null;
     let selectedSlot = null;
     let submitting = false;
-    let selectedFiles = [];      // Array of { file, preview, status, url }
+    let selectedFiles = [];      // Array of { file, preview, status, url, type }
+    let selectedVideos = [];     // Array of { file, preview, status, url }
     let uploadingCount = 0;
 
     // ── Map Picker State ──────────────────────────────────────────
@@ -869,18 +893,31 @@
     const dates = generateDates();
 
     // ── Expose functions globally for inline onclick ──────────────────
-    window.selectDevice = function(type) {
-      selectedDevice = type;
-      document.querySelectorAll('.device-card').forEach(c => c.classList.remove('active'));
-      document.getElementById('dev' + type.charAt(0).toUpperCase() + type.slice(1)).classList.add('active');
+    window.selectDevice = function(key) {
+      selectedDevice = key;
+      document.querySelectorAll('.service-card').forEach(c => c.classList.remove('active'));
+      const card = document.querySelector(`.service-card[data-key="${key}"]`);
+      if (card) card.classList.add('active');
 
-      const brands = type === 'phone' ? PHONE_BRANDS : LAPTOP_BRANDS;
-      const grid = document.getElementById('brandGrid');          grid.innerHTML = brands.map(b => `<div class="brand-card" onclick="selectBrand('${b}', this)">${b}</div>`).join('');
-      document.getElementById('brandSection').style.display = 'block';
-      document.getElementById('modelSection').style.display = 'none';
-      document.getElementById('deviceModel').value = '';
-      selectedBrand = null;
-      document.getElementById('step2Next').disabled = true;
+      const svc = SERVICE_CATEGORIES.find(s => s.key === key);
+      const deviceFlow = svc ? svc.hasDeviceFlow : false;
+
+      if (deviceFlow) {
+        const brands = SERVICE_BRANDS[key] || PHONE_BRANDS;
+        const grid = document.getElementById('brandGrid');
+        grid.innerHTML = brands.map(b => `<div class="brand-card" onclick="selectBrand('${b}', this)">${b}</div>`).join('');
+        document.getElementById('brandSection').style.display = 'block';
+        document.getElementById('modelSection').style.display = 'none';
+        document.getElementById('deviceModel').value = '';
+        selectedBrand = null;
+        document.getElementById('step2Next').disabled = true;
+      } else {
+        // Non-device service: no brand/model needed, enable Next immediately
+        document.getElementById('brandSection').style.display = 'none';
+        selectedBrand = null;
+        document.getElementById('deviceModel').value = '';
+        document.getElementById('step2Next').disabled = false;
+      }
       updateSummary();
     };
 
@@ -900,9 +937,16 @@
           return;
         }
       }
-      if (step === 3 && !selectedBrand) {
-        showToast('Please select a device and brand', 'error');
-        return;
+      if (step === 3) {
+        if (!selectedDevice) {
+          showToast('Please select a service category', 'error');
+          return;
+        }
+        const svc = SERVICE_CATEGORIES.find(s => s.key === selectedDevice);
+        if (svc && svc.hasDeviceFlow && !selectedBrand) {
+          showToast('Please select a brand', 'error');
+          return;
+        }
       }
       currentStep = step;
       document.querySelectorAll('.form-step').forEach(s => s.style.display = 'none');
@@ -1713,33 +1757,38 @@
     photoSection.addEventListener('drop', (e) => {
       e.preventDefault();
       photoSection.classList.remove('drag-over');
-      const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+      const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
       addFiles(files);
     });
 
     function addFiles(files) {
-      const remaining = MAX_IMAGES - selectedFiles.length;
-      if (remaining <= 0) {
-        showToast('Maximum ' + MAX_IMAGES + ' photos allowed', 'error');
-        return;
-      }
+      const imgRemaining = MAX_IMAGES - selectedFiles.length;
+      const vidRemaining = MAX_VIDEOS - selectedVideos.length;
 
-      const toAdd = files.slice(0, remaining);
-
-      toAdd.forEach(file => {
-        // Check file size
-        if (file.size > MAX_IMAGE_SIZE) {
-          showToast(file.name + ' is too large (max 5MB)', 'error');
-          return;
+      files.forEach(file => {
+        if (file.type.startsWith('video/')) {
+          if (vidRemaining <= 0) {
+            showToast('Maximum ' + MAX_VIDEOS + ' videos allowed', 'error');
+            return;
+          }
+          if (file.size > MAX_VIDEO_SIZE) {
+            showToast(file.name + ' is too large (max 50MB)', 'error');
+            return;
+          }
+          const preview = URL.createObjectURL(file);
+          selectedVideos.push({ file, preview, status: 'pending', url: null });
+        } else {
+          if (imgRemaining <= 0) {
+            showToast('Maximum ' + MAX_IMAGES + ' photos allowed', 'error');
+            return;
+          }
+          if (file.size > MAX_IMAGE_SIZE) {
+            showToast(file.name + ' is too large (max 5MB)', 'error');
+            return;
+          }
+          const preview = URL.createObjectURL(file);
+          selectedFiles.push({ file, preview, status: 'pending', url: null });
         }
-
-        const preview = URL.createObjectURL(file);
-        selectedFiles.push({
-          file,
-          preview,
-          status: 'pending', // pending | uploading | done | error
-          url: null,
-        });
       });
 
       updatePhotoGrid();
@@ -1752,16 +1801,25 @@
       updatePhotoGrid();
     };
 
-    async function uploadImage(file, index) {
+    window.removeVideo = function(index) {
+      const item = selectedVideos[index];
+      if (item.preview) URL.revokeObjectURL(item.preview);
+      selectedVideos.splice(index, 1);
+      updatePhotoGrid();
+    };
+
+    async function uploadMedia(file, index, isVideo) {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('upload_preset', CLOUDINARY_PRESET);
 
-      selectedFiles[index].status = 'uploading';
+      const list = isVideo ? selectedVideos : selectedFiles;
+      list[index].status = 'uploading';
       updatePhotoGrid();
 
       try {
-        const res = await fetch(CLOUDINARY_URL, {
+        const url = isVideo ? CLOUDINARY_VIDEO_URL : CLOUDINARY_IMAGE_URL;
+        const res = await fetch(url, {
           method: 'POST',
           body: formData,
         });
@@ -1769,25 +1827,31 @@
         if (!res.ok) throw new Error('Upload failed: ' + res.status);
 
         const data = await res.json();
-        selectedFiles[index].url = data.secure_url;
-        selectedFiles[index].status = 'done';
+        list[index].url = data.secure_url;
+        list[index].status = 'done';
       } catch(err) {
         console.error('Upload failed:', err);
-        selectedFiles[index].status = 'error';
+        list[index].status = 'error';
       }
 
       updatePhotoGrid();
     }
 
-    async function uploadAllImages() {
-      const toUpload = selectedFiles.filter(f => f.status === 'pending' && !f.url);
-      if (toUpload.length === 0) return;
+    async function uploadAllMedia() {
+      const imgUpload = selectedFiles.filter(f => f.status === 'pending' && !f.url);
+      const vidUpload = selectedVideos.filter(f => f.status === 'pending' && !f.url);
+      if (imgUpload.length === 0 && vidUpload.length === 0) return;
 
-      uploadingCount = toUpload.length;
-      const promises = toUpload.map((item, i) => {
-        const idx = selectedFiles.indexOf(item);
-        return uploadImage(item.file, idx);
-      });
+      const promises = [
+        ...imgUpload.map((item, i) => {
+          const idx = selectedFiles.indexOf(item);
+          return uploadMedia(item.file, idx, false);
+        }),
+        ...vidUpload.map((item, i) => {
+          const idx = selectedVideos.indexOf(item);
+          return uploadMedia(item.file, idx, true);
+        }),
+      ];
 
       await Promise.allSettled(promises);
     }
@@ -1796,54 +1860,84 @@
       const grid = document.getElementById('photoGrid');
       const count = document.getElementById('photoCount');
 
-      const uploaded = selectedFiles.filter(f => f.status === 'done' || f.url).length;
-      const uploading = selectedFiles.filter(f => f.status === 'uploading').length;
-      const pending = selectedFiles.filter(f => f.status === 'pending').length;
-      const failed = selectedFiles.filter(f => f.status === 'error').length;
+      const imgUploaded = selectedFiles.filter(f => f.status === 'done' || f.url).length;
+      const imgUploading = selectedFiles.filter(f => f.status === 'uploading').length;
+      const imgPending = selectedFiles.filter(f => f.status === 'pending').length;
+      const imgFailed = selectedFiles.filter(f => f.status === 'error').length;
 
-      count.textContent = `${uploaded} uploaded · ${pending} pending · ${uploading} uploading${failed > 0 ? ' · ' + failed + ' failed' : ''}${selectedFiles.length === 0 ? 'No photos selected' : ''}`;
+      const vidUploaded = selectedVideos.filter(f => f.status === 'done' || f.url).length;
+      const vidUploading = selectedVideos.filter(f => f.status === 'uploading').length;
+      const vidPending = selectedVideos.filter(f => f.status === 'pending').length;
+      const vidFailed = selectedVideos.filter(f => f.status === 'error').length;
 
-      if (selectedFiles.length === 0) {
+      const totalFiles = selectedFiles.length + selectedVideos.length;
+
+      let statusText = '';
+      if (totalFiles === 0) {
+        statusText = 'No photos or videos selected';
+      } else {
+        const parts = [];
+        if (imgUploaded > 0) parts.push(imgUploaded + ' photos uploaded');
+        if (imgPending > 0) parts.push(imgPending + ' photos pending');
+        if (imgUploading > 0) parts.push(imgUploading + ' photos uploading');
+        if (imgFailed > 0) parts.push(imgFailed + ' photos failed');
+        if (vidUploaded > 0) parts.push(vidUploaded + ' videos uploaded');
+        if (vidPending > 0) parts.push(vidPending + ' videos pending');
+        if (vidUploading > 0) parts.push(vidUploading + ' videos uploading');
+        if (vidFailed > 0) parts.push(vidFailed + ' videos failed');
+        statusText = parts.join(' · ');
+      }
+      count.textContent = statusText;
+
+      if (totalFiles === 0) {
         grid.innerHTML = '';
         return;
       }
 
-      grid.innerHTML = selectedFiles.map((item, i) => {
-        const uploadedUrls = selectedFiles.filter(f => f.status === 'done' && f.url).map(f => f.url);
-        return `
-        <div class="photo-item">
-          <img src="${item.preview}" alt="Photo ${i+1}" style="cursor:pointer;"${item.url ? ` onclick="openFsViewer(${JSON.stringify(uploadedUrls)}, ${uploadedUrls.indexOf(item.url)})"` : ''}>
-          ${item.status === 'uploading'
-            ? '<div class="uploading-overlay">⏳ Uploading...</div>'
-            : item.status === 'error'
-              ? '<div class="uploading-overlay" style="background:rgba(198,40,40,0.7);">❌ Failed</div>'
-              : ''
-          }
-          ${item.status !== 'uploading'
-            ? `<button class="remove-btn" onclick="removePhoto(${i})">✕</button>`
-            : ''
-          }
-        </div>
-      `}).join('');
+      grid.innerHTML = [
+        ...selectedFiles.map((item, i) => {
+          const uploadedUrls = selectedFiles.filter(f => f.status === 'done' && f.url).map(f => f.url);
+          return `<div class="photo-item">
+            <img src="${item.preview}" alt="Photo ${i+1}" style="cursor:pointer;"${item.url ? ` onclick="openFsViewer(${JSON.stringify(uploadedUrls)}, ${uploadedUrls.indexOf(item.url)})"` : ''}>
+            ${item.status === 'uploading' ? '<div class="uploading-overlay">⏳ Uploading...</div>' : item.status === 'error' ? '<div class="uploading-overlay" style="background:rgba(198,40,40,0.7);">❌ Failed</div>' : ''}
+            ${item.status !== 'uploading' ? `<button class="remove-btn" onclick="removePhoto(${i})">✕</button>` : ''}
+          </div>`;
+        }),
+        ...selectedVideos.map((item, i) => {
+          return `<div class="photo-item" style="background:#1A3A6B;">
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:32px;">▶️</div>
+            ${item.status === 'uploading' ? '<div class="uploading-overlay">⏳ Uploading...</div>' : item.status === 'error' ? '<div class="uploading-overlay" style="background:rgba(198,40,40,0.7);">❌ Failed</div>' : ''}
+            ${item.status !== 'uploading' ? `<button class="remove-btn" onclick="removeVideo(${i})">✕</button>` : ''}
+          </div>`;
+        }),
+      ].join('');
 
-      // Update summary images display
       updateSummaryImages();
     }
 
     function updateSummaryImages() {
       const summaryEl = document.getElementById('summaryImages');
       if (!summaryEl) return;
-      const uploaded = selectedFiles.filter(f => f.status === 'done' && f.url);
-      if (uploaded.length > 0) {
-        summaryEl.innerHTML = '📸 Photos: <span style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">' +
-          uploaded.map((f, i) => `<img src="${f.url}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;background:var(--gray-light);cursor:pointer;" onclick="openFsViewer(${JSON.stringify(uploaded.map(x => x.url))}, ${i})">`).join('') +
+
+      const uploadedImgs = selectedFiles.filter(f => f.status === 'done' && f.url);
+      const uploadedVids = selectedVideos.filter(f => f.status === 'done' && f.url);
+
+      let html = '';
+      if (uploadedImgs.length > 0) {
+        html += '📸 Photos: <span style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">' +
+          uploadedImgs.map((f, i) => `<img src="${f.url}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;background:var(--gray-light);cursor:pointer;" onclick="openFsViewer(${JSON.stringify(uploadedImgs.map(x => x.url))}, ${i})">`).join('') +
           '</span>';
-      } else {
-        const totalSelected = selectedFiles.filter(f => f.status !== 'error').length;
-        summaryEl.innerHTML = totalSelected > 0
-          ? `📸 Photos: ${totalSelected} selected (will upload on submit)`
-          : '📸 Photos: None';
       }
+      if (uploadedVids.length > 0) {
+        html += (html ? '<br>' : '') + '🎥 Videos: ' + uploadedVids.length + ' video(s) uploaded';
+      }
+      if (!html) {
+        const totalFiles = selectedFiles.filter(f => f.status !== 'error').length + selectedVideos.filter(f => f.status !== 'error').length;
+        html = totalFiles > 0
+          ? `📸 ${totalFiles} file(s) selected (will upload on submit)`
+          : '📸 Media: None';
+      }
+      summaryEl.innerHTML = html;
     }
 
     window.submitOrder = async function() {
@@ -1856,7 +1950,9 @@
       const model = document.getElementById('deviceModel').value.trim();
 
       if (!name || !phone) { showToast('Please fill in your contact details', 'error'); return; }
-      if (!selectedDevice || !selectedBrand) { showToast('Please select device and brand', 'error'); return; }
+      const submitSvc = SERVICE_CATEGORIES.find(s => s.key === selectedDevice);
+      if (!selectedDevice) { showToast('Please select a service', 'error'); return; }
+      if (submitSvc?.hasDeviceFlow && !selectedBrand) { showToast('Please select a brand', 'error'); return; }
       if (!desc) { showToast('Please describe your issue', 'error'); return; }
 
       submitting = true;
@@ -1865,11 +1961,13 @@
       btn.innerHTML = '⏳ Uploading photos & submitting...';
 
       try {
-        // Upload any pending images first
+        // Upload any pending media first
         const pendingImages = selectedFiles.filter(f => f.status === 'pending' && !f.url);
-        if (pendingImages.length > 0) {
-          btn.innerHTML = `⏳ Uploading ${pendingImages.length} photo(s)...`;
-          await uploadAllImages();
+        const pendingVideos = selectedVideos.filter(f => f.status === 'pending' && !f.url);
+        const pendingTotal = pendingImages.length + pendingVideos.length;
+        if (pendingTotal > 0) {
+          btn.innerHTML = `⏳ Uploading ${pendingTotal} file(s)...`;
+          await uploadAllMedia();
         }
 
         let appointmentTime = null;
@@ -1881,11 +1979,16 @@
           appointmentTime = d.getTime();
         }
 
-        // Get uploaded image URLs
+        // Get uploaded image & video URLs
         const imageUrls = selectedFiles
           .filter(f => f.status === 'done' && f.url)
           .map(f => f.url);
+        const videoUrls = selectedVideos
+          .filter(f => f.status === 'done' && f.url)
+          .map(f => f.url);
 
+        const svcCat = SERVICE_CATEGORIES.find(s => s.key === selectedDevice);
+        const deviceFlow = svcCat ? svcCat.hasDeviceFlow : false;
         const orderData = {
           name,
           phone,
@@ -1894,11 +1997,14 @@
           pincode,
           lat: gpsLat,
           lng: gpsLng,
-          brand: selectedBrand,
-          device: selectedDevice,
-          modelName: model || '',
+          serviceCategory: selectedDevice,
+          serviceLabel: svcCat?.label || selectedDevice,
+          brand: deviceFlow ? selectedBrand : null,
+          device: deviceFlow ? selectedDevice : null,
+          modelName: deviceFlow ? (model || '') : '',
           time: selectedSlot || new Date().toLocaleTimeString(),
           images: imageUrls,
+          videos: videoUrls,
           ...(wantAppointment && selectedDate && selectedSlot ? {
             isAppointment: true,
             appointmentTime,
@@ -1944,13 +2050,14 @@
     }
 
     function updateSummary() {
+      const svcCat = SERVICE_CATEGORIES.find(s => s.key === selectedDevice);
       const name = document.getElementById('custName').value.trim() || '—';
       const phone = document.getElementById('custPhone').value.trim() || '—';
       const location = document.getElementById('location').value.trim() || '—';
       const model = document.getElementById('deviceModel').value.trim() || '—';
-      document.getElementById('summaryDevice').textContent = `Device: ${selectedDevice || '—'}`;
-      document.getElementById('summaryBrand').textContent = `Brand: ${selectedBrand || '—'}`;
-      document.getElementById('summaryModel').textContent = `Model: ${model}`;
+      document.getElementById('summaryDevice').textContent = `Service: ${svcCat?.label || selectedDevice || '—'}`;
+      document.getElementById('summaryBrand').textContent = `Brand: ${(svcCat?.hasDeviceFlow && selectedBrand) ? selectedBrand : '—'}`;
+      document.getElementById('summaryModel').textContent = `Model: ${(svcCat?.hasDeviceFlow && model) ? model : '—'}`;
       document.getElementById('summaryName').textContent = `Name: ${name}`;
       document.getElementById('summaryPhone').textContent = `Phone: ${phone}`;
       document.getElementById('summaryLocation').textContent = `Location: ${location}`;
@@ -2043,7 +2150,19 @@
       setTimeout(() => toast.remove(), 4000);
     }
 
+    function renderServiceGrid() {
+      const grid = document.getElementById('serviceGrid');
+      grid.innerHTML = SERVICE_CATEGORIES.map(svc =>
+        `<div class="service-card" data-key="${svc.key}" onclick="selectDevice('${svc.key}')">
+          <div class="icon">${svc.icon}</div>
+          <div class="name">${svc.label}</div>
+          ${svc.hasDeviceFlow ? '<div class="badge">Brand/Model</div>' : ''}
+        </div>`
+      ).join('');
+    }
+
     // ── Init ─────────────────────────────────────────────────────────
+    renderServiceGrid();
     renderDateScroll();
     renderSlots();
 

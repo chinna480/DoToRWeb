@@ -1130,18 +1130,15 @@
         (pos) => {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
-          custLat = lat;
-          custLng = lng;
+          // Do NOT overwrite custLat/custLng here — those are the booking address coordinates
+          // from the order. Live GPS should not change the repair destination.
 
-          // Update map markers with new location
-          updateMapMarkers();
-
-          statusEl.textContent = `✅ Location refreshed (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+          statusEl.textContent = `✅ GPS signal acquired (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
           statusEl.style.color = 'var(--green)';
           btn.disabled = false;
           btn.innerHTML = '📍 Refresh My Location';
 
-          showToast('📍 Location refreshed successfully!', 'success');
+          showToast('📍 GPS refreshed successfully!', 'success');
 
           // Clear status after a few seconds
           setTimeout(() => {

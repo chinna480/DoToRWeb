@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Image,
+  Linking,
   ScrollView,
   StyleSheet,
   Switch,
@@ -14,6 +15,7 @@ import {
   View
 } from 'react-native'
 import { db } from '../firebase/config'
+import SettingsModal from '../../components/SettingsModal'
 
 export default function CustomerProfileScreen() {
   const router = useRouter()
@@ -28,6 +30,7 @@ export default function CustomerProfileScreen() {
   const [totalOrders, setTotalOrders]   = useState(0)
   const [completedOrders, setCompleted] = useState(0)
   const [notifications, setNotifications] = useState(true)
+  const [showSettings, setShowSettings]   = useState(false)
   const ordersUnsub = useRef(null)
 
   useEffect(() => {
@@ -119,11 +122,11 @@ export default function CustomerProfileScreen() {
   }
 
   const MENU = [
-    { icon: '❓', label: 'Help & Support',   sub: null,                   onPress: () => Alert.alert('Help', 'Email: support@dotor.in') },
+    { icon: '❓', label: 'Help & Support',   sub: 'dotor.india@gmail.com',  onPress: () => Linking.openURL('mailto:dotor.india@gmail.com') },
     { icon: '📋', label: 'My Orders',        sub: `${totalOrders} total`, onPress: () => Alert.alert('Orders', `Total: ${totalOrders}\nCompleted: ${completedOrders}\nPending: ${totalOrders - completedOrders}`) },
     { icon: '🛡️', label: 'Safety',           sub: null,                   onPress: () => Alert.alert('Safety', 'Your safety is our priority!') },
     { icon: '🔔', label: 'Notifications',    sub: null,                   toggle: true, value: notifications, onToggle: setNotifications },
-    { icon: '⚙️', label: 'Settings',         sub: null,                   onPress: () => Alert.alert('Settings', 'Coming Soon!') },
+    { icon: '⚙️', label: 'Settings',         sub: 'Profile, Security & more', onPress: () => setShowSettings(true) },
     { icon: '📄', label: 'Privacy Policy',   sub: null,                   onPress: () => Alert.alert('Privacy', 'Your data is secure!') },
     { icon: '📜', label: 'Terms of Service', sub: null,                   onPress: () => Alert.alert('Terms', 'Use DoToR responsibly!') },
     { icon: '🚪', label: 'Logout',           sub: null,                   onPress: logout, danger: true },
@@ -209,6 +212,9 @@ export default function CustomerProfileScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* SETTINGS MODAL */}
+      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} role="customer" />
 
       {/* VERSION */}
       <View style={s.version}>

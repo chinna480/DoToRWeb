@@ -25,13 +25,44 @@ import {
   notifyTechsForNewOrder,
   registerForNotifications,
 } from '../utils/notifications';
-import { uploadImages } from '../utils/uploadImage';
+import { uploadImages, uploadVideos } from '../utils/uploadImage';
+import MapPickerModal from '../../components/MapPickerModal';
+import LocationAutocomplete from '../../components/LocationAutocomplete';
+import { useRouter } from 'expo-router';
 
 const PHONE_BRANDS  = ['iPhone','Samsung','OnePlus','Redmi','Vivo','Oppo','Realme','Nokia']
 const LAPTOP_BRANDS = ['Dell','HP','Lenovo','MacBook','Asus','Acer','MSI','Sony']
+const TV_BRANDS = ['Samsung','LG','Sony','Panasonic','Toshiba','MI','OnePlus','TCL']
+const AC_BRANDS = ['Voltas','LG','Samsung','Blue Star','Daikin','Hitachi','Panasonic','Lloyd']
+const FRIDGE_BRANDS = ['Samsung','LG','Whirlpool','Godrej','Haier','Panasonic','Bosch','Hitachi']
+const WM_BRANDS = ['Samsung','LG','Whirlpool','Bosch','IFB','Godrej','Panasonic','Haier']
+
+const SERVICE_CATEGORIES = [
+  { key: 'mobile',       icon: '📱', label: 'Mobile Repair',             hasDeviceFlow: true },
+  { key: 'laptop',       icon: '💻', label: 'Laptop & PC Repair',        hasDeviceFlow: true },
+  { key: 'tv',           icon: '📺', label: 'TV Repair',                 hasDeviceFlow: true },
+  { key: 'ac',           icon: '❄️', label: 'AC Service & Repair',       hasDeviceFlow: true },
+  { key: 'refrigerator', icon: '🧊', label: 'Refrigerator Repair',       hasDeviceFlow: true },
+  { key: 'washing',      icon: '🧺', label: 'Washing Machine Repair',     hasDeviceFlow: true },
+  { key: 'electrician',  icon: '🔌', label: 'Electrician Services',      hasDeviceFlow: false },
+  { key: 'plumbing',     icon: '🚰', label: 'Plumbing Services',          hasDeviceFlow: false },
+  { key: 'cctv',         icon: '📡', label: 'CCTV Installation & Service', hasDeviceFlow: false },
+  { key: 'wifi',         icon: '🌐', label: 'Wi-Fi Router Setup',        hasDeviceFlow: false },
+  { key: 'ro',           icon: '💧', label: 'RO Water Purifier Service', hasDeviceFlow: false },
+  { key: 'inverter',     icon: '🔋', label: 'Inverter & UPS Service',    hasDeviceFlow: false },
+]
+
+const SERVICE_BRANDS = {
+  mobile: PHONE_BRANDS,
+  laptop: LAPTOP_BRANDS,
+  tv: TV_BRANDS,
+  ac: AC_BRANDS,
+  refrigerator: FRIDGE_BRANDS,
+  washing: WM_BRANDS,
+}
 
 const STEPS = [
-  { num: 1, label: 'Device',   icon: '📱' },
+  { num: 1, label: 'Service',  icon: '🔧' },
   { num: 2, label: 'Brand',    icon: '🏷️' },
   { num: 3, label: 'Model',    icon: '✏️' },
   { num: 4, label: 'Issue',    icon: '🔧' },
@@ -40,10 +71,6 @@ const STEPS = [
   { num: 7, label: 'Pincode',  icon: '📮' },
   { num: 8, label: 'Confirm',  icon: '✅' },
 ]
-
-import MapPickerModal from '../../components/MapPickerModal'
-import LocationAutocomplete from '../../components/LocationAutocomplete'
-import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -61,6 +88,7 @@ export default function HomeScreen() {
   const [modelName, setModelName]           = useState('')
   const [issueDesc, setIssueDesc]           = useState('')
   const [deviceImages, setDeviceImages]     = useState([])
+  const [deviceVideos, setDeviceVideos]     = useState([])
   const [locationInput, setLocationInput]   = useState('')
   const [pincodeInput, setPincodeInput]     = useState('')
   const [isSubmitting, setIsSubmitting]     = useState(false)
@@ -152,10 +180,53 @@ export default function HomeScreen() {
     setDeviceImages(prev => prev.filter((_, i) => i !== index))
   }
 
+  // ── Video picker ───────────────────────────────────────────────────────
+  const pickVideos = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Allow access to gallery to upload videos.')
+      return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      allowsMultipleSelection: true,
+      selectionLimit: 2 - deviceVideos.length,
+    })
+    if (!result.canceled) {
+      setDeviceVideos(prev => [...prev, ...result.assets.map(a => a.uri)].slice(0, 2))
+    }
+  }
+
+  const recordVideo = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync()
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Allow camera access to record a video.')
+      return
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['videos'],
+      videoMaxDuration: 60,
+    })
+    if (!result.canceled) {
+      setDeviceVideos(prev => [...prev, result.assets[0].uri].slice(0, 2))
+    }
+  }
+
+  const removeVideo = (index) => {
+    setDeviceVideos(prev => prev.filter((_, i) => i !== index))
+  }
+
   // ── Submit order ───────────────────────────────────────────────────────
   const submitOrder = async () => {
-    if (!selectedDevice || !selectedBrand || !modelName.trim() || !issueDesc.trim()) {
-      Alert.alert('Missing info', 'Please fill in device, brand, model, and issue.')
+    const svc = SERVICE_CATEGORIES.find(s => s.key === selectedDevice)
+    const deviceFlow = svc ? svc.hasDeviceFlow : false
+
+    if (!selectedDevice || !issueDesc.trim()) {
+      Alert.alert('Missing info', 'Please select a service and describe the issue.')
+      return
+    }
+    if (deviceFlow && (!selectedBrand || !modelName.trim())) {
+      Alert.alert('Missing info', 'Please fill in brand, model, and issue.')
       return
     }
     if (!locationInput.trim()) {
@@ -173,12 +244,17 @@ export default function HomeScreen() {
       if (deviceImages.length > 0) {
         imageUrls = await uploadImages(deviceImages.map(uri => ({ uri })), tempOrderId)
       }
+      let videoUrls = null
+      if (deviceVideos.length > 0) {
+        videoUrls = await uploadVideos(deviceVideos.map(uri => ({ uri })), tempOrderId)
+      }
 
       // Only use GPS coords if the user explicitly used "My Location" or map picker
       // If user manually typed an address, don't override with current GPS position
       // (they might be at office but repair is at home)
       let orderLat = custLat, orderLng = custLng
 
+      const svcCat = SERVICE_CATEGORIES.find(s => s.key === selectedDevice)
       const order = {
         customerName:       name,
         customerPhone:      phone,
@@ -187,11 +263,14 @@ export default function HomeScreen() {
         custLng:            orderLng,
         location:           locationInput.trim(),
         pincode:            pincodeInput.trim(),
-        device:             selectedDevice,
-        brand:              selectedBrand,
-        modelName:          modelName.trim(),
+        serviceCategory:    selectedDevice,
+        serviceLabel:       svcCat?.label || selectedDevice,
+        device:             svcCat?.hasDeviceFlow ? selectedDevice : null,
+        brand:              svcCat?.hasDeviceFlow ? selectedBrand : null,
+        modelName:          svcCat?.hasDeviceFlow ? modelName.trim() : null,
         description:        issueDesc.trim(),
         images:             imageUrls || null,
+        videos:             videoUrls || null,
         status:             'pending',
         time:               new Date().toLocaleTimeString(),
         createdAt:          Date.now(),
@@ -208,13 +287,13 @@ export default function HomeScreen() {
       if (pincodeInput) await AsyncStorage.setItem('custPincode', pincodeInput.trim())
       if (locationInput) await AsyncStorage.setItem('custLocation', locationInput.trim())
 
-      await notifyCustomerBookingConfirmed(selectedBrand, modelName.trim())
+      await notifyCustomerBookingConfirmed(svcCat?.label || selectedBrand, modelName.trim() || issueDesc.trim())
       await notifyTechsForNewOrder(order, orderId)
       resetWizard()
 
       Alert.alert(
         '✅ Booking Confirmed!',
-        `Device: ${selectedBrand} ${modelName}\nIssue: ${issueDesc}\n\nTrack your technician?`,
+        `${svcCat?.label || 'Service'}: ${selectedBrand ? selectedBrand + ' ' : ''}${modelName || issueDesc}\n\nTrack your technician?`,
         [
           { text: 'Track Now', onPress: () => router.push('/screens/TrackingScreen') },
           { text: '💬 Chat', onPress: () => router.push(`/screens/ChatScreen?orderId=${orderId}&role=cust&customerName=${encodeURIComponent(name)}&techName=`) },
@@ -237,51 +316,71 @@ export default function HomeScreen() {
     setModelName('')
     setIssueDesc('')
     setDeviceImages([])
+    setDeviceVideos([])
     setLocationInput(custLocation || '')
     setPincodeInput('')
   }
 
   const goNext = () => {
-    if (bookingStep === 1 && !selectedDevice) { Alert.alert('Select device', 'Please select Phone or Laptop'); return }
-    if (bookingStep === 2 && !selectedBrand) { Alert.alert('Select brand', 'Please select a brand'); return }
-    if (bookingStep === 3 && !modelName.trim()) { Alert.alert('Enter model', 'Please enter your device model'); return }
+    const svc = SERVICE_CATEGORIES.find(s => s.key === selectedDevice)
+    const deviceFlow = svc ? svc.hasDeviceFlow : true
+
+    if (bookingStep === 1 && !selectedDevice) { Alert.alert('Select service', 'Please select a service category'); return }
+    if (bookingStep === 2 && deviceFlow && !selectedBrand) { Alert.alert('Select brand', 'Please select a brand'); return }
+    if (bookingStep === 3 && deviceFlow && !modelName.trim()) { Alert.alert('Enter model', 'Please enter your device model'); return }
     if (bookingStep === 4 && !issueDesc.trim()) { Alert.alert('Describe issue', 'Please describe the problem'); return }
-    setBookingStep(prev => Math.min(prev + 1, 8))
+
+    let next = bookingStep + 1
+    // Non-device services: skip brand (step 2) and model (step 3)
+    if (!deviceFlow && bookingStep === 1) next = 4
+    setBookingStep(Math.min(next, 8))
   }
 
   const goBack = () => {
     if (bookingStep <= 1) { resetWizard(); return }
-    setBookingStep(prev => prev - 1)
+    const svc = SERVICE_CATEGORIES.find(s => s.key === selectedDevice)
+    const deviceFlow = svc ? svc.hasDeviceFlow : true
+    let prev = bookingStep - 1
+    // Non-device services: skip back over model (step 3) and brand (step 2)
+    if (!deviceFlow && bookingStep === 4) prev = 1
+    setBookingStep(prev)
   }
 
-  // ── Progress bar ──
-  const renderProgressBar = () => (
-    <View style={s.progressContainer}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.progressScroll}>
-        {STEPS.map((step) => (
-          <View key={step.num} style={s.progressStepWrap}>
-            <View style={[s.progressDot, bookingStep >= step.num && s.progressDotActive, bookingStep === step.num && s.progressDotCurrent]}>
-              <Text style={s.progressDotTxt}>{step.icon}</Text>
+  const renderProgressBar = () => {
+    const selSvc = SERVICE_CATEGORIES.find(s => s.key === selectedDevice)
+    const devFlow = selSvc ? selSvc.hasDeviceFlow : true
+    const visSteps = STEPS.filter(s => devFlow || (s.num !== 2 && s.num !== 3))
+    const total = visSteps.length || 8
+    const curIdx = visSteps.findIndex(s => s.num === bookingStep) + 1
+    return (
+      <View style={s.progressContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.progressScroll}>
+          {visSteps.map((step) => (
+            <View key={step.num} style={s.progressStepWrap}>
+              <View style={[s.progressDot, bookingStep >= step.num && s.progressDotActive, bookingStep === step.num && s.progressDotCurrent]}>
+                <Text style={s.progressDotTxt}>{step.icon}</Text>
+              </View>
+              <Text style={[s.progressLabel, bookingStep >= step.num && s.progressLabelActive]} numberOfLines={1}>{step.label}</Text>
             </View>
-            <Text style={[s.progressLabel, bookingStep >= step.num && s.progressLabelActive]} numberOfLines={1}>{step.label}</Text>
-          </View>
-        ))}
-      </ScrollView>
-      <View style={s.progressTrack}>
-        <View style={[s.progressFill, { width: `${(bookingStep / 8) * 100}%` }]} />
+          ))}
+        </ScrollView>
+        <View style={s.progressTrack}>
+          <View style={[s.progressFill, { width: `${(curIdx / total) * 100}%` }]} />
+        </View>
       </View>
-    </View>
-  )
+    )
+  }
 
   const renderStep1 = () => (
     <View style={s.stepBody}>
-      <Text style={s.stepTitle}>📱 Select Your Device</Text>
-      <Text style={s.stepSubtitle}>What type of device needs repair?</Text>
-      <View style={s.deviceGrid}>
-        {[['phone','📱','Phone'],['laptop','💻','Laptop']].map(([type, icon, label]) => (
-          <TouchableOpacity key={type} style={[s.deviceCard, selectedDevice === type && s.deviceCardActive]} onPress={() => { setSelectedDevice(type); if (type !== selectedDevice) setSelectedBrand(null) }}>
-            <Text style={s.deviceIcon}>{icon}</Text>
-            <Text style={s.deviceLabel}>{label}</Text>
+      <Text style={s.stepTitle}>🔧 Select Service</Text>
+      <Text style={s.stepSubtitle}>What do you need help with?</Text>
+      <View style={s.serviceGrid}>
+        {SERVICE_CATEGORIES.map(svc => (
+          <TouchableOpacity key={svc.key} style={[s.serviceCard, selectedDevice === svc.key && s.serviceCardActive]} onPress={() => { setSelectedDevice(svc.key); if (svc.key !== selectedDevice) setSelectedBrand(null) }}>
+            <Text style={s.serviceIcon}>{svc.icon}</Text>
+            <Text style={s.serviceLabel}>{svc.label}</Text>
+            {svc.hasDeviceFlow && <Text style={s.serviceBadge}>Brand/Model</Text>}
           </TouchableOpacity>
         ))}
       </View>
@@ -289,15 +388,16 @@ export default function HomeScreen() {
   )
 
   const renderStep2 = () => {
-    const brands = selectedDevice === 'phone' ? PHONE_BRANDS : LAPTOP_BRANDS
+    const brands = SERVICE_BRANDS[selectedDevice] || PHONE_BRANDS
+    const svc = SERVICE_CATEGORIES.find(s => s.key === selectedDevice)
     return (
       <View style={s.stepBody}>
         <Text style={s.stepTitle}>🏷️ Select Brand</Text>
-        <Text style={s.stepSubtitle}>Choose the brand of your {selectedDevice}</Text>
+        <Text style={s.stepSubtitle}>Choose the brand for {svc?.label || 'your device'}</Text>
         <View style={s.brandGrid}>
           {brands.map(brand => (
             <TouchableOpacity key={brand} style={[s.brandCard, selectedBrand === brand && s.brandCardActive]} onPress={() => setSelectedBrand(brand)}>
-              <Text style={s.brandIcon}>{selectedDevice === 'phone' ? '📱' : '💻'}</Text>
+              <Text style={s.brandIcon}>{svc?.icon || '📱'}</Text>
               <Text style={s.brandLabel}>{brand}</Text>
             </TouchableOpacity>
           ))}
@@ -306,16 +406,19 @@ export default function HomeScreen() {
     )
   }
 
-  const renderStep3 = () => (
-    <View style={s.stepBody}>
-      <Text style={s.stepTitle}>✏️ Device Model</Text>
-      <Text style={s.stepSubtitle}>e.g. iPhone 14 Pro Max, Samsung Galaxy S24</Text>
-      <View style={s.inputCard}>
-        <Text style={s.inputLabel}>Model Name</Text>
-        <TextInput style={s.textInput} placeholder={`e.g. ${selectedBrand} ...`} placeholderTextColor="#bbb" value={modelName} onChangeText={setModelName} maxLength={100} />
+  const renderStep3 = () => {
+    const svc = SERVICE_CATEGORIES.find(s => s.key === selectedDevice)
+    return (
+      <View style={s.stepBody}>
+        <Text style={s.stepTitle}>✏️ Model / Details</Text>
+        <Text style={s.stepSubtitle}>e.g. iPhone 14 Pro Max, Samsung Galaxy S24 — or describe your model</Text>
+        <View style={s.inputCard}>
+          <Text style={s.inputLabel}>{svc?.label || 'Device'} Model</Text>
+          <TextInput style={s.textInput} placeholder={`e.g. ${selectedBrand || svc?.label} model...`} placeholderTextColor="#bbb" value={modelName} onChangeText={setModelName} maxLength={100} />
+        </View>
       </View>
-    </View>
-  )
+    )
+  }
 
   const renderStep4 = () => (
     <View style={s.stepBody}>
@@ -331,23 +434,48 @@ export default function HomeScreen() {
 
   const renderStep5 = () => (
     <View style={s.stepBody}>
-      <Text style={s.stepTitle}>📸 Add Photos</Text>
-      <Text style={s.stepSubtitle}>Upload photos of the damage (up to 5)</Text>
-      {deviceImages.length > 0 && (
-        <FlatList horizontal data={deviceImages} keyExtractor={(_, i) => String(i)} showsHorizontalScrollIndicator={false} contentContainerStyle={s.imageList} renderItem={({ item, index }) => (
-          <View style={s.imageThumbWrap}>
-            <Image source={{ uri: item }} style={s.imageThumb} />
-            <TouchableOpacity style={s.imageRemove} onPress={() => removeImage(index)}><Text style={s.imageRemoveTxt}>✕</Text></TouchableOpacity>
+      <Text style={s.stepTitle}>📸 Add Photos & Videos</Text>
+      <Text style={s.stepSubtitle}>Upload photos (up to 5) or videos (up to 2) of the issue</Text>
+      {/* ── Photos ── */}
+      <View style={s.mediaSection}>
+        <Text style={s.mediaSectionTitle}>📷 Photos</Text>
+        {deviceImages.length > 0 && (
+          <FlatList horizontal data={deviceImages} keyExtractor={(_, i) => String(i)} showsHorizontalScrollIndicator={false} contentContainerStyle={s.imageList} renderItem={({ item, index }) => (
+            <View style={s.imageThumbWrap}>
+              <Image source={{ uri: item }} style={s.imageThumb} />
+              <TouchableOpacity style={s.imageRemove} onPress={() => removeImage(index)}><Text style={s.imageRemoveTxt}>✕</Text></TouchableOpacity>
+            </View>
+          )} />
+        )}
+        {deviceImages.length < 5 && (
+          <View style={s.imageActions}>
+            <TouchableOpacity style={s.imageBtn} onPress={pickImages}><Text style={s.imageBtnIcon}>🖼️</Text><Text style={s.imageBtnLabel}>Gallery</Text></TouchableOpacity>
+            <TouchableOpacity style={s.imageBtn} onPress={takePhoto}><Text style={s.imageBtnIcon}>📷</Text><Text style={s.imageBtnLabel}>Camera</Text></TouchableOpacity>
           </View>
-        )} />
-      )}
-      {deviceImages.length < 5 && (
-        <View style={s.imageActions}>
-          <TouchableOpacity style={s.imageBtn} onPress={pickImages}><Text style={s.imageBtnIcon}>🖼️</Text><Text style={s.imageBtnLabel}>Gallery</Text></TouchableOpacity>
-          <TouchableOpacity style={s.imageBtn} onPress={takePhoto}><Text style={s.imageBtnIcon}>📷</Text><Text style={s.imageBtnLabel}>Camera</Text></TouchableOpacity>
-        </View>
-      )}
-      <Text style={s.imageHint}>{deviceImages.length}/5 photos added {deviceImages.length === 0 ? '(optional — skip if not needed)' : ''}</Text>
+        )}
+        <Text style={s.mediaHint}>{deviceImages.length}/5 photos added</Text>
+      </View>
+      {/* ── Videos ── */}
+      <View style={s.mediaSection}>
+        <Text style={s.mediaSectionTitle}>🎥 Videos</Text>
+        {deviceVideos.length > 0 && (
+          <FlatList horizontal data={deviceVideos} keyExtractor={(_, i) => String(i)} showsHorizontalScrollIndicator={false} contentContainerStyle={s.imageList} renderItem={({ item, index }) => (
+            <View style={s.videoThumbWrap}>
+              <View style={s.videoThumb}>
+                <Text style={s.videoPlayIcon}>▶️</Text>
+              </View>
+              <TouchableOpacity style={s.imageRemove} onPress={() => removeVideo(index)}><Text style={s.imageRemoveTxt}>✕</Text></TouchableOpacity>
+            </View>
+          )} />
+        )}
+        {deviceVideos.length < 2 && (
+          <View style={s.imageActions}>
+            <TouchableOpacity style={s.imageBtn} onPress={pickVideos}><Text style={s.imageBtnIcon}>🎬</Text><Text style={s.imageBtnLabel}>Gallery</Text></TouchableOpacity>
+            <TouchableOpacity style={s.imageBtn} onPress={recordVideo}><Text style={s.imageBtnIcon}>📹</Text><Text style={s.imageBtnLabel}>Record</Text></TouchableOpacity>
+          </View>
+        )}
+        <Text style={s.mediaHint}>{deviceVideos.length}/2 videos added {deviceVideos.length === 0 && deviceImages.length === 0 ? '(optional — skip if not needed)' : ''}</Text>
+      </View>
     </View>
   )
 
@@ -443,27 +571,42 @@ export default function HomeScreen() {
     </View>
   )
 
-  const renderStep8 = () => (
-    <View style={s.stepBody}>
-      <Text style={s.stepTitle}>✅ Review & Confirm</Text>
-      <Text style={s.stepSubtitle}>Check your booking details</Text>
-      <View style={s.reviewCard}>
-        {[['📱','Device', selectedDevice === 'phone' ? 'Phone' : 'Laptop'],['🏷️','Brand', selectedBrand],['✏️','Model', modelName || '—'],['🔧','Issue', issueDesc || '—'],['📸','Photos', deviceImages.length > 0 ? `${deviceImages.length} photo(s)` : 'None'],['📍','Location', locationInput || '—'],['📮','Pincode', pincodeInput || '—']].map(([icon, label, value], i) => (
-          <View key={i} style={s.reviewRow}>
-            <Text style={s.reviewIcon}>{icon}</Text>
-            <View style={{ flex: 1 }}><Text style={s.reviewLabel}>{label}</Text><Text style={s.reviewValue} numberOfLines={label === 'Issue' ? 3 : 1}>{value}</Text></View>
-          </View>
-        ))}
+  const renderStep8 = () => {
+    const svc = SERVICE_CATEGORIES.find(s => s.key === selectedDevice)
+    const deviceFlow = svc ? svc.hasDeviceFlow : false
+    const reviewRows = [
+      ['🔧','Service', svc?.label || selectedDevice],
+      ...(deviceFlow ? [['🏷️','Brand', selectedBrand || '—'], ['✏️','Model', modelName || '—']] : []),
+      ['🔧','Issue', issueDesc || '—'],
+      ['📸','Photos', deviceImages.length > 0 ? `${deviceImages.length} photo(s)` : 'None'],
+      ['🎥','Videos', deviceVideos.length > 0 ? `${deviceVideos.length} video(s)` : 'None'],
+      ['📍','Location', locationInput || '—'],
+      ['📮','Pincode', pincodeInput || '—'],
+    ]
+    return (
+      <View style={s.stepBody}>
+        <Text style={s.stepTitle}>✅ Review & Confirm</Text>
+        <Text style={s.stepSubtitle}>Check your booking details</Text>
+        <View style={s.reviewCard}>
+          {reviewRows.map(([icon, label, value], i) => (
+            <View key={i} style={s.reviewRow}>
+              <Text style={s.reviewIcon}>{icon}</Text>
+              <View style={{ flex: 1 }}><Text style={s.reviewLabel}>{label}</Text><Text style={s.reviewValue} numberOfLines={label === 'Issue' ? 3 : 1}>{value}</Text></View>
+            </View>
+          ))}
+        </View>
+        {isSubmitting && <View style={s.submittingOverlay}><ActivityIndicator size="large" color="#FF6B00" /><Text style={s.submittingTxt}>Uploading & Booking...</Text></View>}
       </View>
-      {isSubmitting && <View style={s.submittingOverlay}><ActivityIndicator size="large" color="#FF6B00" /><Text style={s.submittingTxt}>Uploading & Booking...</Text></View>}
-    </View>
-  )
+    )
+  }
 
   const renderWizardStep = () => {
+    const svc = SERVICE_CATEGORIES.find(s => s.key === selectedDevice)
+    const deviceFlow = svc ? svc.hasDeviceFlow : true
     switch (bookingStep) {
       case 1: return renderStep1()
-      case 2: return renderStep2()
-      case 3: return renderStep3()
+      case 2: return deviceFlow ? renderStep2() : renderStep4()
+      case 3: return deviceFlow ? renderStep3() : renderStep5()
       case 4: return renderStep4()
       case 5: return renderStep5()
       case 6: return renderStep6()
@@ -485,8 +628,17 @@ export default function HomeScreen() {
         <View><Text style={s.bannerText}>🔧 Expert Repair at Your Doorstep!</Text><Text style={s.bannerSub}>Book in 30 seconds!</Text></View>
         <View style={s.bannerCta}><Text style={s.bannerCtaTxt}>🔧 Book Now</Text></View>
       </TouchableOpacity>
+      {/* Quick Service Strip */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.quickServiceStrip} contentContainerStyle={{ paddingHorizontal: 15, gap: 10 }}>
+        {SERVICE_CATEGORIES.slice(0, 6).map(svc => (
+          <TouchableOpacity key={svc.key} style={s.quickServiceItem} onPress={() => { setSelectedDevice(svc.key); setBookingStep(1) }}>
+            <Text style={s.quickServiceIcon}>{svc.icon}</Text>
+            <Text style={s.quickServiceLabel} numberOfLines={1}>{svc.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
       <Text style={s.sectionTitle}>⭐ Why DoToR?</Text>
-      {[{ icon:'🏠', title:'Doorstep Service', desc:'Technician comes to your home!' },{ icon:'👀', title:'Repair in Front of You', desc:'100% transparent process!' },{ icon:'⚡', title:'Fast Service', desc:'Arrives within 60 mins!' },{ icon:'🛡️', title:'30 Day Warranty', desc:'All repairs covered!' },{ icon:'💰', title:'Best Price', desc:'No hidden charges ever!' }].map((item, i) => (
+      {[{ icon:'🏠', title:'Doorstep Service', desc:'Technician comes to your home!' },{ icon:'👀', title:'Repair in Front of You', desc:'100% transparent process!' },{ icon:'⚡', title:'Fast Service', desc:'Arrives within 60 mins!' },{ icon:'💰', title:'Best Price', desc:'No hidden charges ever!' }].map((item, i) => (
         <View key={i} style={s.whyItem}><Text style={s.whyIcon}>{item.icon}</Text><View><Text style={s.whyTitle}>{item.title}</Text><Text style={s.whyDesc}>{item.desc}</Text></View></View>
       ))}
       <View style={{ height: 90 }} />
@@ -616,7 +768,7 @@ export default function HomeScreen() {
                       }
                     }}>
                       <View style={s.orderLeft}>
-                        <Text style={s.orderDevice}>📱 {order.brand} {order.modelName ? `— ${order.modelName}` : ''}</Text>
+                        <Text style={s.orderDevice}>{order.serviceLabel ? `🔧 ${order.serviceLabel}` : `📱 ${order.brand || ''}`}{order.brand && order.modelName ? ` — ${order.modelName}` : ''}</Text>
                         {order.description ? <Text style={s.orderRepair}>🔧 {order.description}</Text> : null}
                         {order.images && order.images.length > 0 && (
                           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
@@ -659,7 +811,7 @@ export default function HomeScreen() {
                 {completedOrders.map((order, i) => (
                   <View key={order.id || i} style={[s.orderCard, { borderLeftColor: '#2e7d32', opacity: 0.8 }]}>
                     <View style={s.orderLeft}>
-                      <Text style={s.orderDevice}>📱 {order.brand} {order.modelName ? `— ${order.modelName}` : ''}</Text>
+                      <Text style={s.orderDevice}>{order.serviceLabel ? `✅ ${order.serviceLabel}` : `📱 ${order.brand || ''}`}{order.brand && order.modelName ? ` — ${order.modelName}` : ''}</Text>
                       {order.description ? <Text style={[s.orderRepair, { color: '#2e7d32' }]}>✅ {order.description}</Text> : null}
                       {order.images && order.images.length > 0 && (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
@@ -803,12 +955,18 @@ const s = StyleSheet.create({
   stepBody:         { padding: 15 },
   stepTitle:        { fontSize: 20, fontWeight: '800', color: '#1A3A6B', marginBottom: 4 },
   stepSubtitle:     { fontSize: 13, color: '#888', marginBottom: 18 },
-  // Device cards
-  deviceGrid:       { flexDirection: 'row', gap: 14 },
-  deviceCard:       { flex: 1, backgroundColor: '#fff', borderRadius: 18, padding: 28, alignItems: 'center', borderWidth: 2, borderColor: 'transparent', elevation: 3 },
-  deviceCardActive: { borderColor: '#FF6B00', backgroundColor: '#FFF5EE' },
-  deviceIcon:       { fontSize: 40 },
-  deviceLabel:      { fontSize: 14, fontWeight: '800', color: '#1A3A6B', marginTop: 8 },
+  // Service categories grid
+  serviceGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  serviceCard:      { width: '30%', backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', elevation: 3, borderWidth: 2, borderColor: 'transparent', justifyContent: 'center', minHeight: 100 },
+  serviceCardActive:{ borderColor: '#FF6B00', backgroundColor: '#FFF5EE' },
+  serviceIcon:      { fontSize: 28 },
+  serviceLabel:     { fontSize: 11, fontWeight: '800', color: '#1A3A6B', marginTop: 6, textAlign: 'center' },
+  serviceBadge:     { fontSize: 8, color: '#FF6B00', fontWeight: '700', marginTop: 4, backgroundColor: '#FFF0E6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
+  // Quick service strip
+  quickServiceStrip:{ marginTop: 10, marginBottom: 5 },
+  quickServiceItem: { backgroundColor: '#fff', borderRadius: 14, padding: 12, alignItems: 'center', elevation: 2, borderWidth: 1, borderColor: '#f0f0f0', minWidth: 80 },
+  quickServiceIcon: { fontSize: 24 },
+  quickServiceLabel:{ fontSize: 10, fontWeight: '700', color: '#1A3A6B', marginTop: 4, textAlign: 'center' },
   // Brand cards
   brandGrid:        { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   brandCard:        { width: '30%', backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', elevation: 2, borderWidth: 2, borderColor: 'transparent' },
@@ -836,6 +994,13 @@ const s = StyleSheet.create({
   imageBtnIcon:     { fontSize: 28 },
   imageBtnLabel:    { fontSize: 12, fontWeight: '700', color: '#1A3A6B', marginTop: 6 },
   imageHint:        { fontSize: 11, color: '#bbb', marginTop: 10, textAlign: 'center' },
+  // Media sections (photos & videos)
+  mediaSection:     { backgroundColor: '#fff', borderRadius: 14, padding: 14, elevation: 2, marginBottom: 14 },
+  mediaSectionTitle:{ fontSize: 13, fontWeight: '800', color: '#1A3A6B', marginBottom: 8 },
+  mediaHint:        { fontSize: 11, color: '#bbb', marginTop: 8, textAlign: 'center' },
+  videoThumbWrap:   { position: 'relative', marginRight: 10 },
+  videoThumb:       { width: 100, height: 100, borderRadius: 12, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' },
+  videoPlayIcon:    { fontSize: 32 },
   // Review
   reviewCard:       { backgroundColor: '#fff', borderRadius: 14, padding: 16, elevation: 2 },
   reviewRow:        { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },

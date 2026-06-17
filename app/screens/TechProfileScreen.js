@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Image,
+  Linking,
   ScrollView,
   StyleSheet,
   Switch,
@@ -14,6 +15,7 @@ import {
   View
 } from 'react-native'
 import { db } from '../firebase/config'
+import SettingsModal from '../../components/SettingsModal'
 
 export default function TechProfileScreen() {
   const router = useRouter()
@@ -28,6 +30,7 @@ export default function TechProfileScreen() {
   const [totalJobs, setTotal]     = useState(0)
   const [notifications, setNotifications] = useState(true)
   const [isOnline, setIsOnline]   = useState(true)
+  const [showSettings, setShowSettings]   = useState(false)
   const ordersUnsub = useRef(null)
 
   useEffect(() => {
@@ -125,7 +128,8 @@ export default function TechProfileScreen() {
     { icon: '📊', label: 'Performance',    sub: 'View your stats',         onPress: () => Alert.alert('Stats', `Jobs: ${totalJobs}\nRating: ${rating}`) },
     { icon: '🔔', label: 'Notifications',  sub: null,                      toggle: true, value: notifications, onToggle: setNotifications },
     { icon: '🛡️', label: 'Safety',         sub: null,                      onPress: () => Alert.alert('Safety', 'Your safety matters!') },
-    { icon: '❓', label: 'Help & Support', sub: null,                      onPress: () => Alert.alert('Help', 'support@dotor.in') },
+    { icon: '❓', label: 'Help & Support', sub: 'dotor.india@gmail.com', onPress: () => Linking.openURL('mailto:dotor.india@gmail.com') },
+    { icon: '⚙️', label: 'Settings',       sub: 'Profile, Security & more', onPress: () => setShowSettings(true) },
     { icon: '📄', label: 'Privacy Policy', sub: null,                      onPress: () => Alert.alert('Privacy', 'Your data is secure!') },
     { icon: '🚪', label: 'Logout',         sub: null,                      onPress: logout, danger: true },
   ]
@@ -223,6 +227,9 @@ export default function TechProfileScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* SETTINGS MODAL */}
+      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} role="tech" />
 
       <View style={s.version}>
         <Text style={s.versionTxt}>🔧 DoToR v1.0.0</Text>

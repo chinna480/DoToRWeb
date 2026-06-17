@@ -19,13 +19,19 @@ import {
 import { db } from '../firebase/config'
 import { registerForNotifications } from '../utils/notifications'
 
-const SKILLS = [
-  '📱 Phone Repair',
-  '💻 Laptop Repair',
-  '🍎 iPhone Repair',
-  '🖥️ Screen Replacement',
-  '🔋 Battery Replacement',
-  '💾 Software Issues',
+const SERVICE_CATEGORIES = [
+  { key: 'mobile',       icon: '📱', label: 'Mobile Repair' },
+  { key: 'laptop',       icon: '💻', label: 'Laptop & PC Repair' },
+  { key: 'tv',           icon: '📺', label: 'TV Repair' },
+  { key: 'ac',           icon: '❄️', label: 'AC Service & Repair' },
+  { key: 'refrigerator', icon: '🧊', label: 'Refrigerator Repair' },
+  { key: 'washing',      icon: '🧺', label: 'Washing Machine Repair' },
+  { key: 'electrician',  icon: '🔌', label: 'Electrician Services' },
+  { key: 'plumbing',     icon: '🚰', label: 'Plumbing Services' },
+  { key: 'cctv',         icon: '📡', label: 'CCTV Installation & Service' },
+  { key: 'wifi',         icon: '🌐', label: 'Wi-Fi Router Setup' },
+  { key: 'ro',           icon: '💧', label: 'RO Water Purifier Service' },
+  { key: 'inverter',     icon: '🔋', label: 'Inverter & UPS Service' },
 ]
 
 const EXP = ['0 - 1 Year', '1 - 2 Years', '2 - 5 Years', '5+ Years']
@@ -38,8 +44,9 @@ export default function TechLoginScreen() {
   const [location, setLocation]   = useState('')
   const [pincode, setPincode]     = useState('')
   const [exp, setExp]             = useState('')
-  const [selSkills, setSelSkills] = useState([])
+  const [selCategories, setSelCategories] = useState([])
   const [showExp, setShowExp]     = useState(false)
+  const [showCatPicker, setShowCatPicker] = useState(false)
   const [certificate, setCertificate] = useState(null)
   const [aadhar, setAadhar]                 = useState(null)
   const [aadharVerified, setAadharVerified] = useState(false)
@@ -66,10 +73,15 @@ export default function TechLoginScreen() {
     }, [params.aadharVerified])
   )
 
-  const toggleSkill = (skill) => {
-    setSelSkills(prev =>
-      prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill]
+  const toggleCategory = (catKey) => {
+    setSelCategories(prev =>
+      prev.includes(catKey) ? prev.filter(c => c !== catKey) : [...prev, catKey]
     )
+  }
+
+  const getSelectedLabels = () => {
+    if (selCategories.length === 0) return 'Select service categories...'
+    return selCategories.map(k => SERVICE_CATEGORIES.find(c => c.key === k)?.label).filter(Boolean).join(', ')
   }
 
   const pickImage = async (type) => {
@@ -102,7 +114,7 @@ export default function TechLoginScreen() {
     if (!location)             { Alert.alert('Error', 'Enter your location!');        return }
     if (!/^\d{6}$/.test(pincode))   { Alert.alert('Error', 'Enter a valid 6-digit pincode!'); return }
     if (!exp)                  { Alert.alert('Error', 'Select your experience!');     return }
-    if (selSkills.length === 0){ Alert.alert('Error', 'Select at least one skill!'); return }
+    if (selCategories.length === 0){ Alert.alert('Error', 'Select at least one service category!'); return }
     if (!certificate)          { Alert.alert('Error', 'Upload your Certificate!');   return }
     if (!aadhar && !aadharVerified) { Alert.alert('Error', 'Verify your Aadhar via DigiLocker or upload manually!'); return }
 
@@ -112,7 +124,7 @@ export default function TechLoginScreen() {
       await AsyncStorage.setItem('techLocation', location)
       await AsyncStorage.setItem('techPincode', pincode)
       await AsyncStorage.setItem('techExp',      exp)
-      await AsyncStorage.setItem('techSkills',   JSON.stringify(selSkills))
+      await AsyncStorage.setItem('techCategories',    JSON.stringify(selCategories))
 
       const token = await registerForNotifications()
       if (token) {
@@ -126,7 +138,7 @@ export default function TechLoginScreen() {
           pincode,
         })
         // These paths are used by the newOrderNotification Cloud Function
-        await update(ref(db, 'techUsers/' + phone), { pushToken: token, name, phone, location, pincode })
+        await update(ref(db, 'techUsers/' + phone), { pushToken: token, name, phone, location, pincode, serviceCategories: selCategories })
         await update(ref(db, 'pushTokens/' + phone), token)
       }
     } catch (e) {
@@ -210,17 +222,37 @@ export default function TechLoginScreen() {
           </View>
 
           <View style={s.group}>
-            <Text style={s.label}>Skills</Text>
-            <View style={s.skillsBox}>
-              {SKILLS.map(skill => (
-                <TouchableOpacity key={skill} style={s.skillRow} onPress={() => toggleSkill(skill)}>
-                  <View style={[s.checkbox, selSkills.includes(skill) && s.checkboxActive]}>
-                    {selSkills.includes(skill) && <Text style={s.checkmark}>✓</Text>}
-                  </View>
-                  <Text style={s.skillTxt}>{skill}</Text>
+            <Text style={s.label}>🔧 Service Categories</Text>
+            <Text style={s.hint}>Select which services you want to receive orders for</Text>
+            <TouchableOpacity style={s.field} onPress={() => setShowCatPicker(!showCatPicker)}>
+              <Text style={s.fIcon}>📋</Text>
+              <Text style={[s.input, { color: selCategories.length > 0 ? '#1A3A6B' : '#aaa' }]} numberOfLines={1}>
+                {selCategories.length > 0 ? `${selCategories.length} selected` : 'Select service categories...'}
+              </Text>
+              <Text style={{ color: '#888', fontSize: 11 }}>{showCatPicker ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+            {selCategories.length > 0 && (
+              <Text style={s.catSelectedHint} numberOfLines={2}>{getSelectedLabels()}</Text>
+            )}
+            {showCatPicker && (
+              <View style={s.dropdown}>
+                {SERVICE_CATEGORIES.map(cat => {
+                  const isSelected = selCategories.includes(cat.key)
+                  return (
+                    <TouchableOpacity key={cat.key} style={[s.catDropItem, isSelected && s.catDropItemActive]} onPress={() => { toggleCategory(cat.key) }}>
+                      <View style={[s.catDropCheck, isSelected && s.catDropCheckActive]}>
+                        {isSelected && <Text style={s.catDropCheckmark}>✓</Text>}
+                      </View>
+                      <Text style={s.catDropIcon}>{cat.icon}</Text>
+                      <Text style={[s.catDropLabel, isSelected && s.catDropLabelActive]}>{cat.label}</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+                <TouchableOpacity style={s.catDoneBtn} onPress={() => setShowCatPicker(false)}>
+                  <Text style={s.catDoneTxt}>✅ Done ({selCategories.length} selected)</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
+              </View>
+            )}
           </View>
 
           <View style={s.group}>
@@ -305,12 +337,18 @@ const s = StyleSheet.create({
   dropItemActive: { backgroundColor: '#fff5ee' },
   dropTxt:        { fontSize: 14, color: '#1A3A6B', fontWeight: '600' },
   dropTxtActive:  { color: '#FF6B00', fontWeight: '800' },
-  skillsBox:      { borderWidth: 2, borderColor: '#eee', borderRadius: 12, padding: 12, gap: 12 },
-  skillRow:       { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  checkbox:       { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#eee', alignItems: 'center', justifyContent: 'center' },
-  checkboxActive: { backgroundColor: '#FF6B00', borderColor: '#FF6B00' },
-  checkmark:      { color: '#fff', fontSize: 13, fontWeight: '800' },
-  skillTxt:       { fontSize: 14, fontWeight: '700', color: '#1A3A6B' },
+  hint:           { fontSize: 11, color: '#888', fontWeight: '600', marginBottom: 8 },
+  catSelectedHint:{ fontSize: 11, color: '#FF6B00', fontWeight: '700', marginTop: 4, marginLeft: 2 },
+  catDropItem:    { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
+  catDropItemActive:{ backgroundColor: '#FFF5EE' },
+  catDropCheck:   { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#ddd', alignItems: 'center', justifyContent: 'center' },
+  catDropCheckActive:{ backgroundColor: '#FF6B00', borderColor: '#FF6B00' },
+  catDropCheckmark:{ color: '#fff', fontSize: 12, fontWeight: '800' },
+  catDropIcon:    { fontSize: 18 },
+  catDropLabel:   { fontSize: 13, fontWeight: '700', color: '#1A3A6B', flex: 1 },
+  catDropLabelActive:{ color: '#FF6B00' },
+  catDoneBtn:     { padding: 14, alignItems: 'center', backgroundColor: '#FF6B00' },
+  catDoneTxt:     { color: '#fff', fontSize: 14, fontWeight: '800' },
   uploadBox:      { borderWidth: 2, borderColor: '#FF6B00', borderStyle: 'dashed', borderRadius: 12, padding: 20, alignItems: 'center', backgroundColor: '#fff5ee' },
   uploadBoxDone:  { borderColor: '#2e7d32', backgroundColor: '#f1f8f1', borderStyle: 'solid' },
   uploadIcon:     { fontSize: 32 },
