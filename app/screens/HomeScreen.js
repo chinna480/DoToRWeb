@@ -260,15 +260,11 @@ export default function HomeScreen() {
       // Only use GPS coords if the user explicitly used "My Location" or map picker
       // If user manually typed an address, don't override with current GPS position
       // (they might be at office but repair is at home)
-      let orderLat = custLat, orderLng = custLng
-
       const svcCat = SERVICE_CATEGORIES.find(s => s.key === selectedDevice)
       const order = {
         customerName:       name,
         customerPhone:      phone,
         customerPushToken,
-        custLat:            orderLat,
-        custLng:            orderLng,
         location:           locationInput.trim(),
         pincode:            pincodeInput.trim(),
         serviceCategory:    selectedDevice,
@@ -282,6 +278,11 @@ export default function HomeScreen() {
         status:             'pending',
         time:               new Date().toLocaleTimeString(),
         createdAt:          Date.now(),
+      }
+      // Only include GPS coords if available — Firebase validation requires isNumber()
+      if (custLat != null && custLng != null) {
+        order.custLat = custLat
+        order.custLng = custLng
       }
 
       const newOrderRef = await push(ref(db, 'orders'), order)
@@ -309,7 +310,7 @@ export default function HomeScreen() {
         ]
       )
     } catch (e) {
-      console.error('Booking error:', e)
+      console.error('Booking error:', e?.message || e)
       Alert.alert('Error', 'Booking failed! Try again.')
     } finally {
       setIsSubmitting(false)

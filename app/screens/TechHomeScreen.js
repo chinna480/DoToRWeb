@@ -1,8 +1,9 @@
+import { useFocusEffect } from '@react-navigation/native'
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { onValue, ref, remove, set, update } from 'firebase/database';
-import { Component, useEffect, useRef, useState } from 'react';
+import { Component, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert, Image, Linking,
@@ -115,6 +116,7 @@ export default function TechHomeScreen() {
   const prevPendingIds    = useRef(new Set())
   const areaAssignments   = useRef({})
   const storedEtaRef      = useRef(null)
+  const rawPendingRef     = useRef([]) // unfiltered pending orders for re-filter on focus
 
   useEffect(() => {
     let unsub
@@ -245,6 +247,55 @@ export default function TechHomeScreen() {
     } catch (_) {}
   }
 
+  // Filter pending jobs by all criteria — used both by the Firebase listener and on focus refresh
+  const filterPendingJobs = useCallback((pendingList) => {
+    const myCats = techCatRef.current
+    const filterPincode = techPincodeRef.current
+    const techLat = techLatRef.current
+    const techLng = techLngRef.current
+    const myPhone = techPhoneRef.current
+    const assignments = areaAssignments.current
+
+    let pending = [...pendingList]
+
+    // Filter by service category
+    if (myCats.length > 0) {
+      pending = pending.filter(o => {
+        const orderCat = o.serviceCategory
+        return orderCat && myCats.includes(orderCat)
+      })
+    }
+
+    // Filter by pincode OR GPS proximity
+    if (filterPincode && techLat && techLng) {
+      pending = pending.filter(o => {
+        const pincodeMatch = (o.pincode || '').toLowerCase().trim() === filterPincode
+        if (pincodeMatch) return true
+        if (o.custLat == null || o.custLng == null) return false
+        const dist = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
+        return dist <= 20
+      })
+    } else if (filterPincode) {
+      pending = pending.filter(o => (o.pincode || '').toLowerCase().trim() === filterPincode)
+    } else if (techLat && techLng) {
+      pending = pending.filter(o => {
+        if (o.custLat == null || o.custLng == null) return true
+        const dist = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
+        return dist <= 20
+      })
+    }
+
+    // Area assignment filter
+    pending = pending.filter(o => {
+      const area = (o.location || '').toLowerCase().trim()
+      const assignedTech = assignments[area]
+      if (!area || !assignedTech) return true
+      return assignedTech.phone === myPhone
+    })
+
+    return pending
+  }, [])
+
   const logout = () => {
     Alert.alert('Logout?', 'Are you sure?', [
       { text: 'Cancel' },
@@ -351,56 +402,10 @@ export default function TechHomeScreen() {
         }
       })
 
-      // Filter pending jobs by technician's service categories + pincode + GPS proximity
-      const filterPincode = techPincodeRef.current
-      const techLat = techLatRef.current
-      const techLng = techLngRef.current
-      const myPhone       = techPhoneRef.current
-      const assignments   = areaAssignments.current
-      const myCats        = techCatRef.current
+      // Save raw pending data for re-filter on screen focus
+      rawPendingRef.current = [...allPending]
 
-      let pending = allPending
-
-      // Filter by service category — only show jobs matching tech's selected categories
-      if (myCats.length > 0) {
-        pending = pending.filter(o => {
-          const orderCat = o.serviceCategory
-          return orderCat && myCats.includes(orderCat)
-        })
-      }
-
-      // Filter by pincode OR GPS proximity — show if pincode matches OR within 20 km
-      // This way, nearby customers in a different pincode are still visible
-      if (filterPincode && techLat && techLng) {
-        // Both filters available → OR condition
-        pending = pending.filter(o => {
-          const pincodeMatch = (o.pincode || '').toLowerCase().trim() === filterPincode
-          if (pincodeMatch) return true
-          if (o.custLat == null || o.custLng == null) return false // No GPS & no pincode → hide
-          const dist = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
-          return dist <= 20
-        })
-      } else if (filterPincode) {
-        // Only pincode available
-        pending = pending.filter(o => (o.pincode || '').toLowerCase().trim() === filterPincode)
-      } else if (techLat && techLng) {
-        // Only GPS available
-        pending = pending.filter(o => {
-          if (o.custLat == null || o.custLng == null) return true
-          const dist = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
-          return dist <= 20
-        })
-      }
-
-      // If an area is already assigned to a different technician, exclude those jobs
-      // so only the assigned technician sees them
-      pending = pending.filter(o => {
-        const area = (o.location || '').toLowerCase().trim()
-        const assignedTech = assignments[area]
-        if (!area || !assignedTech) return true // No assignment → anyone can take it
-        // If assigned to this tech → show it
-        return assignedTech.phone === myPhone
-      })
+      let pending = filterPendingJobs(allPending)
 
       pending.forEach(order => {
         if (!prevPendingIds.current.has(order.id)) {
@@ -424,6 +429,32 @@ export default function TechHomeScreen() {
 
     return () => { unsub(); unsubArea() }
   }
+
+  // Reload tech categories whenever screen is focused (e.g. after saving SettingsModal)
+  // and re-filter pending orders to reflect the new service categories immediately
+  useFocusEffect(
+    useCallback(() => {
+      const refreshCategories = async () => {
+        try {
+          const cats = await AsyncStorage.getItem('techCategories')
+          if (cats) {
+            const parsed = JSON.parse(cats)
+            if (Array.isArray(parsed)) {
+              setTechCategories(parsed)
+              techCatRef.current = parsed
+            }
+          }
+        } catch (_) {}
+
+        // Re-filter pending orders with the updated categories
+        if (rawPendingRef.current.length > 0) {
+          const reFiltered = filterPendingJobs(rawPendingRef.current)
+          setPending(reFiltered)
+        }
+      }
+      refreshCategories()
+    }, [filterPendingJobs])
+  )
 
   const acceptJob = async (orderId, order) => {
     const name  = await AsyncStorage.getItem('techName')     || 'Technician'

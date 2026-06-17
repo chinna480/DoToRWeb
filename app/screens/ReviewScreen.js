@@ -19,15 +19,19 @@ export default function ReviewScreen() {
 
     const name = await AsyncStorage.getItem('custName') || 'Customer'
 
-    await push(ref(db, 'reviews'), {
-      customerName: name,
-      rating,
-      comment,
-      time: new Date().toLocaleTimeString(),
-      createdAt: Date.now(),
-    })
-
-    setSubmitted(true)
+    try {
+      await push(ref(db, 'reviews'), {
+        customerName: name,
+        rating,
+        comment,
+        time: new Date().toLocaleTimeString(),
+        createdAt: Date.now(),
+      })
+      setSubmitted(true)
+    } catch (e) {
+      console.error('Review submit error:', e)
+      Alert.alert('Error', 'Failed to submit review. Please try again.')
+    }
   }
 
   if (submitted) {
