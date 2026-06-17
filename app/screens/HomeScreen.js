@@ -26,6 +26,7 @@ import {
   registerForNotifications,
 } from '../utils/notifications';
 import { uploadImages, uploadVideos } from '../utils/uploadImage';
+import { Video, ResizeMode } from 'expo-av';
 import MapPickerModal from '../../components/MapPickerModal';
 import LocationAutocomplete from '../../components/LocationAutocomplete';
 import { useRouter } from 'expo-router';
@@ -97,6 +98,9 @@ export default function HomeScreen() {
   const [custLng, setCustLng]               = useState(null)
   const [fsImages, setFsImages]             = useState([])
   const [fsIndex, setFsIndex]               = useState(0)
+  const [fsVideos, setFsVideos]             = useState([])
+  const [fsVideoIndex, setFsVideoIndex]     = useState(0)
+  const [videoLoading, setVideoLoading]     = useState(true)
   const [orderFilter, setOrderFilter]       = useState('all') // 'all', 'today', 'week', 'month'
   const [showMapPicker, setShowMapPicker]   = useState(false)
   const [mapPickLat, setMapPickLat]         = useState(null)
@@ -137,6 +141,10 @@ export default function HomeScreen() {
         // Normalize images from Firebase (may be stored as object)
         if (o.images && !Array.isArray(o.images)) {
           o.images = typeof o.images === 'string' ? [o.images] : Object.values(o.images).filter(v => typeof v === 'string')
+        }
+        // Normalize videos from Firebase (may be stored as object)
+        if (o.videos && !Array.isArray(o.videos)) {
+          o.videos = typeof o.videos === 'string' ? [o.videos] : Object.values(o.videos).filter(v => typeof v === 'string')
         }
         if (!phone || o.customerPhone === phone) {
           orders.push(o)
@@ -779,6 +787,17 @@ export default function HomeScreen() {
                             ))}
                           </ScrollView>
                         )}
+                        {order.videos && order.videos.length > 0 && (
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                            {order.videos.map((url, j) => (
+                              <TouchableOpacity key={j} onPress={() => { setFsVideos(order.videos); setFsVideoIndex(j) }}>
+                                <View style={s.videoThumbSm}>
+                                  <Text style={s.videoPlayIconSm}>▶️</Text>
+                                </View>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        )}
                         <Text style={s.orderLoc}>📍 {order.location}</Text>
                         {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
                         <Text style={s.orderTime}>🕐 {order.time}</Text>
@@ -818,6 +837,17 @@ export default function HomeScreen() {
                           {order.images.map((url, j) => (
                             <TouchableOpacity key={j} onPress={() => { setFsImages(order.images); setFsIndex(j) }}>
                               <Image source={{ uri: url }} style={s.orderImage} />
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      )}
+                      {order.videos && order.videos.length > 0 && (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                          {order.videos.map((url, j) => (
+                            <TouchableOpacity key={j} onPress={() => { setFsVideos(order.videos); setFsVideoIndex(j) }}>
+                              <View style={s.videoThumbSm}>
+                                <Text style={s.videoPlayIconSm}>▶️</Text>
+                              </View>
                             </TouchableOpacity>
                           ))}
                         </ScrollView>
@@ -884,6 +914,54 @@ export default function HomeScreen() {
     </Modal>
   )
 
+  /* ── Full-Screen Video Player Modal ── */
+  const renderVideoModal = () => (
+    <Modal visible={fsVideos.length > 0} transparent onRequestClose={() => { setFsVideos([]); setFsVideoIndex(0) }}>
+      <View style={s.fsOverlay}>
+        <TouchableOpacity style={s.fsClose} onPress={() => { setFsVideos([]); setFsVideoIndex(0) }}>
+          <Text style={s.fsCloseTxt}>✕</Text>
+        </TouchableOpacity>
+
+        <Text style={s.fsCounter}>{fsVideoIndex + 1} / {fsVideos.length}</Text>
+
+        <View style={s.fsContent}>
+          {fsVideoIndex > 0 && (
+            <TouchableOpacity style={s.fsArrow} onPress={() => setFsVideoIndex(i => i - 1)}>
+              <Text style={s.fsArrowTxt}>‹</Text>
+            </TouchableOpacity>
+          )}
+
+          {fsVideos.length > 0 && (
+            <View style={{ flex: 1, height: '70%', justifyContent: 'center', alignItems: 'center' }}>
+              <Video
+                source={{ uri: fsVideos[fsVideoIndex] }}
+                style={{ width: '100%', height: '100%' }}
+                useNativeControls
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay
+                onLoadStart={() => setVideoLoading(true)}
+                onLoad={() => setVideoLoading(false)}
+                onError={() => setVideoLoading(false)}
+              />
+              {videoLoading ? (
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
+                  <ActivityIndicator size="large" color="#FF6B00" />
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', marginTop: 10 }}>Loading video...</Text>
+                </View>
+              ) : null}
+            </View>
+          )}
+
+          {fsVideoIndex < fsVideos.length - 1 && (
+            <TouchableOpacity style={s.fsArrow} onPress={() => setFsVideoIndex(i => i + 1)}>
+              <Text style={s.fsArrowTxt}>›</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </Modal>
+  )
+
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
       {bookingStep > 0 ? renderWizard() : (
@@ -891,6 +969,7 @@ export default function HomeScreen() {
           {activeTab === 'home' && renderHome()}
           {activeTab === 'orders' && renderOrdersTab()}
           {renderImageModal()}
+          {renderVideoModal()}
           <View style={s.tabBar}>
             <TouchableOpacity style={[s.tabItem, activeTab === 'home' && s.tabItemActive]} onPress={() => setActiveTab('home')}><Text style={[s.tabIcon, activeTab === 'home' && s.tabIconActive]}>🏠</Text><Text style={[s.tabLabel, activeTab === 'home' && s.tabLabelActive]}>Home</Text></TouchableOpacity>
             <TouchableOpacity style={s.tabItem} onPress={() => setBookingStep(1)}><Text style={s.tabIcon}>🔧</Text><Text style={s.tabLabel}>Book</Text></TouchableOpacity>
@@ -1034,6 +1113,8 @@ const s = StyleSheet.create({
   orderChatBtn:     { backgroundColor: '#FF6B00', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, marginTop: 4 },
   orderChatTxt:     { color: '#fff', fontSize: 10, fontWeight: '800' },
   orderImage:       { width: 70, height: 70, borderRadius: 10, marginRight: 8 },
+  videoThumbSm:     { width: 70, height: 70, borderRadius: 10, marginRight: 8, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' },
+  videoPlayIconSm:  { fontSize: 28 },
   // Tab bar
   tabBar:           { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },
   tabItem:          { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, position: 'relative' },

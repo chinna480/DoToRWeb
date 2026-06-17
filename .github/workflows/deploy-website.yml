@@ -1,0 +1,34 @@
+name: Deploy Website to Vercel
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'website/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Website
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Deploy Website to Vercel (Production)
+        run: |
+          vercel deploy ./website \
+            --prod \
+            --yes \
+            --scope ramb0s-projects \
+            --token ${{ secrets.VERCEL_TOKEN }}

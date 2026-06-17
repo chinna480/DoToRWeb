@@ -342,6 +342,12 @@
                 ${order.images.length > 3 ? `<span class="order-more-images">+${order.images.length - 3}</span>` : ''}
               </div>
             ` : ''}
+            ${order.videos && order.videos.length > 0 ? `
+              <div class="order-images">
+                ${order.videos.slice(0, 3).map((url, j) => `<video src="${url}" style="width:72px;height:72px;border-radius:8px;object-fit:cover;background:#1A3A6B;cursor:pointer;" controls preload="none" title="Tap to play video" onclick="event.stopPropagation()"></video>`).join('')}
+                ${order.videos.length > 3 ? `<span class="order-more-images">+${order.videos.length - 3}</span>` : ''}
+              </div>
+            ` : ''}
           </div>
           <div class="order-right">
             <span class="order-status ${order.status}">${order.status}</span>
@@ -416,6 +422,14 @@
             <p style="font-size:12px;font-weight:700;color:var(--gray);margin-bottom:6px;">Images:</p>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
               ${order.images.map((url, j) => `<img src="${url}" style="width:72px;height:72px;border-radius:8px;object-fit:cover;background:var(--gray-light);cursor:pointer;" onclick="event.stopPropagation();openFsViewer(${JSON.stringify(order.images)}, ${j})">`).join('')}
+            </div>
+          </div>
+        ` : ''}
+        ${order.videos && order.videos.length > 0 ? `
+          <div style="margin-top:12px;">
+            <p style="font-size:12px;font-weight:700;color:var(--gray);margin-bottom:6px;">Videos:</p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${order.videos.map(url => `<video src="${url}" style="width:72px;height:72px;border-radius:8px;object-fit:cover;background:#1A3A6B;" controls preload="none" title="Play video"></video>`).join('')}
             </div>
           </div>
         ` : ''}

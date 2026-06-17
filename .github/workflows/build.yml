@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -67,9 +68,19 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPO_DOCTOR_SKIP: true
 
+      - name: Find APK (newest one)
+        run: |
+          APK=$(find . -name "*.apk" -not -path "*/node_modules/*" -printf '%T@ %p\n' | sort -rn | head -1 | cut -d' ' -f2-)
+          if [ -z "$APK" ]; then
+            echo "❌ No APK found!"
+            exit 1
+          fi
+          echo "✅ APK found: $APK"
+          echo "APK_PATH=$APK" >> $GITHUB_ENV
+          echo "APK_NAME=$(basename "$APK")" >> $GITHUB_ENV
+
       - name: Upload APK as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DoToR-APK
-          path: build-*.apk
-
+          name: DoToR-APK-${{ env.APK_NAME }}
+          path: ${{ env.APK_PATH }}

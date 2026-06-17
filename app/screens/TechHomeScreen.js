@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { onValue, ref, remove, set, update } from 'firebase/database';
 import { Component, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert, Image, Linking,
   Modal,
   ScrollView,
@@ -12,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Video, ResizeMode } from 'expo-av';
 import MiniMap from '../../components/MiniMap';
 import { db } from '../firebase/config';
 import { calcDistance } from '../utils/distance';
@@ -91,6 +93,9 @@ export default function TechHomeScreen() {
   }
   const [fsImages, setFsImages]          = useState([])
   const [fsIndex, setFsIndex]            = useState(0)
+  const [fsVideos, setFsVideos]          = useState([])
+  const [fsVideoIndex, setFsVideoIndex]  = useState(0)
+  const [videoLoading, setVideoLoading]  = useState(true)
   const [liveOrderData, setLiveOrderData] = useState(null)
   const miniMapRef = useRef(null)
 
@@ -576,6 +581,7 @@ export default function TechHomeScreen() {
         <View style={s.ongoingCard}>
           <Text style={s.jobCust}>👤 {(liveOrderData || ongoingJob).customerName}</Text>
           <Text style={s.jobType}>📱 {(liveOrderData || ongoingJob).brand} {(liveOrderData || ongoingJob).modelName ? `— ${(liveOrderData || ongoingJob).modelName}` : ''}</Text>
+          {(liveOrderData || ongoingJob).serviceLabel ? <Text style={s.jobCat}>🔧 {(liveOrderData || ongoingJob).serviceLabel}</Text> : null}
           {(liveOrderData || ongoingJob).description ? <Text style={s.jobDesc}>📝 {(liveOrderData || ongoingJob).description}</Text> : null}
           <Text style={s.jobLoc}>📍 {(liveOrderData || ongoingJob).location}</Text>
           {(liveOrderData || ongoingJob).pincode ? <Text style={s.jobLoc}>📮 {(liveOrderData || ongoingJob).pincode}</Text> : null}
@@ -586,6 +592,18 @@ export default function TechHomeScreen() {
               {(liveOrderData || ongoingJob).images.map((url, j) => (
                 <TouchableOpacity key={j} onPress={() => { setFsImages((liveOrderData || ongoingJob).images); setFsIndex(j) }}>
                   <Image source={{ uri: url }} style={s.orderImage} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+
+          {(liveOrderData || ongoingJob).videos && (liveOrderData || ongoingJob).videos.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 8 }}>
+              {(liveOrderData || ongoingJob).videos.map((url, j) => (
+                <TouchableOpacity key={j} onPress={() => { setFsVideos((liveOrderData || ongoingJob).videos); setFsVideoIndex(j) }}>
+                  <View style={s.videoThumb}>
+                    <Text style={s.videoPlayIcon}>▶️</Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -715,6 +733,54 @@ export default function TechHomeScreen() {
     </Modal>
   )
 
+  /* ── Full-Screen Video Player Modal ── */
+  const renderVideoModal = () => (
+    <Modal visible={fsVideos.length > 0} transparent onRequestClose={() => setFsVideos([])}>
+      <View style={s.fsOverlay}>
+        <TouchableOpacity style={s.fsClose} onPress={() => { setFsVideos([]); setFsVideoIndex(0) }}>
+          <Text style={s.fsCloseTxt}>✕</Text>
+        </TouchableOpacity>
+
+        <Text style={s.fsCounter}>{fsVideoIndex + 1} / {fsVideos.length}</Text>
+
+        <View style={s.fsContent}>
+          {fsVideoIndex > 0 && (
+            <TouchableOpacity style={s.fsArrow} onPress={() => setFsVideoIndex(i => i - 1)}>
+              <Text style={s.fsArrowTxt}>‹</Text>
+            </TouchableOpacity>
+          )}
+
+          {fsVideos.length > 0 && (
+            <View style={{ flex: 1, height: '70%', justifyContent: 'center', alignItems: 'center' }}>
+              <Video
+                source={{ uri: fsVideos[fsVideoIndex] }}
+                style={{ width: '100%', height: '100%' }}
+                useNativeControls
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay
+                onLoadStart={() => setVideoLoading(true)}
+                onLoad={() => setVideoLoading(false)}
+                onError={() => setVideoLoading(false)}
+              />
+              {videoLoading ? (
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
+                  <ActivityIndicator size="large" color="#FF6B00" />
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', marginTop: 10 }}>Loading video...</Text>
+                </View>
+              ) : null}
+            </View>
+          )}
+
+          {fsVideoIndex < fsVideos.length - 1 && (
+            <TouchableOpacity style={s.fsArrow} onPress={() => setFsVideoIndex(i => i + 1)}>
+              <Text style={s.fsArrowTxt}>›</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </Modal>
+  )
+
   // ── PENDING TAB ──
   const renderPendingTab = () => (
     <ScrollView style={s.container} showsVerticalScrollIndicator={false}>
@@ -737,6 +803,7 @@ export default function TechHomeScreen() {
             <View style={s.newBadge}><Text style={s.newBadgeTxt}>NEW</Text></View>
             <Text style={s.jobCust}>👤 {order.customerName}</Text>
             <Text style={s.jobType}>📱 {order.brand} {order.modelName ? `— ${order.modelName}` : ''}</Text>
+            {order.serviceLabel ? <Text style={s.jobCat}>🔧 {order.serviceLabel}</Text> : null}
             {order.description ? <Text style={s.jobDesc}>📝 {order.description}</Text> : null}
             <Text style={s.jobLoc}>📍 {order.location}</Text>
             {order.pincode ? <Text style={s.jobLoc}>📮 {order.pincode}</Text> : null}
@@ -745,6 +812,17 @@ export default function TechHomeScreen() {
                 {order.images.map((url, j) => (
                   <TouchableOpacity key={j} onPress={() => { setFsImages(order.images); setFsIndex(j) }}>
                     <Image source={{ uri: url }} style={s.orderImage} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            {order.videos && order.videos.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                {order.videos.map((url, j) => (
+                  <TouchableOpacity key={j} onPress={() => { setFsVideos(order.videos); setFsVideoIndex(j) }}>
+                    <View style={s.videoThumb}>
+                      <Text style={s.videoPlayIcon}>▶️</Text>
+                    </View>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -865,6 +943,7 @@ export default function TechHomeScreen() {
             <View style={{ flex: 1 }}>
               <Text style={s.compCust}>👤 {order.customerName}</Text>
               <Text style={s.compType}>📱 {order.brand} {order.modelName ? `— ${order.modelName}` : ''}</Text>
+              {order.serviceLabel ? <Text style={{ fontSize: 11, color: '#FF6B00', fontWeight: '700', marginTop: 2 }}>🔧 {order.serviceLabel}</Text> : null}
               {order.description ? <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>📝 {order.description}</Text> : null}
               <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📍 {order.location}</Text>
               {order.pincode ? <Text style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📮 {order.pincode}</Text> : null}
@@ -877,6 +956,20 @@ export default function TechHomeScreen() {
                   ))}
                   {order.images.length > 3 && (
                     <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{order.images.length - 3}</Text>
+                  )}
+                </View>
+              )}
+              {order.videos && order.videos.length > 0 && (
+                <View style={{ flexDirection: 'row', gap: 4, marginTop: 6 }}>
+                  {order.videos.slice(0, 3).map((url, j) => (
+                    <TouchableOpacity key={j} onPress={() => { setFsVideos(order.videos); setFsVideoIndex(j) }}>
+                      <View style={{ width: 36, height: 36, borderRadius: 6, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ fontSize: 16 }}>▶️</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                  {order.videos.length > 3 && (
+                    <Text style={{ fontSize: 10, color: '#888', alignSelf: 'center' }}>+{order.videos.length - 3}</Text>
                   )}
                 </View>
               )}
@@ -912,6 +1005,7 @@ export default function TechHomeScreen() {
       {activeTab === 'completed' && renderCompletedTab()}
 
       {renderImageModal()}
+      {renderVideoModal()}
 
       {/* BOTTOM TAB BAR */}
       <View style={s.tabBar}>
@@ -963,7 +1057,10 @@ const s = StyleSheet.create({
   jobType:       { fontSize: 13, fontWeight: '700', color: '#FF6B00', marginTop: 4 },
   jobDesc:       { fontSize: 12, color: '#555', fontWeight: '600', marginTop: 3, fontStyle: 'italic' },
   jobLoc:        { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 3 },
+  jobCat:        { fontSize: 12, fontWeight: '700', color: '#FF6B00', marginTop: 4 },
   orderImage:    { width: 70, height: 70, borderRadius: 10, marginRight: 8 },
+  videoThumb:    { width: 70, height: 70, borderRadius: 10, marginRight: 8, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' },
+  videoPlayIcon: { fontSize: 28 },
   jobTime:       { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 3 },
   jobActions:    { flexDirection: 'row', gap: 10, marginTop: 15 },
   rejectBtn:     { flex: 1, backgroundColor: '#ffebee', padding: 12, borderRadius: 12, alignItems: 'center' },

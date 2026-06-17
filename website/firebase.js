@@ -125,6 +125,10 @@ export function listenOrders(callback) {
       if (order.images && !Array.isArray(order.images)) {
         order.images = Object.values(order.images);
       }
+      // Normalize videos (Firebase stores arrays as objects)
+      if (order.videos && !Array.isArray(order.videos)) {
+        order.videos = Object.values(order.videos);
+      }
       orders.push(order);
     });
     callback(orders.reverse());
@@ -148,6 +152,9 @@ export function listenCustomerOrders(phone, callback) {
         if (order.images && !Array.isArray(order.images)) {
           order.images = Object.values(order.images);
         }
+        if (order.videos && !Array.isArray(order.videos)) {
+          order.videos = Object.values(order.videos);
+        }
         orders.push(order);
       }
     });
@@ -168,6 +175,9 @@ export function listenOrder(orderId, callback) {
     const order = { id: orderId, ...val };
     if (order.images && !Array.isArray(order.images)) {
       order.images = Object.values(order.images);
+    }
+    if (order.videos && !Array.isArray(order.videos)) {
+      order.videos = Object.values(order.videos);
     }
     callback(order);
   });

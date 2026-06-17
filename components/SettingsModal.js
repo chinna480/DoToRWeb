@@ -1,6 +1,7 @@
 // SettingsModal.js — Reusable settings for both Customer & Technician profiles
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useRouter } from 'expo-router'
+import { ref, update } from 'firebase/database'
 import { useState } from 'react'
 import {
   Alert,
@@ -14,10 +15,26 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import { db } from '../app/firebase/config'
 
 const LANGUAGES = [
   { code: 'en', label: '🇬🇧 English' },
   { code: 'hi', label: '🇮🇳 हिन्दी' },
+]
+
+const SERVICE_CATEGORIES = [
+  { key: 'mobile',       icon: '📱', label: 'Mobile Repair' },
+  { key: 'laptop',       icon: '💻', label: 'Laptop & PC Repair' },
+  { key: 'tv',           icon: '📺', label: 'TV Repair' },
+  { key: 'ac',           icon: '❄️', label: 'AC Service & Repair' },
+  { key: 'refrigerator', icon: '🧊', label: 'Refrigerator Repair' },
+  { key: 'washing',      icon: '🧺', label: 'Washing Machine Repair' },
+  { key: 'electrician',  icon: '🔌', label: 'Electrician Services' },
+  { key: 'plumbing',     icon: '🚰', label: 'Plumbing Services' },
+  { key: 'cctv',         icon: '📡', label: 'CCTV Installation & Service' },
+  { key: 'wifi',         icon: '🌐', label: 'Wi-Fi Router Setup' },
+  { key: 'ro',           icon: '💧', label: 'RO Water Purifier Service' },
+  { key: 'inverter',     icon: '🔋', label: 'Inverter & UPS Service' },
 ]
 
 export default function SettingsModal({ visible, onClose, role = 'customer' }) {
@@ -36,6 +53,9 @@ export default function SettingsModal({ visible, onClose, role = 'customer' }) {
   const [language, setLanguage]       = useState('en')
   const [darkMode, setDarkMode]       = useState(false)
   const [notifSound, setNotifSound]   = useState(true)
+
+  // ── Service categories state (tech only) ──
+  const [selCategories, setSelCategories] = useState([])
 
   // ── Load / Save ──
   const loadSettings = async () => {
@@ -57,6 +77,17 @@ export default function SettingsModal({ visible, onClose, role = 'customer' }) {
       if (lang) setLanguage(lang)
       if (dm) setDarkMode(dm === 'true')
       if (ns) setNotifSound(ns === 'true')
+
+      // Load tech service categories
+      if (isTech) {
+        const cats = await AsyncStorage.getItem('techCategories')
+        if (cats) {
+          try {
+            const parsed = JSON.parse(cats)
+            if (Array.isArray(parsed)) setSelCategories(parsed)
+          } catch (_) {}
+        }
+      }
     } catch (_) {}
   }
 
@@ -72,6 +103,22 @@ export default function SettingsModal({ visible, onClose, role = 'customer' }) {
       await AsyncStorage.setItem(`${pfx}Lang`, language)
       await AsyncStorage.setItem(`${pfx}DarkMode`, String(darkMode))
       await AsyncStorage.setItem(`${pfx}NotifSound`, String(notifSound))
+
+      // Save tech service categories
+      if (isTech && selCategories.length > 0) {
+        await AsyncStorage.setItem('techCategories', JSON.stringify(selCategories))
+        // Also update Firebase so push notifications filter correctly
+        try {
+          if (phone) {
+            await update(ref(db, 'techUsers/' + phone), { serviceCategories: selCategories })
+          }
+        } catch (e) {
+          console.log('Firebase category update failed (non-critical):', e.message)
+        }
+      } else if (isTech && selCategories.length === 0) {
+        Alert.alert('Error', 'You must select at least one service category!')
+        return
+      }
 
       Alert.alert('✅ Saved', 'Your settings have been updated!')
       onClose()
@@ -132,6 +179,73 @@ export default function SettingsModal({ visible, onClose, role = 'customer' }) {
       </View>
     </>
   )
+
+  const renderServices = () => {
+    const toggleCategory = (catKey) => {
+      setSelCategories(prev =>
+        prev.includes(catKey) ? prev.filter(c => c !== catKey) : [...prev, catKey]
+      )
+    }
+
+    const getSelectedLabels = () => {
+      if (selCategories.length === 0) return 'No services selected'
+      return selCategories.map(k => SERVICE_CATEGORIES.find(c => c.key === k)?.label).filter(Boolean).join(', ')
+    }
+
+    return (
+      <>
+        <Text style={st.sectionTitle}>🔧 Service Categories</Text>
+        <Text style={{ fontSize: 12, color: '#888', fontWeight: '600', marginBottom: 12 }}>
+          Select which services you want to receive orders for
+        </Text>
+
+        {selCategories.length > 0 && (
+          <Text style={{ fontSize: 12, color: '#FF6B00', fontWeight: '700', marginBottom: 12, lineHeight: 18 }}>
+            ✅ {getSelectedLabels()}
+          </Text>
+        )}
+
+        <View style={{ backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', elevation: 2, marginBottom: 16 }}>
+          {SERVICE_CATEGORIES.map((cat, idx) => {
+            const isSelected = selCategories.includes(cat.key)
+            return (
+              <TouchableOpacity
+                key={cat.key}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: 14,
+                  borderBottomWidth: idx < SERVICE_CATEGORIES.length - 1 ? 1 : 0,
+                  borderBottomColor: '#f0f0f0',
+                  backgroundColor: isSelected ? '#FFF5EE' : '#fff',
+                }}
+                onPress={() => toggleCategory(cat.key)}
+              >
+                <View style={{
+                  width: 24, height: 24, borderRadius: 6,
+                  borderWidth: 2, borderColor: isSelected ? '#FF6B00' : '#ddd',
+                  backgroundColor: isSelected ? '#FF6B00' : 'transparent',
+                  alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {isSelected && <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>✓</Text>}
+                </View>
+                <Text style={{ fontSize: 20 }}>{cat.icon}</Text>
+                <Text style={{
+                  fontSize: 14, fontWeight: '700',
+                  color: isSelected ? '#FF6B00' : '#1A3A6B', flex: 1,
+                }}>{cat.label}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+
+        <Text style={{ fontSize: 12, color: '#888', fontWeight: '600', textAlign: 'center' }}>
+          {selCategories.length} of {SERVICE_CATEGORIES.length} services selected
+        </Text>
+      </>
+    )
+  }
 
   const renderAccount = () => (
     <>
@@ -195,6 +309,7 @@ export default function SettingsModal({ visible, onClose, role = 'customer' }) {
           {[
             { key: 'profile', icon: '👤', label: 'Profile' },
             { key: 'account', icon: '🔐', label: 'Security' },
+            ...(isTech ? [{ key: 'services', icon: '🔧', label: 'Services' }] : []),
             { key: 'prefs',   icon: '⚙️', label: 'Preferences' },
           ].map(tab => (
             <TouchableOpacity key={tab.key} style={[st.tab, activeSection === tab.key && st.tabActive]} onPress={() => setActiveSection(tab.key)}>
@@ -208,6 +323,7 @@ export default function SettingsModal({ visible, onClose, role = 'customer' }) {
         <ScrollView style={st.body} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
           {activeSection === 'profile' && renderProfile()}
           {activeSection === 'account' && renderAccount()}
+          {activeSection === 'services' && renderServices()}
           {activeSection === 'prefs' && renderPreferences()}
 
           {/* Save Button (visible on all tabs) */}
