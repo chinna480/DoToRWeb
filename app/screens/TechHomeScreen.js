@@ -364,17 +364,26 @@ export default function TechHomeScreen() {
         })
       }
 
-      if (filterPincode) {
-        pending = pending.filter(o => (o.pincode || '').toLowerCase().trim() === filterPincode)
-      }
-
-      // Filter by GPS proximity — only show orders within 20 km of technician's current location
-      // Orders without GPS coordinates are still shown (e.g., website bookings where customer didn't share GPS)
-      if (techLat && techLng) {
+      // Filter by pincode OR GPS proximity — show if pincode matches OR within 20 km
+      // This way, nearby customers in a different pincode are still visible
+      if (filterPincode && techLat && techLng) {
+        // Both filters available → OR condition
         pending = pending.filter(o => {
-          if (o.custLat == null || o.custLng == null) return true // No GPS → still show (website orders)
+          const pincodeMatch = (o.pincode || '').toLowerCase().trim() === filterPincode
+          if (pincodeMatch) return true
+          if (o.custLat == null || o.custLng == null) return false // No GPS & no pincode → hide
           const dist = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
-          return dist <= 20 // within 20 km radius
+          return dist <= 20
+        })
+      } else if (filterPincode) {
+        // Only pincode available
+        pending = pending.filter(o => (o.pincode || '').toLowerCase().trim() === filterPincode)
+      } else if (techLat && techLng) {
+        // Only GPS available
+        pending = pending.filter(o => {
+          if (o.custLat == null || o.custLng == null) return true
+          const dist = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
+          return dist <= 20
         })
       }
 
