@@ -299,9 +299,9 @@
       const container = document.getElementById('ordersList');
       container.style.display = 'block';
 
-      // Fetch tech profiles for accepted orders (async)
+      // Fetch tech profiles for orders with an assigned tech (async)
       orders.forEach(order => {
-        if (order.status === 'accepted' && order.techPhone && !techProfileCache[order.techPhone]) {
+        if (order.techPhone && !techProfileCache[order.techPhone]) {
           fetchTechProfile(order.techPhone).then(() => {
             // Re-render to show updated tech info
             applyFilter();
@@ -311,7 +311,7 @@
 
       container.innerHTML = orders.map(order => {
         const techProfile = order.techPhone ? techProfileCache[order.techPhone] : null;
-        const hasTechInfo = order.status === 'accepted' && order.techName && techProfile;
+        const hasTechInfo = (order.status === 'accepted' || order.status === 'completed') && order.techName && techProfile;
 
         return `
         <div class="order-card ${order.status}" onclick="showDetail('${order.id}')">
@@ -321,7 +321,7 @@
             <div class="order-detail">📍 ${order.location || 'Location not set'}</div>
             ${order.pincode ? `<div class="order-detail">📮 ${order.pincode}</div>` : ''}
             <div class="order-detail">🕐 ${order.time || ''}</div>
-            ${order.techName ? `<div class="order-detail">🛵 ${order.techName}</div>` : ''}
+            ${!hasTechInfo && order.techName ? `<div class="order-detail">🛵 ${order.techName}</div>` : ''}
             ${hasTechInfo ? `
               <div class="tech-info-row">
                 <div class="tech-avatar-sm">
