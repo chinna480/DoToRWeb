@@ -5,17 +5,17 @@
     "orders": {
       ".read": true,
       ".write": true,
-      ".indexOn": ["customerPhone", "status", "techPhone", "createdAt"],
+      ".indexOn": ["customerPhone", "status", "techPhone", "createdAt", "serviceCategory"],
       "$orderId": {
         ".validate": "newData.hasChildren(['customerName', 'customerPhone', 'status'])",
         "customerName": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100" },
         "customerPhone": { ".validate": "newData.isString() && newData.val().length >= 10" },
         "customerPushToken": { ".validate": "newData.isString()" },
-        "status": {
-          ".validate": "newData.isString() && (newData.val() === 'pending' || newData.val() === 'accepted' || newData.val() === 'completed' || newData.val() === 'rejected')"
-        },
+        "status": { ".validate": "newData.isString() && (newData.val() === 'pending' || newData.val() === 'accepted' || newData.val() === 'completed' || newData.val() === 'rejected')" },
+        "serviceCategory": { ".validate": "newData.isString() && newData.val().length <= 50" },
+        "serviceLabel": { ".validate": "newData.isString() && newData.val().length <= 100" },
+        "device": { ".validate": "newData.isString() && newData.val().length <= 50" },
         "brand": { ".validate": "newData.isString() && newData.val().length <= 100" },
-        "repair": { ".validate": "newData.isString() && newData.val().length <= 200" },
         "modelName": { ".validate": "newData.isString() && newData.val().length <= 100" },
         "description": { ".validate": "newData.isString() && newData.val().length <= 2000" },
         "location": { ".validate": "newData.isString() && newData.val().length <= 500" },
@@ -23,6 +23,7 @@
         "time": { ".validate": "newData.isString()" },
         "createdAt": { ".validate": "newData.isNumber()" },
         "images": { ".validate": "newData.isString() || newData.hasChildren()" },
+        "videos": { ".validate": "newData.isString() || newData.hasChildren()" },
         "techPhone": { ".validate": "newData.isString() && newData.val().length >= 10" },
         "techName": { ".validate": "newData.isString() && newData.val().length <= 100" },
         "completedTime": { ".validate": "newData.isNumber()" },
@@ -34,6 +35,7 @@
         "reminderSent": { ".validate": "newData.isBoolean()" },
         "custLat": { ".validate": "newData.isNumber()" },
         "custLng": { ".validate": "newData.isNumber()" },
+        "autoAssignTime": { ".validate": "newData.isNumber()" },
         "custLocation": {
           "$loc": {
             "lat": { ".validate": "newData.isNumber()" },
@@ -78,9 +80,9 @@
       }
     },
     "users": {
+      ".read": true,
+      ".write": true,
       "$phone": {
-        ".read": true,
-        ".write": true,
         ".validate": "newData.hasChildren(['name', 'phone'])",
         "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100" },
         "phone": { ".validate": "newData.isString() && newData.val().length >= 10" },
@@ -92,9 +94,9 @@
       }
     },
     "techs": {
+      ".read": true,
+      ".write": true,
       "$phone": {
-        ".read": true,
-        ".write": true,
         ".validate": "newData.hasChildren(['name', 'phone'])",
         "name": { ".validate": "newData.isString()" },
         "phone": { ".validate": "newData.isString()" },
@@ -105,9 +107,10 @@
       }
     },
     "techUsers": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["serviceCategories"],
       "$phone": {
-        ".read": true,
-        ".write": true,
         ".validate": "newData.hasChildren(['name', 'phone'])",
         "name": { ".validate": "newData.isString()" },
         "phone": { ".validate": "newData.isString()" },
@@ -115,6 +118,7 @@
         "location": { ".validate": "newData.isString()" },
         "pincode": { ".validate": "newData.isString()" },
         "photo": { ".validate": "newData.isString()" },
+        "serviceCategories": { ".validate": "newData.isArray()" },
         "$other": { ".validate": true }
       }
     },
@@ -131,13 +135,15 @@
       }
     },
     "pushTokens": {
+      ".read": true,
       "$phone": {
-        ".read": true,
-        ".write": true
+        ".write": true,
+        ".validate": "newData.isString()"
       }
     },
     "reviews": {
       ".read": true,
+      ".indexOn": ["createdAt"],
       "$reviewId": {
         ".write": true,
         ".validate": "newData.hasChildren(['customerName', 'rating'])",
@@ -150,14 +156,14 @@
       }
     },
     "techRatings": {
+      ".read": true,
       "$phone": {
-        ".read": true,
         ".write": true
       }
     },
     "areaAssignments": {
+      ".read": true,
       "$area": {
-        ".read": true,
         ".write": true,
         ".validate": "newData.hasChildren(['name', 'phone'])",
         "name": { ".validate": "newData.isString()" },

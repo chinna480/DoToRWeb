@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { onValue, push, ref } from 'firebase/database';
+import { get, child, onValue, push, ref } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -105,6 +105,7 @@ export default function HomeScreen() {
   const [showMapPicker, setShowMapPicker]   = useState(false)
   const [mapPickLat, setMapPickLat]         = useState(null)
   const [mapPickLng, setMapPickLng]         = useState(null)
+  const [techPhotos, setTechPhotos]         = useState({}) // {phone: url}
 
   const ordersUnsubRef = useRef(null)
 
@@ -151,7 +152,28 @@ export default function HomeScreen() {
         }
       })
       setMyOrders(orders.reverse())
+      // Fetch tech photos for orders with techPhone
+      const phonesToFetch = [...new Set(orders.filter(o => o.techPhone).map(o => o.techPhone))]
+      if (phonesToFetch.length > 0) {
+        loadTechPhotos(phonesToFetch)
+      }
     })
+  }
+
+  // Fetch tech profile photos from Firebase
+  const loadTechPhotos = async (phones) => {
+    const photos = {}
+    await Promise.all(phones.map(async (phone) => {
+      try {
+        const snap = await get(child(ref(db), `techUsers/${phone}/photo`))
+        if (snap.exists() && typeof snap.val() === 'string' && snap.val().startsWith('http')) {
+          photos[phone] = snap.val()
+        }
+      } catch (_) {}
+    }))
+    if (Object.keys(photos).length > 0) {
+      setTechPhotos(prev => ({ ...prev, ...photos }))
+    }
   }
 
   // ── Image picker ───────────────────────────────────────────────────────
@@ -806,6 +828,11 @@ export default function HomeScreen() {
                       <View style={s.orderRight}>
                         <Text style={[s.orderStatus, { color: statusColor }]}>{statusIcon}</Text>
                         <Text style={[s.orderStatusLabel, { color: statusColor }]}>{order.status}</Text>
+                        {order.techName && order.techPhone && techPhotos[order.techPhone] && (
+                          <View style={s.techAvatarSm}>
+                            <Image source={{ uri: techPhotos[order.techPhone] }} style={{ width: 28, height: 28, borderRadius: 14 }} />
+                          </View>
+                        )}
                         {order.id && (
                           <TouchableOpacity style={s.orderChatBtn} onPress={() => {
                             try {
@@ -1116,6 +1143,7 @@ const s = StyleSheet.create({
   orderImage:       { width: 70, height: 70, borderRadius: 10, marginRight: 8 },
   videoThumbSm:     { width: 70, height: 70, borderRadius: 10, marginRight: 8, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' },
   videoPlayIconSm:  { fontSize: 28 },
+  techAvatarSm:     { marginTop: 4, alignSelf: 'center' },
   // Tab bar
   tabBar:           { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },
   tabItem:          { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, position: 'relative' },

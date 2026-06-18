@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Location from 'expo-location'
 import { useRouter } from 'expo-router'
-import { onValue, ref, set } from 'firebase/database'
+import { get, child, onValue, ref, set } from 'firebase/database'
 import { Component, useEffect, useRef, useState } from 'react'
 import {
   Alert,
+  Image,
   Linking,
   Platform,
   ScrollView,
@@ -60,6 +61,7 @@ export default function TrackingScreen() {
   const [etaSeconds, setEtaSeconds] = useState(null)
   const [countdown, setCountdown]   = useState('--')
   const [techName, setTechName]   = useState('Connecting...')
+  const [techPhoto, setTechPhoto] = useState(null)
 
   // Format seconds into readable countdown
   const formatCountdown = (s) => {
@@ -80,6 +82,19 @@ export default function TrackingScreen() {
   const [jobDone, setJobDone]     = useState(false)
   const [orderId, setOrderId]     = useState('')
   const [custName, setCustName]   = useState('Customer')
+
+  // Fetch tech profile photo when techPhone is known
+  const fetchTechPhoto = async (phone) => {
+    if (!phone) return
+    try {
+      const snap = await get(child(ref(db), `techUsers/${phone}/photo`))
+      if (snap.exists() && typeof snap.val() === 'string' && snap.val().startsWith('http')) {
+        setTechPhoto(snap.val())
+      }
+    } catch (e) {
+      console.log('fetchTechPhoto error:', e.message)
+    }
+  }
   const [refreshingLocation, setRefreshingLocation] = useState(false)
   const [gpsStatus, setGpsStatus]                   = useState('')
 
@@ -200,7 +215,10 @@ export default function TrackingScreen() {
           if (!o) return
           if (o.techName) {
             setTechName(o.techName)
-            if (o.techPhone) setTechPhone(o.techPhone)
+            if (o.techPhone) {
+              setTechPhone(o.techPhone)
+              fetchTechPhoto(o.techPhone)
+            }
           }
           if (o.modelName) setModelName(o.modelName)
           if (o.description) setDescription(o.description)
@@ -240,15 +258,19 @@ export default function TrackingScreen() {
   }
 
   const openMapsDirections = () => {
-    if (techLat && techLng && custLat && custLng) {
-      Linking.openURL(`https://www.google.com/maps/dir/?api=1&origin=${techLat},${techLng}&destination=${custLat},${custLng}`)
-        .catch(() => Alert.alert('Error', 'Could not open Google Maps'))
-    } else if (custLat && custLng) {
-      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${custLat},${custLng}`)
-        .catch(() => Alert.alert('Error', 'Could not open Google Maps'))
-    } else {
+    if (!custLat || !custLng) {
       Alert.alert('Location Unavailable', 'Customer location is not set yet.')
+      return
     }
+    const dest = `${custLat},${custLng}`
+    const origin = (techLat && techLng) ? `${techLat},${techLng}` : null
+    // Official Google Maps deep link — works on both Android & iOS
+    const url = origin
+      ? `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&travelmode=driving`
+      : `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`
+    Linking.openURL(url).catch(() =>
+      Alert.alert('Error', 'Could not open Maps. Please install Google Maps.')
+    )
   }
 
   // Recalculate distance whenever GPS or tech location changes
@@ -437,7 +459,13 @@ export default function TrackingScreen() {
           <View style={s.card}>
             <Text style={s.cardTitle}>YOUR TECHNICIAN</Text>
             <View style={s.techRow}>
-              <View style={s.techAvatar}><Text style={{ fontSize: 26 }}>👨‍🔧</Text></View>
+              <View style={s.techAvatar}>
+                {techPhoto ? (
+                  <Image source={{ uri: techPhoto }} style={{ width: 50, height: 50, borderRadius: 25 }} />
+                ) : (
+                  <Text style={{ fontSize: 26 }}>👨‍🔧</Text>
+                )}
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.techName}>{techName}</Text>
                 <Text style={s.techSub}>⭐ Verified Expert Technician</Text>

@@ -86,10 +86,12 @@ export async function createOrder(orderData) {
       modelName:       orderData.modelName || orderData.model || '',
       description:     (orderData.description || '').trim(),
       status:          'pending',
+      createdAt:       Date.now(),
       time:            orderData.time || new Date().toLocaleTimeString(),
       custLat:         orderData.lat || null,
       custLng:         orderData.lng || null,
       images:          orderData.images || [],
+      videos:          orderData.videos || [],
       ...(orderData.isAppointment && {
         isAppointment: true,
         appointmentTime: orderData.appointmentTime,

@@ -232,7 +232,7 @@ export default function TechProfileScreen() {
       <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} role="tech" />
 
       <View style={s.version}>
-        <Text style={s.versionTxt}>🔧 DoToR v1.0.0</Text>
+        <Text style={s.versionTxt}>🔧 DoToR v1.0.1</Text>
         <Text style={s.versionSub}>We are the Doctor of your Device</Text>
       </View>
 

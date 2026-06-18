@@ -530,12 +530,19 @@ export default function TechHomeScreen() {
   }
 
   const navigate = () => {
-    if (custLat && custLng) {
-      const origin = (myLat && myLng) ? `&origin=${myLat},${myLng}` : ''
-      Linking.openURL(`https://www.google.com/maps/dir/?api=1${origin}&destination=${custLat},${custLng}`)
-    } else {
+    if (!custLat || !custLng) {
       Alert.alert('Not Available', 'Customer location not available yet!')
+      return
     }
+    const dest = `${custLat},${custLng}`
+    const origin = (myLat && myLng) ? `${myLat},${myLng}` : null
+    // Official Google Maps deep link — works on both Android & iOS
+    const url = origin
+      ? `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&travelmode=driving`
+      : `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`
+    Linking.openURL(url).catch(() =>
+      Alert.alert('Error', 'Could not open Maps. Please install Google Maps.')
+    )
   }
 
   const callCustomer = () => {

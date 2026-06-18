@@ -218,7 +218,7 @@ export default function CustomerProfileScreen() {
 
       {/* VERSION */}
       <View style={s.version}>
-        <Text style={s.versionApp}>🔧 DoToR v1.0.0</Text>
+        <Text style={s.versionApp}>🔧 DoToR v1.0.1</Text>
         <Text style={s.versionTag}>We are the Doctor of your Device</Text>
       </View>
 
