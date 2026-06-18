@@ -1,15 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useFocusEffect } from '@react-navigation/native'
-import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useEffect, useState } from 'react'
-
+import { useRouter } from 'expo-router'
 import { ref, update } from 'firebase/database'
+import { useState } from 'react'
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Linking,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -18,164 +13,69 @@ import {
   TouchableOpacity,
   View
 } from 'react-native'
-import * as Location from 'expo-location'
 import { db } from '../firebase/config'
 import { registerForNotifications } from '../utils/notifications'
-import LocationAutocomplete from '../../components/LocationAutocomplete'
 
 export default function CustomerLoginScreen() {
   const router = useRouter()
 
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [step, setStep] = useState(1) // 1: Phone, 2: OTP, 3: Name
   const [phone, setPhone] = useState('')
-  const [location, setLocation] = useState('')
-  const [pincode, setPincode] = useState('')
-  const [aadharVerified, setAadharVerified] = useState(false)
-  const [aadharName, setAadharName] = useState('')
-  // ── Map Picker ──
-  const [showMapModal, setShowMapModal] = useState(false)
-  const [mapLat, setMapLat] = useState(null)
-  const [mapLng, setMapLng] = useState(null)
-  const [reverseGeocoding, setReverseGeocoding] = useState(false)
-  // react-native-maps removed — using Google Maps link instead (prevents native crash)
-
   const [otp, setOtp] = useState('')
-  const [showOtpBox, setShowOtpBox] = useState(false)
+  const [name, setName] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const params = useLocalSearchParams()
-
-  useFocusEffect(
-    useCallback(() => {
-      const syncVerification = async () => {
-        if (params.aadharVerified === 'true') {
-          setAadharVerified(true)
-          setAadharName(params.aadharName || 'Verified')
-          return
-        }
-
-        // Fallback: check AsyncStorage (used when coming back from DigiLockerScreen)
-        const storedVerified = await AsyncStorage.getItem('digilockerVerified')
-        if (storedVerified === 'true') {
-          setAadharVerified(true)
-          const storedName = await AsyncStorage.getItem('digilockerName')
-          if (storedName) setAadharName(storedName)
-        }
-      }
-      syncVerification()
-    }, [params.aadharVerified])
-  )
-
+  // ── Step 1: Send OTP ──────────────────────────────────────────────
   const sendOtp = () => {
-    if (!name) {
-      Alert.alert('Error', 'Enter your name!')
+    const cleaned = phone.replace(/[^0-9]/g, '')
+    if (cleaned.length !== 10) {
+      Alert.alert('Error', 'Enter a valid 10-digit phone number!')
       return
     }
-
-    if (!email) {
-      Alert.alert('Error', 'Enter your email!')
-      return
-    }
-
-    if (phone.length !== 10) {
-      Alert.alert('Error', 'Enter valid 10 digit number!')
-      return
-    }
-
-    if (!location) {
-      Alert.alert('Error', 'Enter your location!')
-      return
-    }
-
-    if (!/^\d{6}$/.test(pincode)) {
-      Alert.alert('Error', 'Enter a valid 6-digit pincode!')
-      return
-    }
-
-    if (!aadharVerified) {
-      Alert.alert('Error', 'Please verify your Aadhar via DigiLocker first!')
-      return
-    }
-
-    setShowOtpBox(true)
-
-    Alert.alert(
-      'OTP Sent',
-      'Demo OTP is: 123456'
-    )
+    setPhone(cleaned)
+    Alert.alert('📱 OTP Sent', 'Demo OTP is: 123456')
+    setStep(2)
   }
 
- const verifyOtp = async () => {
-  if (otp !== '123456') {
-    Alert.alert('Error', 'Invalid OTP')
-    return
+  // ── Step 2: Verify OTP ────────────────────────────────────────────
+  const verifyOtp = () => {
+    if (otp !== '123456') {
+      Alert.alert('Error', 'Invalid OTP. Use 123456')
+      return
+    }
+    Alert.alert('✅ Verified!', 'Now set your name to continue')
+    setStep(3)
   }
 
-  await AsyncStorage.setItem('custName', name)
-  await AsyncStorage.setItem('custEmail', email)
-  await AsyncStorage.setItem('custPhone', phone)
-  await AsyncStorage.setItem('custLocation', location)
-  await AsyncStorage.setItem('custPincode', pincode)
+  // ── Step 3: Complete Login ────────────────────────────────────────
+  const completeLogin = async () => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      Alert.alert('Error', 'Please enter your name!')
+      return
+    }
 
-  const token = await registerForNotifications()
-  if (token) {
-    await AsyncStorage.setItem('pushToken', token)
-    // ← THIS LINE saves to Firebase under users/
-    await update(ref(db, 'users/' + phone), { 
-      pushToken: token, 
-      name, 
-      phone, 
-      location,
-      pincode
-    })
-  }
+    setLoading(true)
 
-  router.replace('/screens/HomeScreen')
-}
-
-  // ── Map Picker Functions ──
-  const reverseGeocode = async (lat, lng) => {
     try {
-      // Use free Nominatim API (no key needed) — same as MapPicker
-      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'DoToR/1.0 (doorstep-repair)' },
-      })
-      const data = await res.json()
-      if (data.display_name) {
-        const parts = data.display_name.split(',')
-        return parts.slice(0, 4).join(',')
-      }
-    } catch (e) {}
-    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
-  }
+      await AsyncStorage.setItem('custName', trimmed)
+      await AsyncStorage.setItem('custPhone', phone)
 
-  const openMapPicker = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status === 'granted') {
-        const pos = await Location.getCurrentPositionAsync({})
-        setMapLat(pos.coords.latitude)
-        setMapLng(pos.coords.longitude)
-      } else {
-        setMapLat(17.3850)
-        setMapLng(78.4867)
+      const token = await registerForNotifications()
+      if (token) {
+        await AsyncStorage.setItem('pushToken', token)
+        await update(ref(db, 'users/' + phone), {
+          pushToken: token,
+          name: trimmed,
+          phone,
+        })
       }
+
+      router.replace('/screens/HomeScreen')
     } catch (e) {
-      setMapLat(17.3850)
-      setMapLng(78.4867)
+      Alert.alert('Error', 'Something went wrong. Please try again.')
+      setLoading(false)
     }
-    setShowMapModal(true)
-  }
-
-  const confirmMapLocation = async () => {
-    if (!mapLat || !mapLng) return
-    setReverseGeocoding(true)
-    const addr = await reverseGeocode(mapLat, mapLng)
-    setLocation(addr)
-    await AsyncStorage.setItem('custLocation', addr)
-    setReverseGeocoding(false)
-    setShowMapModal(false)
   }
 
   return (
@@ -189,124 +89,140 @@ export default function CustomerLoginScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
       >
-
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={s.back}>←</Text>
         </TouchableOpacity>
 
         <View style={s.header}>
-          <Text style={s.icon}>👤</Text>
-          <Text style={s.title}>Customer Login</Text>
-          <Text style={s.sub}>Enter your details to continue</Text>
+          <Text style={s.icon}>🔧</Text>
+          <Text style={s.title}>Welcome to DoToR</Text>
+          <Text style={s.sub}>
+            {step === 1 && 'Enter your phone number to get started'}
+            {step === 2 && 'Enter the OTP sent to your phone'}
+            {step === 3 && 'One last step — what should we call you?'}
+          </Text>
         </View>
 
-        <Field
-          label="Full Name"
-          icon="👤"
-          placeholder="Enter your full name"
-          value={name}
-          onChange={setName}
-          type="default"
-        />
-
-        <Field
-          label="Email ID"
-          icon="📧"
-          placeholder="Enter your email"
-          value={email}
-          onChange={setEmail}
-          type="email-address"
-        />
-
-        <Field
-          label="Phone Number"
-          icon="📱"
-          placeholder="Enter 10 digit number"
-          value={phone}
-          onChange={setPhone}
-          type="numeric"
-          max={10}
-        />
-
-        {/* ── Your Address with Autocomplete + Map Picker ── */}
-        <View style={s.group}>
-          <Text style={s.label}>📍 Your Address</Text>
-          <View style={s.addressBox}>
-            <LocationAutocomplete
-              value={location}
-              onChangeText={(t) => {
-                setLocation(t)
-                AsyncStorage.setItem('custLocation', t).catch(() => {})
-              }}
-              placeholder="Search your area..."
-              icon="📍"
-            />
-            <TouchableOpacity style={s.mapBtn} onPress={openMapPicker}>
-              <Text style={s.mapBtnIcon}>🗺️</Text>
-              <Text style={s.mapBtnText}>Select on Map</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <Field
-          label="Pincode"
-          icon="📮"
-          placeholder="Enter 6-digit pincode"
-          value={pincode}
-          onChange={(t) => setPincode(t.replace(/[^0-9]/g, '').slice(0, 6))}
-          type="numeric"
-          max={6}
-        />
-
-        {/* DIGILOCKER AADHAR VERIFICATION */}
-        <View style={s.group}>
-          <Text style={s.label}>Aadhar Verification</Text>
-          <TouchableOpacity
-            style={[s.digiBtn, aadharVerified && s.digiBtnDone]}
-            onPress={() => {
-              if (!aadharVerified) {
-                router.push({
-                  pathname: '/screens/DigiLockerScreen',
-                  params: { onVerified: 'customer' }
-                })
-              }
-            }}
-          >
-            <Text style={s.digiIcon}>🏛️</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.digiTxt, aadharVerified && s.digiTxtDone]}>
-                {aadharVerified
-                  ? `✅ Aadhar Verified — ${aadharName}`
-                  : 'Verify Aadhar via DigiLocker'}
-              </Text>
-              <Text style={s.digiSub}>
-                {aadharVerified
-                  ? 'Identity confirmed by Government'
-                  : 'Secure government verification'}
+        {/* Step Indicator */}
+        <View style={s.stepRow}>
+          {[1, 2, 3].map(s => (
+            <View
+              key={s}
+              style={[
+                s.stepDot,
+                step === s && s.stepDotActive,
+                step > s && s.stepDotDone,
+              ]}
+            >
+              <Text
+                style={[
+                  s.stepDotTxt,
+                  (step === s || step > s) && s.stepDotTxtActive,
+                ]}
+              >
+                {step > s ? '✓' : s}
               </Text>
             </View>
-            {!aadharVerified && <Text style={s.digiArrow}>→</Text>}
-          </TouchableOpacity>
+          ))}
         </View>
 
-        {!showOtpBox ? (
-          <TouchableOpacity style={s.btn} onPress={sendOtp}>
-            <Text style={s.btnText}>Send OTP →</Text>
-          </TouchableOpacity>
-        ) : (
+        {/* Step 1: Phone */}
+        {step === 1 && (
           <>
-            <Field
-              label="OTP"
-              icon="🔐"
-              placeholder="Enter OTP"
-              value={otp}
-              onChange={setOtp}
-              type="numeric"
-              max={6}
-            />
+            <View style={s.group}>
+              <Text style={s.label}>📱 Phone Number</Text>
+              <View style={s.field}>
+                <Text style={s.fIcon}>🇮🇳 +91</Text>
+                <TextInput
+                  style={s.input}
+                  placeholder="Enter 10-digit number"
+                  placeholderTextColor="#aaa"
+                  value={phone}
+                  onChangeText={(t) => setPhone(t.replace(/[^0-9]/g, '').slice(0, 10))}
+                  keyboardType="numeric"
+                  maxLength={10}
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity style={s.btn} onPress={sendOtp}>
+              <Text style={s.btnText}>📱 Send OTP</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Step 2: OTP */}
+        {step === 2 && (
+          <>
+            <View style={s.phoneDisplay}>
+              <Text style={s.phoneDisplayTxt}>
+                📱 +91 {phone.slice(0, 5)}XXXXX
+              </Text>
+              <TouchableOpacity onPress={() => setStep(1)}>
+                <Text style={s.changeLink}>Change</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={s.group}>
+              <Text style={s.label}>🔐 OTP</Text>
+              <View style={s.field}>
+                <Text style={s.fIcon}>🔑</Text>
+                <TextInput
+                  style={[s.input, s.otpInput]}
+                  placeholder="Enter OTP"
+                  placeholderTextColor="#aaa"
+                  value={otp}
+                  onChangeText={(t) => setOtp(t.replace(/[^0-9]/g, '').slice(0, 6))}
+                  keyboardType="numeric"
+                  maxLength={6}
+                />
+              </View>
+            </View>
+
+            <Text style={s.otpHint}>Demo OTP: <Text style={s.otpHintBold}>123456</Text></Text>
 
             <TouchableOpacity style={s.btn} onPress={verifyOtp}>
-              <Text style={s.btnText}>Verify OTP →</Text>
+              <Text style={s.btnText}>✅ Verify OTP</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setStep(1)}>
+              <Text style={s.backLink}>← Change Phone Number</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Step 3: Name */}
+        {step === 3 && (
+          <>
+            <View style={s.namePrompt}>
+              <Text style={s.namePromptIcon}>👤</Text>
+            </View>
+
+            <View style={s.group}>
+              <Text style={s.label}>Your Name</Text>
+              <View style={s.field}>
+                <Text style={s.fIcon}>✏️</Text>
+                <TextInput
+                  style={s.input}
+                  placeholder="e.g. Rahul Kumar"
+                  placeholderTextColor="#aaa"
+                  value={name}
+                  onChangeText={setName}
+                  autoCapitalize="words"
+                  returnKeyType="done"
+                  onSubmitEditing={completeLogin}
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[s.btn, loading && s.btnDisabled]}
+              onPress={completeLogin}
+              disabled={loading}
+            >
+              <Text style={s.btnText}>
+                {loading ? '⏳ Logging in...' : "🚀 Let's Go!"}
+              </Text>
             </TouchableOpacity>
           </>
         )}
@@ -319,100 +235,10 @@ export default function CustomerLoginScreen() {
             <Text style={s.link}> Login here</Text>
           </Text>
         </TouchableOpacity>
-           
 
         <View style={{ height: 40 }} />
       </ScrollView>
-
-      {/* ── Map Picker Modal ── */}
-      <Modal visible={showMapModal} animationType="slide" transparent={false}>
-        <View style={s.mapModalContainer}>
-          <View style={s.mapModalHeader}>
-            <Text style={s.mapModalTitle}>📍 Select Your Location</Text>
-            <TouchableOpacity onPress={() => setShowMapModal(false)}>
-              <Text style={s.mapModalClose}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          {mapLat && mapLng ? (
-            <View style={s.mapModalPlaceholder}>
-              <Text style={s.mapModalPlaceholderIcon}>📍</Text>
-              <Text style={s.mapModalPlaceholderText}>
-                Location selected: {mapLat.toFixed(4)}, {mapLng.toFixed(4)}
-              </Text>
-              <View style={{ marginTop: 16, flexDirection: 'row', gap: 10 }}>
-                <TouchableOpacity
-                  style={{ backgroundColor: '#FF6B00', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}
-                  onPress={() => {
-                    Linking.openURL(`https://www.google.com/maps?q=${mapLat},${mapLng}`)
-                      .catch(() => {})
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>🗺️ Open in Maps</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{ backgroundColor: '#1A3A6B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}
-                  onPress={() => {
-                    setMapLat(mapLat + 0.001)
-                    setMapLng(mapLng + 0.001)
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>📍 Fine-tune</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
-            <View style={s.mapModalPlaceholder}>
-              <Text style={s.mapModalPlaceholderIcon}>🗺️</Text>
-              <Text style={s.mapModalPlaceholderText}>Loading location...</Text>
-            </View>
-          )}
-          <View style={s.mapModalFooter}>
-            <Text style={s.mapModalHint}>Tap on the map or drag the pin to set your exact location</Text>
-            <TouchableOpacity
-              style={s.mapModalConfirmBtn}
-              onPress={confirmMapLocation}
-              disabled={reverseGeocoding}
-            >
-              {reverseGeocoding ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={s.mapModalConfirmText}>✅ Confirm Location</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </KeyboardAvoidingView>
-  )
-}
-
-function Field({
-  label,
-  icon,
-  placeholder,
-  value,
-  onChange,
-  type,
-  max
-}) {
-  return (
-    <View style={s.group}>
-      <Text style={s.label}>{label}</Text>
-
-      <View style={s.field}>
-        <Text style={s.fIcon}>{icon}</Text>
-
-        <TextInput
-          style={s.input}
-          placeholder={placeholder}
-          placeholderTextColor="#aaa"
-          value={value}
-          onChangeText={onChange}
-          keyboardType={type}
-          maxLength={max}
-        />
-      </View>
-    </View>
   )
 }
 
@@ -420,7 +246,7 @@ const s = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    padding: 25
+    padding: 25,
   },
 
   back: {
@@ -428,33 +254,75 @@ const s = StyleSheet.create({
     color: '#1A3A6B',
     fontWeight: '700',
     marginTop: 40,
-    marginBottom: 10
+    marginBottom: 10,
   },
 
   header: {
     alignItems: 'center',
-    marginBottom: 25
+    marginBottom: 20,
   },
 
   icon: {
-    fontSize: 45
+    fontSize: 48,
   },
 
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
     color: '#1A3A6B',
-    marginTop: 10
+    marginTop: 10,
   },
 
   sub: {
     fontSize: 13,
     color: '#888',
-    marginTop: 5
+    marginTop: 6,
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
 
+  // ── Step Indicator ──
+  stepRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 28,
+  },
+
+  stepDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  stepDotActive: {
+    backgroundColor: '#FF6B00',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+
+  stepDotDone: {
+    backgroundColor: '#2e7d32',
+  },
+
+  stepDotTxt: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#bbb',
+  },
+
+  stepDotTxtActive: {
+    color: '#fff',
+  },
+
+  // ── Fields ──
   group: {
-    marginBottom: 16
+    marginBottom: 18,
   },
 
   label: {
@@ -463,7 +331,7 @@ const s = StyleSheet.create({
     color: '#1A3A6B',
     textTransform: 'uppercase',
     letterSpacing: 1,
-    marginBottom: 7
+    marginBottom: 7,
   },
 
   field: {
@@ -474,32 +342,105 @@ const s = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    gap: 10
+    gap: 10,
   },
 
   fIcon: {
-    fontSize: 18
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A3A6B',
   },
 
   input: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 16,
     color: '#1A3A6B',
-    fontWeight: '600'
+    fontWeight: '600',
   },
 
+  otpInput: {
+    fontSize: 20,
+    letterSpacing: 6,
+    textAlign: 'center',
+  },
+
+  // ── Phone Display ──
+  phoneDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 20,
+    backgroundColor: '#f0f4ff',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d0d8ee',
+  },
+
+  phoneDisplayTxt: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1A3A6B',
+  },
+
+  changeLink: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FF6B00',
+  },
+
+  // ── OTP Hint ──
+  otpHint: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#888',
+    marginTop: -8,
+    marginBottom: 18,
+  },
+
+  otpHintBold: {
+    fontWeight: '800',
+    color: '#1A3A6B',
+    letterSpacing: 2,
+  },
+
+  // ── Name Prompt ──
+  namePrompt: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+
+  namePromptIcon: {
+    fontSize: 56,
+  },
+
+  // ── Buttons ──
   btn: {
     backgroundColor: '#FF6B00',
-    padding: 15,
+    padding: 16,
     borderRadius: 14,
     alignItems: 'center',
-    marginTop: 5
+    marginTop: 5,
+  },
+
+  btnDisabled: {
+    backgroundColor: '#ccc',
   },
 
   btnText: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#fff'
+    color: '#fff',
+  },
+
+  // ── Links ──
+  backLink: {
+    textAlign: 'center',
+    marginTop: 14,
+    color: '#888',
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   switchText: {
@@ -507,37 +448,11 @@ const s = StyleSheet.create({
     marginTop: 18,
     color: '#888',
     fontSize: 13,
-    fontWeight: '600'
+    fontWeight: '600',
   },
 
   link: {
     color: '#FF6B00',
-    fontWeight: '800'
+    fontWeight: '800',
   },
-  // ── Address Box ──
-  addressBox:       { backgroundColor: '#fff', borderRadius: 14, padding: 14, elevation: 2, borderWidth: 2, borderColor: '#eee' },
-  mapBtn:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fff5ee', borderWidth: 2, borderColor: '#FF6B00', borderRadius: 12, padding: 12, marginTop: 12 },
-  mapBtnIcon:       { fontSize: 18 },
-  mapBtnText:       { fontSize: 13, fontWeight: '800', color: '#FF6B00' },
-
-  // ── Map Modal ──
-  mapModalContainer:    { flex: 1, backgroundColor: '#fff' },
-  mapModalHeader:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 55, paddingBottom: 15, backgroundColor: '#FF6B00' },
-  mapModalTitle:        { fontSize: 17, fontWeight: '800', color: '#fff' },
-  mapModalClose:        { fontSize: 22, color: '#fff', fontWeight: '800', padding: 4 },
-  mapModalPlaceholder:  { flex: 1, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' },
-  mapModalPlaceholderIcon: { fontSize: 50 },
-  mapModalPlaceholderText: { color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 10 },
-  mapModalFooter:       { padding: 20, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
-  mapModalHint:         { fontSize: 12, color: '#888', fontWeight: '600', textAlign: 'center', marginBottom: 12 },
-  mapModalConfirmBtn:   { backgroundColor: '#FF6B00', padding: 16, borderRadius: 14, alignItems: 'center', elevation: 3 },
-  mapModalConfirmText:  { color: '#fff', fontSize: 16, fontWeight: '800' },
-
-  digiBtn:     { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: '#1A3A6B', borderRadius: 12, padding: 14, gap: 12, backgroundColor: '#f0f4ff' },
-  digiBtnDone: { borderColor: '#2e7d32', backgroundColor: '#f1f8f1' },
-  digiIcon:    { fontSize: 28 },
-  digiTxt:     { fontSize: 14, fontWeight: '800', color: '#1A3A6B' },
-  digiTxtDone: { color: '#2e7d32' },
-  digiSub:     { fontSize: 11, color: '#888', marginTop: 2 },
-  digiArrow:   { fontSize: 18, color: '#1A3A6B', fontWeight: '800' },
 })

@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { onValue, push, ref, set } from 'firebase/database'
+import { get, child, onValue, push, ref, set } from 'firebase/database'
 import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -25,6 +26,7 @@ export default function ChatScreen() {
   const [otherPersonName, setOtherPersonName] = useState(role === 'cust' ? (techName || 'Technician') : (customerName || 'Customer'))
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('chat')
+  const [techPhoto, setTechPhoto] = useState(null)
 
   const scrollRef = useRef(null)
   const mounted = useRef(true)
@@ -49,6 +51,9 @@ export default function ChatScreen() {
         const order = snap.val()
         if (order.techName) {
           setOtherPersonName(order.techName)
+        }
+        if (order.techPhone) {
+          fetchTechPhoto(order.techPhone)
         }
       })
     } else if (role === 'tech') {
@@ -85,6 +90,19 @@ export default function ChatScreen() {
     })
     return () => unsub()
   }, [orderId])
+
+  // Fetch technician profile photo
+  const fetchTechPhoto = async (phone) => {
+    if (!phone) return
+    try {
+      const snap = await get(child(ref(db), `techUsers/${phone}/photo`))
+      if (snap.exists() && typeof snap.val() === 'string' && snap.val().startsWith('http')) {
+        setTechPhoto(snap.val())
+      }
+    } catch (e) {
+      console.log('fetchTechPhoto error:', e.message)
+    }
+  }
 
   const loadUser = async () => {
     // Read the correct name based on role
@@ -232,7 +250,11 @@ export default function ChatScreen() {
         </TouchableOpacity>
         <View style={s.headerCenter}>
           <View style={s.avatarSmall}>
-            <Text style={s.avatarTxt}>{role === 'cust' ? '🔧' : '👤'}</Text>
+            {techPhoto ? (
+              <Image source={{ uri: techPhoto }} style={{ width: 36, height: 36, borderRadius: 18 }} />
+            ) : (
+              <Text style={s.avatarTxt}>{role === 'cust' ? '🔧' : '👤'}</Text>
+            )}
           </View>
           <View>
             <Text style={s.headerName}>{otherName}</Text>

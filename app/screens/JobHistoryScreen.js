@@ -1,7 +1,7 @@
 // JobHistoryScreen.js — Full job history for technicians
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useRouter } from 'expo-router'
-import { onValue, ref } from 'firebase/database'
+import { get, child, onValue, ref } from 'firebase/database'
 import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
@@ -23,6 +23,7 @@ export default function JobHistoryScreen() {
   const [search, setSearch] = useState('')
   const [stats, setStats] = useState({ total: 0, today: 0, week: 0, month: 0 })
   const [fullscreenImg, setFullscreenImg] = useState(null)
+  const [techPhoto, setTechPhoto] = useState(null)
   const loadUnsub = useRef(null)
 
   useEffect(() => {
@@ -35,6 +36,8 @@ export default function JobHistoryScreen() {
   const loadJobHistory = async () => {
     const myPhone = await AsyncStorage.getItem('techPhone')
     if (!myPhone) return
+
+    fetchTechPhoto(myPhone)
 
     loadUnsub.current = onValue(ref(db, 'orders'), snap => {
       if (!snap.exists()) { setJobs([]); return }
@@ -118,6 +121,19 @@ export default function JobHistoryScreen() {
     )
   }
 
+  // Fetch own technician profile photo
+  const fetchTechPhoto = async (phone) => {
+    if (!phone) return
+    try {
+      const snap = await get(child(ref(db), `techUsers/${phone}/photo`))
+      if (snap.exists() && typeof snap.val() === 'string' && snap.val().startsWith('http')) {
+        setTechPhoto(snap.val())
+      }
+    } catch (e) {
+      console.log('fetchTechPhoto error:', e.message)
+    }
+  }
+
   const FILTER_TABS = [
     { key: 'all', label: `All (${stats.total})` },
     { key: 'today', label: `Today (${stats.today})` },
@@ -133,6 +149,13 @@ export default function JobHistoryScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={s.back}>←</Text>
           </TouchableOpacity>
+          <View style={s.techAvatarHdr}>
+            {techPhoto ? (
+              <Image source={{ uri: techPhoto }} style={{ width: 36, height: 36, borderRadius: 18 }} />
+            ) : (
+              <Text style={{ fontSize: 18 }}>🔧</Text>
+            )}
+          </View>
           <View>
             <Text style={s.headerTitle}>📋 Job History</Text>
             <Text style={s.headerSub}>{stats.total} total jobs</Text>
@@ -250,7 +273,8 @@ export default function JobHistoryScreen() {
 }
 
 const s = StyleSheet.create({
-  header:         { flexDirection: 'row', alignItems: 'center', gap: 15, padding: 20, paddingTop: 55, backgroundColor: '#1A3A6B' },
+  header:         { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 20, paddingTop: 55, backgroundColor: '#1A3A6B' },
+  techAvatarHdr:  { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   back:           { fontSize: 24, color: '#fff', fontWeight: '700' },
   headerTitle:    { fontSize: 20, fontWeight: '800', color: '#fff' },
   headerSub:      { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
