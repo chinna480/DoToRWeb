@@ -247,7 +247,7 @@ export default function HomeScreen() {
   }
 
   // ── Submit order ───────────────────────────────────────────────────────
-  const submitOrder = async () => {
+    const submitOrder = async () => {
     const svc = SERVICE_CATEGORIES.find(s => s.key === selectedDevice)
     const deviceFlow = svc ? svc.hasDeviceFlow : false
 
@@ -264,6 +264,8 @@ export default function HomeScreen() {
       return
     }
     setIsSubmitting(true)
+    let orderId = null
+    let orderSaved = false
     try {
       const name              = custName || 'Customer'
       const phone             = custPhone || ''
@@ -279,9 +281,6 @@ export default function HomeScreen() {
         videoUrls = await uploadVideos(deviceVideos.map(uri => ({ uri })), tempOrderId)
       }
 
-      // Only use GPS coords if the user explicitly used "My Location" or map picker
-      // If user manually typed an address, don't override with current GPS position
-      // (they might be at office but repair is at home)
       const svcCat = SERVICE_CATEGORIES.find(s => s.key === selectedDevice)
       const order = {
         customerName:       name,
@@ -301,39 +300,54 @@ export default function HomeScreen() {
         time:               new Date().toLocaleTimeString(),
         createdAt:          Date.now(),
       }
-      // Only include GPS coords if available — Firebase validation requires isNumber()
       if (custLat != null && custLng != null) {
         order.custLat = custLat
         order.custLng = custLng
       }
 
+      // Save order to Firebase (critical path)
       const newOrderRef = await push(ref(db, 'orders'), order)
-      const orderId = newOrderRef.key
+      orderId = newOrderRef.key
+      orderSaved = true
 
-      await AsyncStorage.setItem('lastOrderId', orderId)
-      await AsyncStorage.setItem('lastBrand', selectedBrand)
-      await AsyncStorage.setItem('lastModelName', modelName.trim())
-      await AsyncStorage.setItem('lastDescription', issueDesc.trim())
-      await AsyncStorage.setItem('lastCustName', name)
-      if (pincodeInput) await AsyncStorage.setItem('custPincode', pincodeInput.trim())
-      if (locationInput) await AsyncStorage.setItem('custLocation', locationInput.trim())
+      // Post-order: AsyncStorage + notifications (log failures, don't show error)
+      try {
+        await AsyncStorage.setItem('lastOrderId', orderId)
+        await AsyncStorage.setItem('lastBrand', selectedBrand)
+        await AsyncStorage.setItem('lastModelName', modelName.trim())
+        await AsyncStorage.setItem('lastDescription', issueDesc.trim())
+        await AsyncStorage.setItem('lastCustName', name)
+        if (pincodeInput) await AsyncStorage.setItem('custPincode', pincodeInput.trim())
+        if (locationInput) await AsyncStorage.setItem('custLocation', locationInput.trim())
 
-      await notifyCustomerBookingConfirmed(svcCat?.label || selectedBrand, modelName.trim() || issueDesc.trim())
-      await notifyTechsForNewOrder(order, orderId)
+        await notifyCustomerBookingConfirmed(svcCat?.label || selectedBrand, modelName.trim() || issueDesc.trim())
+        await notifyTechsForNewOrder(order, orderId)
+      } catch (postErr) {
+        console.error('Post-order ops failed (order saved):', postErr?.message || postErr)
+      }
+
       resetWizard()
 
       Alert.alert(
-        '✅ Booking Confirmed!',
-        `${svcCat?.label || 'Service'}: ${selectedBrand ? selectedBrand + ' ' : ''}${modelName || issueDesc}\n\nTrack your technician?`,
+        '\u2705 Booking Confirmed!',
+        (svcCat?.label || 'Service') + ': ' + (selectedBrand ? selectedBrand + ' ' : '') + (modelName || issueDesc) + '\n\nTrack your technician?',
         [
           { text: 'Track Now', onPress: () => router.push('/screens/TrackingScreen') },
-          { text: '💬 Chat', onPress: () => router.push(`/screens/ChatScreen?orderId=${orderId}&role=cust&customerName=${encodeURIComponent(name)}&techName=`) },
+          { text: '\u{1F4AC} Chat', onPress: () => router.push('/screens/ChatScreen?orderId=' + orderId + '&role=cust&customerName=' + encodeURIComponent(name) + '&techName=') },
           { text: 'Later' }
         ]
       )
     } catch (e) {
-      console.error('Booking error:', e?.message || e)
-      Alert.alert('Error', 'Booking failed! Try again.')
+      if (orderSaved) {
+        console.error('Order saved but success display failed:', e?.message || e)
+        Alert.alert(
+          '\u2705 Booking Confirmed!',
+          'Your order was created successfully. You can view it in My Orders.'
+        )
+      } else {
+        console.error('Booking error:', e?.message || e)
+        Alert.alert('Error', 'Booking failed! Try again.')
+      }
     } finally {
       setIsSubmitting(false)
     }

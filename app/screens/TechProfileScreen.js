@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as ImagePicker from 'expo-image-picker'
 import { useRouter } from 'expo-router'
-import { onValue, ref } from 'firebase/database'
+import { onValue, ref, update } from 'firebase/database'
 import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
@@ -16,6 +16,7 @@ import {
 } from 'react-native'
 import { db } from '../firebase/config'
 import SettingsModal from '../../components/SettingsModal'
+import { uploadImage } from '../utils/uploadImage'
 
 export default function TechProfileScreen() {
   const router = useRouter()
@@ -89,6 +90,7 @@ export default function TechProfileScreen() {
           if (!result.canceled) {
             setPhoto(result.assets[0].uri)
             await AsyncStorage.setItem('techPhoto', result.assets[0].uri)
+            uploadAndSyncPhoto(result.assets[0].uri)
           }
         }
       },
@@ -100,11 +102,34 @@ export default function TechProfileScreen() {
           if (!result.canceled) {
             setPhoto(result.assets[0].uri)
             await AsyncStorage.setItem('techPhoto', result.assets[0].uri)
+            uploadAndSyncPhoto(result.assets[0].uri)
           }
         }
       },
       { text: 'Cancel', style: 'cancel' },
     ])
+  }
+
+  // Upload photo to Cloudinary and save URL to Firebase so customer screens can see it
+  const uploadAndSyncPhoto = async (localUri) => {
+    try {
+      const phone = await AsyncStorage.getItem('techPhone')
+      if (!phone) return
+
+      const url = await uploadImage(localUri, 'tech_photos')
+      if (!url || typeof url !== 'string') return
+
+      // Replace local URI with Cloudinary URL in AsyncStorage
+      await AsyncStorage.setItem('techPhoto', url)
+      setPhoto(url)
+
+      // Save to Firebase for customer-facing screens (ChatScreen, TrackingScreen, HomeScreen)
+      await update(ref(db, `techUsers/${phone}`), { photo: url })
+      console.log('Tech photo synced to Firebase:', url.substring(0, 60))
+    } catch (e) {
+      console.log('uploadAndSyncPhoto error (non-critical):', e.message)
+      // Local photo still works via AsyncStorage — upload failure is non-critical
+    }
   }
 
   const logout = () => {

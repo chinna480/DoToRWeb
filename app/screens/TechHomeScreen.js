@@ -81,6 +81,7 @@ export default function TechHomeScreen() {
   const [etaSeconds, setEtaSeconds]        = useState(null)
   const [countdown, setCountdown]          = useState('--')
   const [currentCustPhone, setCustPhone]   = useState('')
+  const [techPhoto, setTechPhoto]         = useState(null)
 
   // Format seconds into readable countdown
   const formatCountdown = (s) => {
@@ -227,12 +228,14 @@ export default function TechHomeScreen() {
     const pi = await AsyncStorage.getItem('techPincode')
     const t = await AsyncStorage.getItem('pushToken')
     const p = await AsyncStorage.getItem('techPhone')
+    const ph = await AsyncStorage.getItem('techPhoto')
     setTechName(n || 'Technician')
     setTechLoc(l || 'Your Location')
     techLocRef.current = (l || '').toLowerCase().trim()
     techPincodeRef.current = (pi || '').toLowerCase().trim()
     techPhoneRef.current = p || ''
     if (t) techPushToken.current = t
+    if (ph) setTechPhoto(ph)
 
     // Load tech's service categories from AsyncStorage
     try {
@@ -577,7 +580,11 @@ export default function TechHomeScreen() {
         </View>
         <View style={s.headerRight}>
           <TouchableOpacity style={s.avatar} onPress={() => router.push('/screens/TechProfileScreen')}>
-            <Text style={{ fontSize: 24 }}>🔧</Text>
+            {techPhoto ? (
+              <Image source={{ uri: techPhoto }} style={{ width: 48, height: 48, borderRadius: 24 }} />
+            ) : (
+              <Text style={{ fontSize: 24 }}>🔧</Text>
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.onlinePill, !isOnline && s.offlinePill]}
