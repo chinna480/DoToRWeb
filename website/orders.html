@@ -353,7 +353,16 @@
             <span class="order-status ${order.status}">${order.status}</span>
             ${order.id ? `<a href="tracking.html" class="btn btn-outline btn-sm" style="margin-top:8px;width:100%;" onclick="event.stopPropagation()">📍 Track</a>` : ''}
             ${order.status === 'accepted' && order.techName ? `<a href="chat.html?orderId=${order.id}" class="btn btn-primary btn-sm" style="margin-top:4px;width:100%;" onclick="event.stopPropagation()">💬 Chat</a>` : ''}
-            ${order.status === 'completed' && order.techName ? `<a href="review.html?orderId=${order.id}" class="btn btn-green btn-sm" style="margin-top:4px;width:100%;" onclick="event.stopPropagation()">⭐ Rate</a>` : ''}
+            ${order.status === 'completed' && order.techName
+              ? order.reviewed
+                ? `<span class="order-status completed" style="margin-top:4px;display:block;text-align:center;">✅ Reviewed</span>`
+                : `<a href="review.html?orderId=${order.id}" class="btn btn-green btn-sm" style="margin-top:4px;width:100%;" onclick="event.stopPropagation()">⭐ Rate</a>`
+              : ''
+            }
+            ${order.status === 'completed' && order.techName && !order.reviewed
+              ? `<div style="font-size:10px;color:var(--red);font-weight:700;text-align:center;margin-top:2px;">⚠️ Review not given</div>`
+              : ''
+            }
           </div>
         </div>
       `}).join('');

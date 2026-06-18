@@ -263,6 +263,29 @@ export default function HomeScreen() {
       Alert.alert('Missing location', 'Please enter your location.')
       return
     }
+
+    // ⛔ Block booking if customer has un-reviewed completed orders
+    const unreviewedOrders = myOrders.filter(o =>
+      o.customerPhone === custPhone &&
+      o.status === 'completed' &&
+      o.techName &&
+      !o.reviewed
+    )
+    if (unreviewedOrders.length > 0) {
+      Alert.alert(
+        '⚠️ Review Required',
+        `Please review your completed ${unreviewedOrders[0].techName ? 'service from ' + unreviewedOrders[0].techName : 'service'} first before booking a new repair.\n\nTap "Review Now" to rate your technician.`,
+        [
+          { text: '📋 Review Now', onPress: () => {
+            resetWizard()
+            setActiveTab('orders')
+          }},
+          { text: 'Later', style: 'cancel' }
+        ]
+      )
+      return
+    }
+
     setIsSubmitting(true)
     let orderId = null
     let orderSaved = false
@@ -901,6 +924,16 @@ export default function HomeScreen() {
                     <View style={s.orderRight}>
                       <Text style={[s.orderStatus, { color: '#2e7d32' }]}>✅</Text>
                       <Text style={[s.orderStatusLabel, { color: '#2e7d32' }]}>Completed</Text>
+                      {order.techName && !order.reviewed && (
+                        <View style={s.reviewBadge}>
+                          <Text style={s.reviewBadgeText}>⚠️ Review not given</Text>
+                        </View>
+                      )}
+                      {order.techName && order.reviewed && (
+                        <View style={s.reviewedBadge}>
+                          <Text style={s.reviewedBadgeText}>✅ Reviewed</Text>
+                        </View>
+                      )}
                       {order.id && (
                         <TouchableOpacity style={[s.orderChatBtn, { backgroundColor: '#2e7d32' }]} onPress={() => {
                           try {
@@ -1158,6 +1191,10 @@ const s = StyleSheet.create({
   videoThumbSm:     { width: 70, height: 70, borderRadius: 10, marginRight: 8, backgroundColor: '#1A3A6B', alignItems: 'center', justifyContent: 'center' },
   videoPlayIconSm:  { fontSize: 28 },
   techAvatarSm:     { marginTop: 4, alignSelf: 'center' },
+  reviewBadge:      { backgroundColor: '#fff5f5', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginTop: 4, borderWidth: 1, borderColor: '#ffcccc' },
+  reviewBadgeText:  { fontSize: 9, color: '#c62828', fontWeight: '800' },
+  reviewedBadge:    { backgroundColor: '#e8f5e9', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginTop: 4, borderWidth: 1, borderColor: '#c8e6c9' },
+  reviewedBadgeText:{ fontSize: 9, color: '#2e7d32', fontWeight: '800' },
   // Tab bar
   tabBar:           { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#fff', paddingBottom: 25, paddingTop: 8, elevation: 10, borderTopWidth: 1, borderTopColor: '#eee' },
   tabItem:          { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, position: 'relative' },

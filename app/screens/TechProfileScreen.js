@@ -27,17 +27,20 @@ export default function TechProfileScreen() {
   const [pincode, setPincode]     = useState('')
   const [exp, setExp]             = useState('')
   const [photo, setPhoto]         = useState(null)
-  const [rating]                  = useState(4.8)
+  const [rating, setRatingValue]          = useState(0)
   const [totalJobs, setTotal]     = useState(0)
+  const [reviewsCount, setReviewsCount] = useState(0)
   const [notifications, setNotifications] = useState(true)
   const [isOnline, setIsOnline]   = useState(true)
   const [showSettings, setShowSettings]   = useState(false)
   const ordersUnsub = useRef(null)
+  const reviewsUnsub = useRef(null)
 
   useEffect(() => {
     loadProfile()
     return () => {
       if (ordersUnsub.current) ordersUnsub.current()
+      if (reviewsUnsub.current) reviewsUnsub.current()
     }
   }, [])
 
@@ -56,7 +59,34 @@ export default function TechProfileScreen() {
     if (ph) setPhoto(ph)
 
     // ── Pass phone directly so we don't rely on state being updated yet ──────
-    if (p) loadJobs(p)
+    if (p) {
+      loadJobs(p)
+      loadReviews(p)
+    }
+  }
+
+  // ── Load reviews count and average rating ───────────────────────────────────
+  const loadReviews = (myPhone) => {
+    reviewsUnsub.current = onValue(ref(db, 'reviews'), snap => {
+      if (!snap.exists()) {
+        setReviewsCount(0)
+        setRatingValue(0)
+        return
+      }
+      let count = 0
+      let total = 0
+      snap.forEach(child => {
+        const r = child.val()
+        const cleanTech = (r.techPhone || '').replace('+91', '').replace(/^0+/, '')
+        const cleanMine = myPhone.replace('+91', '').replace(/^0+/, '')
+        if (cleanTech === cleanMine || r.techPhone === myPhone) {
+          count++
+          total += (r.rating || 0)
+        }
+      })
+      setReviewsCount(count)
+      setRatingValue(count > 0 ? Math.round((total / count) * 10) / 10 : 0)
+    })
   }
 
   // ── FIXED: filter jobs by THIS tech's phone number only ─────────────────────
@@ -114,20 +144,33 @@ export default function TechProfileScreen() {
   const uploadAndSyncPhoto = async (localUri) => {
     try {
       const phone = await AsyncStorage.getItem('techPhone')
-      if (!phone) return
+      if (!phone) {
+        Alert.alert('Upload Failed', 'Phone number not found. Please logout and login again.')
+        return
+      }
 
+      console.log('☁️ Starting Cloudinary upload...')
       const url = await uploadImage(localUri, 'tech_photos')
-      if (!url || typeof url !== 'string') return
+      if (!url || typeof url !== 'string') {
+        console.error('❌ Cloudinary returned invalid URL')
+        Alert.alert('Upload Failed', 'Could not upload photo to cloud. Please try again.')
+        return
+      }
+
+      console.log('☁️ Cloudinary success:', url.substring(0, 60))
 
       // Replace local URI with Cloudinary URL in AsyncStorage
       await AsyncStorage.setItem('techPhoto', url)
       setPhoto(url)
 
       // Save to Firebase for customer-facing screens (ChatScreen, TrackingScreen, HomeScreen)
+      console.log('💾 Saving photo URL to Firebase...')
       await update(ref(db, `techUsers/${phone}`), { photo: url })
-      console.log('Tech photo synced to Firebase:', url.substring(0, 60))
+      console.log('✅ Tech photo synced to Firebase!')
+      Alert.alert('✅ Photo Updated', 'Your profile photo is now visible to customers!')
     } catch (e) {
-      console.log('uploadAndSyncPhoto error (non-critical):', e.message)
+      console.error('❌ uploadAndSyncPhoto error:', e.message)
+      Alert.alert('Upload Failed', `Could not sync photo: ${e.message}. Please try again.`)
       // Local photo still works via AsyncStorage — upload failure is non-critical
     }
   }
@@ -150,7 +193,7 @@ export default function TechProfileScreen() {
     { icon: '⭐', label: 'My Rating',      sub: `${rating} stars`,         onPress: () => Alert.alert('Rating', `Your rating: ${rating} ⭐`) },
     { icon: '🏆', label: 'My Rewards',     sub: null,                      onPress: () => Alert.alert('Rewards', 'Coming Soon!') },
     { icon: '💳', label: 'Payment Info', sub: 'Bank & UPI details', onPress: () => Alert.alert('Payment', 'Add your UPI ID to receive payments directly!\nUPI ID: yourname@upi') },
-    { icon: '📊', label: 'Performance',    sub: 'View your stats',         onPress: () => Alert.alert('Stats', `Jobs: ${totalJobs}\nRating: ${rating}`) },
+    { icon: '📊', label: 'Performance',    sub: `${totalJobs} jobs · ${reviewsCount} reviews`, onPress: () => router.push('/screens/PerformanceScreen') },
     { icon: '🔔', label: 'Notifications',  sub: null,                      toggle: true, value: notifications, onToggle: setNotifications },
     { icon: '🛡️', label: 'Safety',         sub: null,                      onPress: () => Alert.alert('Safety', 'Your safety matters!') },
     { icon: '❓', label: 'Help & Support', sub: 'dotor.india@gmail.com', onPress: () => Linking.openURL('mailto:dotor.india@gmail.com') },

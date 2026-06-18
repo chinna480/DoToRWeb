@@ -225,6 +225,10 @@
     document.addEventListener('DOMContentLoaded', () => {
       currentPhone = localStorage.getItem('customerPhone');
       if (!currentPhone) {
+        // Fallback: also check lastCustPhone
+        currentPhone = localStorage.getItem('lastCustPhone');
+      }
+      if (!currentPhone) {
         document.getElementById('notLoggedIn').style.display = 'block';
         return;
       }
@@ -260,6 +264,11 @@
 
         const container = document.getElementById('completedOrdersList');
         const empty = document.getElementById('noCompletedOrders');
+        const alreadyReviewed = document.getElementById('alreadyReviewed');
+        alreadyReviewed.style.display = 'none';
+
+        // Filter out already-reviewed orders
+        const unreviewed = completed.filter(o => !o.reviewed);
 
         if (completed.length === 0) {
           container.innerHTML = '';
@@ -268,7 +277,7 @@
         }
 
         empty.style.display = 'none';
-        container.innerHTML = completed.map(order => `
+        container.innerHTML = unreviewed.map(order => `
           <div class="completed-order-card" onclick="openReviewForm('${order.id}')">
             <div class="icon">✅</div>
             <div class="info">
@@ -278,6 +287,24 @@
             <div class="action">Rate →</div>
           </div>
         `).join('');
+
+        // If all completed orders have been reviewed, show a message
+        if (unreviewed.length === 0) {
+          container.innerHTML = completed.map(order => `
+            <div class="completed-order-card" style="opacity:0.6;cursor:default;">
+              <div class="icon">✅</div>
+              <div class="info">
+                <div class="brand">${order.brand || 'Device'}</div>
+                <div class="tech">🛵 ${order.techName || 'Technician'} ${order.model ? '· ' + order.model : ''}</div>
+              </div>
+              <div class="action" style="color:var(--green);">✅ Reviewed</div>
+            </div>
+          `).join('') + `
+            <div style="text-align:center;padding:20px;font-size:13px;color:var(--gray);">
+              🎉 You've reviewed all your completed orders! Thank you!
+            </div>
+          `;
+        }
       });
     }
 
@@ -298,6 +325,17 @@
       unsubOrders = listenOrders((orders) => {
         const order = orders.find(o => o.id === orderId);
         if (!order) return;
+
+        // If already reviewed, show message and go back
+        if (order.reviewed) {
+          if (unsubOrders) unsubOrders();
+          document.getElementById('stepSelectOrder').style.display = 'block';
+          document.getElementById('alreadyReviewed').style.display = 'block';
+          document.getElementById('stepReviewForm').style.display = 'none';
+          document.getElementById('reviewSuccess').style.display = 'none';
+          showToast('✅ You already reviewed this order!', 'success');
+          return;
+        }
 
         selectedOrder = order;
         selectedRating = 0;
@@ -363,7 +401,9 @@
           selectedOrder.techName,
           localStorage.getItem('customerName') || 'Customer',
           selectedRating,
-          comment
+          comment,
+          selectedOrder.id,
+          currentPhone
         );
 
         document.getElementById('stepReviewForm').style.display = 'none';

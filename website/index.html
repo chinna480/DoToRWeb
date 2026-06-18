@@ -855,7 +855,8 @@
   <script type="module">
     import {
       createOrder, PHONE_BRANDS, LAPTOP_BRANDS, TV_BRANDS, AC_BRANDS, FRIDGE_BRANDS, WM_BRANDS,
-      SERVICE_CATEGORIES, SERVICE_BRANDS, TIME_SLOTS, MONTHS, DAYS
+      SERVICE_CATEGORIES, SERVICE_BRANDS, TIME_SLOTS, MONTHS, DAYS,
+      get, ref, db
     } from './firebase.js';
 
     // ── Cloudinary Config (same as mobile app) ─────────────────────
@@ -1950,6 +1951,34 @@
       const model = document.getElementById('deviceModel').value.trim();
 
       if (!name || !phone) { showToast('Please fill in your contact details', 'error'); return; }
+
+      // ⛔ Check for un-reviewed completed orders
+      try {
+        const ordersSnap = await get(ref(db, 'orders'));
+        if (ordersSnap.exists()) {
+          let hasUnreviewed = false;
+          ordersSnap.forEach(child => {
+            const o = child.val();
+            if (o.customerPhone === phone && o.status === 'completed' && o.techName && !o.reviewed) {
+              hasUnreviewed = true;
+            }
+          });
+          if (hasUnreviewed) {
+            showToast('⚠️ Please review your completed order first before booking a new repair!', 'error');
+            // Scroll to top and highlight the reviews link
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            setTimeout(() => {
+              const reviewLink = document.querySelector('.nav-links a[href*="review"]') ||
+                                 document.querySelector('a[href*="orders"]');
+              if (reviewLink) reviewLink.style.animation = 'pulse 0.6s ease 3';
+            }, 500);
+            return;
+          }
+        }
+      } catch(e) {
+        console.error('Review check failed:', e);
+        // Don't block booking if the check itself fails
+      }
       const submitSvc = SERVICE_CATEGORIES.find(s => s.key === selectedDevice);
       if (!selectedDevice) { showToast('Please select a service', 'error'); return; }
       if (submitSvc?.hasDeviceFlow && !selectedBrand) { showToast('Please select a brand', 'error'); return; }

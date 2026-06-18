@@ -148,6 +148,8 @@
         ".write": true,
         ".validate": "newData.hasChildren(['customerName', 'rating'])",
         "customerName": { ".validate": "newData.isString() && newData.val().length > 0" },
+        "customerPhone": { ".validate": "newData.isString() && newData.val().length >= 10" },
+        "orderId": { ".validate": "newData.isString()" },
         "rating": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 5" },
         "comment": { ".validate": "newData.isString() && newData.val().length <= 2000" },
         "time": { ".validate": "newData.isString()" },
@@ -170,6 +172,15 @@
         "phone": { ".validate": "newData.isString()" },
         "location": { ".validate": "newData.isString()" },
         "$other": { ".validate": false }
+      }
+    },
+    "techVerification": {
+      ".read": true,
+      ".write": true,
+      "$phone": {
+        "$field": {
+          ".validate": true
+        }
       }
     },
     "techInfo": { ".read": true, ".write": true },

@@ -54,6 +54,7 @@ export default function RootLayout() {
       <Stack.Screen name="screens/ChatScreen" />
       <Stack.Screen name="screens/DigiLockerScreen" />
       <Stack.Screen name="screens/JobHistoryScreen" />
+      <Stack.Screen name="screens/PerformanceScreen" />
     </Stack>
     </AppErrorBoundary>
   );

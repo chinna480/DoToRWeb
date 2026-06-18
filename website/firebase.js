@@ -369,18 +369,26 @@ export async function getTechRating(techPhone) {
 }
 
 // ── Save a review for a technician (from website) ─────────────────────────
-export async function submitTechReview(techPhone, techName, customerName, rating, comment = '') {
+export async function submitTechReview(techPhone, techName, customerName, rating, comment = '', orderId = null, customerPhone = '') {
   try {
     const reviewId = Date.now().toString();
     await set(ref(db, 'reviews/' + reviewId), {
       techPhone,
       techName,
       customerName,
+      customerPhone,
+      orderId,
       rating,
       comment,
       time: new Date().toLocaleString(),
       timestamp: Date.now(),
     });
+
+    // If orderId is provided, mark the order as reviewed
+    if (orderId) {
+      await update(ref(db, 'orders/' + orderId), { reviewed: true });
+      console.log('✅ Order marked as reviewed:', orderId);
+    }
 
     // Also update the aggregated ratings path
     const existingSnap = await get(ref(db, 'techRatings/' + techPhone));
@@ -471,36 +479,46 @@ export async function getTechProfile(techPhone) {
       profile.photo = data.photo || null;
     }
 
-    // Check for Aadhar verification status
-    const aadharSnap = await get(ref(db, 'techVerification/' + cleanPhone + '/aadhar'));
-    if (aadharSnap.exists()) {
-      profile.aadharVerified = aadharSnap.val().verified === true;
-    }
+    // Check for Aadhar verification status (non-critical — errors don't block profile)
+    try {
+      const aadharSnap = await get(ref(db, 'techVerification/' + cleanPhone + '/aadhar'));
+      if (aadharSnap.exists()) {
+        profile.aadharVerified = aadharSnap.val().verified === true;
+      }
+    } catch (_) {}
 
-    // Check for certificate upload
-    const certSnap = await get(ref(db, 'techVerification/' + cleanPhone + '/certificate'));
-    if (certSnap.exists()) {
-      profile.certificateUploaded = certSnap.val().uploaded === true;
-    }
+    // Check for certificate upload (non-critical)
+    try {
+      const certSnap = await get(ref(db, 'techVerification/' + cleanPhone + '/certificate'));
+      if (certSnap.exists()) {
+        profile.certificateUploaded = certSnap.val().uploaded === true;
+      }
+    } catch (_) {}
 
-    // Check for verified badge (admin-approved)
-    const badgeSnap = await get(ref(db, 'techVerification/' + cleanPhone + '/verifiedBadge'));
-    if (badgeSnap.exists()) {
-      profile.verifiedBadge = badgeSnap.val() === true;
-    }
+    // Check for verified badge (admin-approved) (non-critical)
+    try {
+      const badgeSnap = await get(ref(db, 'techVerification/' + cleanPhone + '/verifiedBadge'));
+      if (badgeSnap.exists()) {
+        profile.verifiedBadge = badgeSnap.val() === true;
+      }
+    } catch (_) {}
 
-    // Check member since
-    const memberSnap = await get(ref(db, 'techVerification/' + cleanPhone + '/memberSince'));
-    if (memberSnap.exists()) {
-      profile.memberSince = memberSnap.val();
-    }
+    // Check member since (non-critical)
+    try {
+      const memberSnap = await get(ref(db, 'techVerification/' + cleanPhone + '/memberSince'));
+      if (memberSnap.exists()) {
+        profile.memberSince = memberSnap.val();
+      }
+    } catch (_) {}
 
     // If Aadhar is stored in legacy format (AsyncStorage-only), check techVerification
     if (!profile.aadharVerified) {
-      const legacySnap = await get(ref(db, 'techUsers/' + cleanPhone + '/aadharVerified'));
-      if (legacySnap.exists()) {
-        profile.aadharVerified = legacySnap.val() === true;
-      }
+      try {
+        const legacySnap = await get(ref(db, 'techUsers/' + cleanPhone + '/aadharVerified'));
+        if (legacySnap.exists()) {
+          profile.aadharVerified = legacySnap.val() === true;
+        }
+      } catch (_) {}
     }
 
     return profile;
