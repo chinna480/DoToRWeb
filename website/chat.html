@@ -386,9 +386,8 @@
 
       sendChatMsg(currentOrderId, {
         text: text,
-        sender: 'customer',
+        senderRole: 'cust',
         senderName: customerName,
-        senderPhone: currentPhone,
       });
 
       input.value = '';

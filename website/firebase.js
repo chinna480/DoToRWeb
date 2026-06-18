@@ -571,8 +571,8 @@ export async function sendMessage(orderId, messageData) {
     // Update metadata
     await update(ref(db, 'chats/' + orderId + '/metadata'), {
       lastMessage: messageData.text || '',
-      lastSender: messageData.sender,
-      lastTimestamp: Date.now(),
+      lastSender: messageData.senderRole || messageData.sender || '',
+      lastTime: Date.now(),
       unread: true,
     });
 
