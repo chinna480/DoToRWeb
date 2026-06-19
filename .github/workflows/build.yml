@@ -59,6 +59,12 @@ jobs:
           fi
           echo "✅ Package name matches: $PACKAGE_NAME"
 
+      - name: Decode keystore from secret
+        run: |
+          echo "${{ secrets.DOTOR_RELEASE_KEYSTORE }}" | base64 -d > android/app/dotor-release.keystore
+          chmod 600 android/app/dotor-release.keystore
+          echo "✅ Keystore decoded"
+
       - name: Install EAS CLI
         run: npm install -g eas-cli
 
