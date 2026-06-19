@@ -14,6 +14,7 @@ export default function ReviewScreen() {
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   const submitReview = async () => {
     if (rating === 0) {
@@ -21,6 +22,12 @@ export default function ReviewScreen() {
       return
     }
 
+    if (comment.length > 2000) {
+      Alert.alert('Comment too long', 'Please limit your comment to 2000 characters.')
+      return
+    }
+
+    setSubmitting(true)
     const name = await AsyncStorage.getItem('custName') || 'Customer'
 
     try {
@@ -72,6 +79,8 @@ export default function ReviewScreen() {
     } catch (e) {
       console.error('Review submit error:', e)
       Alert.alert('Error', 'Failed to submit review. Please try again.')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -125,8 +134,8 @@ export default function ReviewScreen() {
           />
         </View>
 
-        <TouchableOpacity style={s.submitBtn} onPress={submitReview}>
-          <Text style={s.submitTxt}>Submit Review →</Text>
+        <TouchableOpacity style={s.submitBtn} onPress={submitReview} disabled={submitting}>
+          <Text style={s.submitTxt}>{submitting ? '⏳ Submitting...' : 'Submit Review →'}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 90 }} />

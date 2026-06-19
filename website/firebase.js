@@ -384,29 +384,39 @@ export async function submitTechReview(techPhone, techName, customerName, rating
       timestamp: Date.now(),
     });
 
-    // If orderId is provided, mark the order as reviewed
+    // If orderId is provided, mark the order as reviewed (non-critical — log only)
     if (orderId) {
-      await update(ref(db, 'orders/' + orderId), { reviewed: true });
-      console.log('✅ Order marked as reviewed:', orderId);
+      try {
+        await update(ref(db, 'orders/' + orderId), { reviewed: true });
+        console.log('✅ Order marked as reviewed:', orderId);
+      } catch (updateErr) {
+        console.error('⚠️ Failed to mark order reviewed (review saved):', updateErr);
+      }
     }
 
-    // Also update the aggregated ratings path
-    const existingSnap = await get(ref(db, 'techRatings/' + techPhone));
-    let totalRating = rating;
-    let count = 1;
+    // Also update the aggregated ratings path (non-critical — log only)
+    if (techPhone) {
+      try {
+        const existingSnap = await get(ref(db, 'techRatings/' + techPhone));
+        let totalRating = rating;
+        let count = 1;
 
-    if (existingSnap.exists()) {
-      const existing = existingSnap.val();
-      totalRating = (existing.totalRating || 0) + rating;
-      count = (existing.count || 0) + 1;
+        if (existingSnap.exists()) {
+          const existing = existingSnap.val();
+          totalRating = (existing.totalRating || 0) + rating;
+          count = (existing.count || 0) + 1;
+        }
+
+        await set(ref(db, 'techRatings/' + techPhone), {
+          average: Math.round((totalRating / count) * 10) / 10,
+          count,
+          totalRating,
+          lastUpdated: Date.now(),
+        });
+      } catch (ratingErr) {
+        console.error('⚠️ Failed to update tech ratings (review saved):', ratingErr);
+      }
     }
-
-    await set(ref(db, 'techRatings/' + techPhone), {
-      average: Math.round((totalRating / count) * 10) / 10,
-      count,
-      totalRating,
-      lastUpdated: Date.now(),
-    });
 
     console.log('✅ Review saved for tech:', techPhone);
     return true;

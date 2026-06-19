@@ -975,9 +975,10 @@
     window.getCurrentLocation = async function() {
       const statusEl = document.getElementById('gpsStatus');
       statusEl.textContent = '📍 Getting your location...';
+      statusEl.style.color = 'var(--gray)';
 
       try {
-        // Try high-accuracy GPS first (mobile GPS chip); fall back to low-accuracy (WiFi/IP) on failure
+        // Try high-accuracy GPS first (GPS chip); fall back to low-accuracy (WiFi/IP) on failure
         const pos = await new Promise((resolve, reject) => {
           function locate(highAccuracy) {
             navigator.geolocation.getCurrentPosition(
@@ -997,8 +998,21 @@
 
         gpsLat = pos.coords.latitude;
         gpsLng = pos.coords.longitude;
-        statusEl.textContent = `✅ Location found! (${gpsLat.toFixed(4)}, ${gpsLng.toFixed(4)})`;
-        statusEl.style.color = 'var(--green)';
+
+        // Check accuracy — warn if it's poor (>500m radius)
+        const accuracy = pos.coords.accuracy;
+        const isAccurate = accuracy <= 500;
+
+        if (!isAccurate) {
+          statusEl.textContent = `⚠️ Low accuracy location (${accuracy >= 1000 ? (accuracy/1000).toFixed(1) + 'km' : Math.round(accuracy) + 'm'} radius). Please check the address below and correct if needed.`;
+          statusEl.style.color = 'var(--red)';
+        } else if (accuracy > 100) {
+          statusEl.textContent = `📍 Approximate location (${Math.round(accuracy)}m radius). Please verify the address.`;
+          statusEl.style.color = 'var(--primary)';
+        } else {
+          statusEl.textContent = `✅ GPS location found! (${gpsLat.toFixed(4)}, ${gpsLng.toFixed(4)})`;
+          statusEl.style.color = 'var(--green)';
+        }
 
         // Reverse geocode
         try {
@@ -1013,7 +1027,7 @@
           document.getElementById('location').value = `${gpsLat.toFixed(4)}, ${gpsLng.toFixed(4)}`;
         }
       } catch(e) {
-        statusEl.textContent = '⚠️ Could not get location. Please enter manually.';
+        statusEl.textContent = '⚠️ Could not get location. Please enter manually or use the map to select.';
         statusEl.style.color = 'var(--red)';
       }
     };
