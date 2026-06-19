@@ -121,6 +121,7 @@ export default function HomeScreen() {
       // Clean up all tech photo listeners
       Object.values(techPhotoUnsubsRef.current).forEach(fn => { try { fn() } catch(e) {} })
       techPhotoUnsubsRef.current = {}
+    }
   }, [])
 
   const loadUser = async () => {
