@@ -29,11 +29,13 @@ export default function ReviewScreen() {
 
     setSubmitting(true)
     const name = await AsyncStorage.getItem('custName') || 'Customer'
+    const customerPhone = await AsyncStorage.getItem('custPhone') || ''
 
     try {
       // Save review to reviews/ node
       await push(ref(db, 'reviews'), {
         customerName: name,
+        ...(customerPhone ? { customerPhone } : {}),
         rating,
         comment,
         orderId,
@@ -78,7 +80,8 @@ export default function ReviewScreen() {
       setSubmitted(true)
     } catch (e) {
       console.error('Review submit error:', e)
-      Alert.alert('Error', 'Failed to submit review. Please try again.')
+      const msg = e?.message || 'Unknown error'
+      Alert.alert('Error', `Failed to submit review.\n${msg}`)
     } finally {
       setSubmitting(false)
     }

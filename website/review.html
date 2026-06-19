@@ -410,7 +410,9 @@
         document.getElementById('reviewSuccess').style.display = 'block';
         showToast('⭐ Review submitted! Thank you!', 'success');
       } catch(err) {
-        showToast('❌ Failed to submit review. Please try again.', 'error');
+        console.error('❌ Review submit error:', err);
+        const errMsg = err?.message || 'Unknown error';
+        showToast(`❌ Failed to submit review: ${errMsg}`, 'error');
         btn.disabled = false;
         btn.innerHTML = '⭐ Submit Review';
       }

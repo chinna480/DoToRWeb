@@ -118,7 +118,7 @@
         "location": { ".validate": "newData.isString()" },
         "pincode": { ".validate": "newData.isString()" },
         "photo": { ".validate": "newData.isString()" },
-        "serviceCategories": { ".validate": "newData.isArray()" },
+        "serviceCategories": { ".validate": "newData.hasChildren()" },
         "$other": { ".validate": true }
       }
     },
@@ -141,14 +141,14 @@
         ".validate": "newData.isString()"
       }
     },
-    "reviews": {
+        "reviews": {
       ".read": true,
       ".indexOn": ["createdAt"],
       "$reviewId": {
         ".write": true,
         ".validate": "newData.hasChildren(['customerName', 'rating'])",
         "customerName": { ".validate": "newData.isString() && newData.val().length > 0" },
-        "customerPhone": { ".validate": "newData.isString() && newData.val().length >= 10" },
+        "customerPhone": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length >= 10)" },
         "techPhone": { ".validate": "newData.isString()" },
         "techName": { ".validate": "newData.isString()" },
         "orderId": { ".validate": "newData.isString()" },
