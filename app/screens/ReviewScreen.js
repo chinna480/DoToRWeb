@@ -1,12 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useRouter } from 'expo-router'
-import { ref, update, push } from 'firebase/database'
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { get, ref, update, push, set } from 'firebase/database'
 import { useState } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { db } from '../firebase/config'
 
 export default function ReviewScreen() {
   const router = useRouter()
+  const params = useLocalSearchParams()
+  const orderId = params.orderId || null
+  const techPhone = params.techPhone || null
+  const techName = params.techName || null
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -20,13 +24,50 @@ export default function ReviewScreen() {
     const name = await AsyncStorage.getItem('custName') || 'Customer'
 
     try {
+      // Save review to reviews/ node
       await push(ref(db, 'reviews'), {
         customerName: name,
         rating,
         comment,
+        orderId,
+        techPhone,
+        techName,
         time: new Date().toLocaleTimeString(),
         createdAt: Date.now(),
       })
+
+      // Mark the order as reviewed so the booking block is lifted
+      if (orderId) {
+        try {
+          await update(ref(db, 'orders/' + orderId), { reviewed: true })
+          console.log('✅ Order marked as reviewed:', orderId)
+        } catch (updateErr) {
+          console.error('Failed to mark order reviewed:', updateErr)
+        }
+      }
+
+      // Update tech's aggregated ratings
+      if (techPhone) {
+        try {
+          const existingSnap = await get(ref(db, 'techRatings/' + techPhone))
+          let totalRating = rating
+          let count = 1
+          if (existingSnap.exists()) {
+            const existing = existingSnap.val()
+            totalRating = (existing.totalRating || 0) + rating
+            count = (existing.count || 0) + 1
+          }
+          await set(ref(db, 'techRatings/' + techPhone), {
+            average: Math.round((totalRating / count) * 10) / 10,
+            count,
+            totalRating,
+            lastUpdated: Date.now(),
+          })
+        } catch (ratingErr) {
+          console.error('Failed to update tech ratings:', ratingErr)
+        }
+      }
+
       setSubmitted(true)
     } catch (e) {
       console.error('Review submit error:', e)

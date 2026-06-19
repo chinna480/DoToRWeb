@@ -524,7 +524,9 @@ export default function TrackingScreen() {
             </TouchableOpacity>
 
             {jobDone && (
-              <TouchableOpacity style={s.reviewBtn} onPress={() => router.push('/screens/ReviewScreen')}>
+              <TouchableOpacity style={s.reviewBtn} onPress={() => {
+                router.push(`/screens/ReviewScreen?orderId=${encodeURIComponent(orderId || '')}&techPhone=${encodeURIComponent(techPhone || '')}&techName=${encodeURIComponent(techName || '')}`)
+              }}>
                 <Text style={s.reviewTxt}>⭐ Rate Your Experience</Text>
               </TouchableOpacity>
             )}

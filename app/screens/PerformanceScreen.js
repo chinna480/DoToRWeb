@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useRouter } from 'expo-router'
 import { onValue, ref } from 'firebase/database'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   ScrollView,
@@ -18,54 +18,142 @@ export default function PerformanceScreen() {
   const [loading, setLoading]      = useState(true)
   const [stats, setStats]          = useState({ average: 0, count: 0, fiveStar: 0 })
 
+  // Refs to keep latest data for cross-referencing
+  const myPhoneRef = useRef('')
+  const allReviewsRef = useRef([])
+  const techOrdersRef = useRef([])
+  const unsubsRef = useRef([])
+
+  // Merge reviews from direct techPhone match + order cross-reference
+  const mergeAndSetReviews = () => {
+    const phone = myPhoneRef.current
+    if (!phone) return
+
+    const allReviews = allReviewsRef.current
+    const techOrders = techOrdersRef.current
+
+    // ── Method 1: Direct techPhone match (for NEW reviews) ──
+    const matchedByTechPhone = new Set()
+    const directMatches = allReviews.filter(r => {
+      const cleanTech = (r.techPhone || '').replace('+91', '').replace(/^0+/, '')
+      const cleanMy = phone.replace('+91', '').replace(/^0+/, '')
+      const match = cleanTech === cleanMy || r.techPhone === phone
+      if (match) matchedByTechPhone.add(r.id)
+      return match
+    })
+
+    // ── Method 2: Cross-reference with orders (catches OLD reviews without techPhone) ──
+    // Match reviews without techPhone to the tech's completed orders by customerName + time
+    const orderCustomerMap = {}
+    techOrders.forEach(order => {
+      const oName = (order.customerName || '').trim().toLowerCase()
+      if (!oName) return
+      if (!orderCustomerMap[oName]) orderCustomerMap[oName] = []
+      orderCustomerMap[oName].push(order)
+    })
+
+    const matchedByOrder = []
+    allReviews.forEach(r => {
+      if (matchedByTechPhone.has(r.id)) return
+      const rName = (r.customerName || '').trim().toLowerCase()
+      if (!rName) return
+      const candidates = orderCustomerMap[rName] || []
+      if (candidates.length === 0) return
+
+      if (r.orderId && techOrders.find(o => o.id === r.orderId)) {
+        matchedByOrder.push(r)
+      } else {
+        const rTime = r.createdAt || r.timestamp || 0
+        const closeOrders = candidates.filter(o => {
+          const oTime = o.createdAt || 0
+          return Math.abs(oTime - rTime) < 6 * 60 * 60 * 1000
+        })
+        if (closeOrders.length > 0) {
+          matchedByOrder.push(r)
+        }
+      }
+    })
+
+    // Merge both sets, sort newest-first
+    const merged = [...directMatches, ...matchedByOrder].sort(
+      (a, b) => (b.createdAt || b.timestamp || 0) - (a.createdAt || a.timestamp || 0)
+    )
+
+    // Deduplicate by review id
+    const seen = new Set()
+    const uniqueReviews = merged.filter(r => {
+      if (!r.id) return true
+      if (seen.has(r.id)) return false
+      seen.add(r.id)
+      return true
+    })
+
+    // Calculate stats
+    const count = uniqueReviews.length
+    const totalRating = uniqueReviews.reduce((sum, r) => sum + (r.rating || 0), 0)
+    const average = count > 0 ? Math.round((totalRating / count) * 10) / 10 : 0
+    const fiveStar = uniqueReviews.filter(r => r.rating === 5).length
+
+    setReviews(uniqueReviews)
+    setStats({ average, count, fiveStar })
+    setLoading(false)
+  }
+
   useEffect(() => {
-    let unsub = null
-    loadReviews()
+    loadData()
     return () => {
-      if (unsub) unsub()
+      unsubsRef.current.forEach(fn => { try { fn() } catch(e) {} })
+      unsubsRef.current = []
     }
 
-    async function loadReviews() {
+    async function loadData() {
       try {
         const phone = await AsyncStorage.getItem('techPhone')
         if (!phone) {
           setLoading(false)
           return
         }
+        myPhoneRef.current = phone
 
-        // Listen to all reviews and filter by this tech's phone
-        unsub = onValue(ref(db, 'reviews'), (snap) => {
+        // ── Listen to all orders (to find completed ones matching this tech) ──
+        const unsubOrders = onValue(ref(db, 'orders'), (snap) => {
           if (!snap.exists()) {
-            setReviews([])
-            setStats({ average: 0, count: 0, fiveStar: 0 })
-            setLoading(false)
+            techOrdersRef.current = []
+            mergeAndSetReviews()
             return
           }
-
-          const myReviews = []
+          const techOrders = []
           snap.forEach(child => {
-            const r = child.val()
-            // Match by techPhone (handles +91 prefix variants)
-            const cleanTech = (r.techPhone || '').replace('+91', '').replace(/^0+/, '')
-            const cleanMy   = phone.replace('+91', '').replace(/^0+/, '')
-            if (cleanTech === cleanMy || r.techPhone === phone) {
-              myReviews.push({ id: child.key, ...r })
+            const o = { id: child.key, ...child.val() }
+            if (o.status === 'completed' && o.techPhone) {
+              const cleanTech = (o.techPhone || '').replace('+91', '').replace(/^0+/, '')
+              const cleanMy = phone.replace('+91', '').replace(/^0+/, '')
+              if (cleanTech === cleanMy || o.techPhone === phone) {
+                techOrders.push(o)
+              }
             }
           })
-
-          // Sort by timestamp descending (newest first)
-          myReviews.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-
-          // Calculate stats
-          const count = myReviews.length
-          const totalRating = myReviews.reduce((sum, r) => sum + (r.rating || 0), 0)
-          const average = count > 0 ? Math.round((totalRating / count) * 10) / 10 : 0
-          const fiveStar = myReviews.filter(r => r.rating === 5).length
-
-          setReviews(myReviews)
-          setStats({ average, count, fiveStar })
-          setLoading(false)
+          techOrdersRef.current = techOrders
+          mergeAndSetReviews()
         })
+        unsubsRef.current.push(unsubOrders)
+
+        // ── Listen to all reviews ──
+        const unsubReviews = onValue(ref(db, 'reviews'), (snap) => {
+          if (!snap.exists()) {
+            allReviewsRef.current = []
+            mergeAndSetReviews()
+            return
+          }
+          const allReviews = []
+          snap.forEach(child => {
+            allReviews.push({ id: child.key, ...child.val() })
+          })
+          allReviewsRef.current = allReviews
+          mergeAndSetReviews()
+        })
+        unsubsRef.current.push(unsubReviews)
+
       } catch (e) {
         console.error('Performance load error:', e.message)
         setLoading(false)

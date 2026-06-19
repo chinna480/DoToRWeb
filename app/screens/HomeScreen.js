@@ -892,62 +892,75 @@ export default function HomeScreen() {
             {completedOrders.length > 0 && (
               <>
                 <Text style={s.sectionTitle}>✅ Completed Orders</Text>
-                {completedOrders.map((order, i) => (
-                  <View key={order.id || i} style={[s.orderCard, { borderLeftColor: '#2e7d32', opacity: 0.8 }]}>
-                    <View style={s.orderLeft}>
-                      <Text style={s.orderDevice}>{order.serviceLabel ? `✅ ${order.serviceLabel}` : `📱 ${order.brand || ''}`}{order.brand && order.modelName ? ` — ${order.modelName}` : ''}</Text>
-                      {order.description ? <Text style={[s.orderRepair, { color: '#2e7d32' }]}>✅ {order.description}</Text> : null}
-                      {order.images && order.images.length > 0 && (
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
-                          {order.images.map((url, j) => (
-                            <TouchableOpacity key={j} onPress={() => { setFsImages(order.images); setFsIndex(j) }}>
-                              <Image source={{ uri: url }} style={s.orderImage} />
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
-                      )}
-                      {order.videos && order.videos.length > 0 && (
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
-                          {order.videos.map((url, j) => (
-                            <TouchableOpacity key={j} onPress={() => { setFsVideos(order.videos); setFsVideoIndex(j) }}>
-                              <View style={s.videoThumbSm}>
-                                <Text style={s.videoPlayIconSm}>▶️</Text>
-                              </View>
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
-                      )}
-                      <Text style={s.orderLoc}>📍 {order.location}</Text>
-                      {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
-                      <Text style={s.orderTime}>🕐 {order.time}</Text>
-                    </View>
-                    <View style={s.orderRight}>
-                      <Text style={[s.orderStatus, { color: '#2e7d32' }]}>✅</Text>
-                      <Text style={[s.orderStatusLabel, { color: '#2e7d32' }]}>Completed</Text>
-                      {order.techName && !order.reviewed && (
-                        <View style={s.reviewBadge}>
-                          <Text style={s.reviewBadgeText}>⚠️ Review not given</Text>
-                        </View>
-                      )}
-                      {order.techName && order.reviewed && (
-                        <View style={s.reviewedBadge}>
-                          <Text style={s.reviewedBadgeText}>✅ Reviewed</Text>
-                        </View>
-                      )}
-                      {order.id && (
-                        <TouchableOpacity style={[s.orderChatBtn, { backgroundColor: '#2e7d32' }]} onPress={() => {
-                          try {
-                            router.push(`/screens/ChatScreen?orderId=${order.id}&role=cust&customerName=${encodeURIComponent(custName)}&techName=${encodeURIComponent(order.techName || '')}`)
-                          } catch (e) {
-                            console.log('Chat navigation error:', e)
-                          }
-                        }}>
-                          <Text style={s.orderChatTxt}>💬 Chat</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-                ))}
+                {completedOrders.map((order, i) => {
+                  const canReview = order.techName && !order.reviewed
+                  return (
+                    <TouchableOpacity
+                      key={order.id || i}
+                      style={[s.orderCard, { borderLeftColor: '#2e7d32', opacity: canReview ? 1 : 0.8 }]}
+                      onPress={() => {
+                        if (canReview) {
+                          router.push(`/screens/ReviewScreen?orderId=${encodeURIComponent(order.id || '')}&techPhone=${encodeURIComponent(order.techPhone || '')}&techName=${encodeURIComponent(order.techName || '')}`)
+                        }
+                      }}
+                      activeOpacity={canReview ? 0.7 : 1}
+                    >
+                      <View style={s.orderLeft}>
+                        <Text style={s.orderDevice}>{order.serviceLabel ? `✅ ${order.serviceLabel}` : `📱 ${order.brand || ''}`}{order.brand && order.modelName ? ` — ${order.modelName}` : ''}</Text>
+                        {canReview && <Text style={[s.orderRepair, { color: '#FF6B00' }]}>👆 Tap to rate this service</Text>}
+                        {order.description ? <Text style={[s.orderRepair, { color: '#2e7d32' }]}>✅ {order.description}</Text> : null}
+                        {order.images && order.images.length > 0 && (
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                            {order.images.map((url, j) => (
+                              <TouchableOpacity key={j} onPress={() => { setFsImages(order.images); setFsIndex(j) }}>
+                                <Image source={{ uri: url }} style={s.orderImage} />
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        )}
+                        {order.videos && order.videos.length > 0 && (
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                            {order.videos.map((url, j) => (
+                              <TouchableOpacity key={j} onPress={() => { setFsVideos(order.videos); setFsVideoIndex(j) }}>
+                                <View style={s.videoThumbSm}>
+                                  <Text style={s.videoPlayIconSm}>▶️</Text>
+                                </View>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        )}
+                        <Text style={s.orderLoc}>📍 {order.location}</Text>
+                        {order.pincode ? <Text style={s.orderLoc}>📮 {order.pincode}</Text> : null}
+                        <Text style={s.orderTime}>🕐 {order.time}</Text>
+                      </View>
+                      <View style={s.orderRight}>
+                        <Text style={[s.orderStatus, { color: '#2e7d32' }]}>✅</Text>
+                        <Text style={[s.orderStatusLabel, { color: '#2e7d32' }]}>Completed</Text>
+                        {canReview && (
+                          <View style={s.reviewBadge}>
+                            <Text style={s.reviewBadgeText}>⚠️ Review not given</Text>
+                          </View>
+                        )}
+                        {order.techName && order.reviewed && (
+                          <View style={s.reviewedBadge}>
+                            <Text style={s.reviewedBadgeText}>✅ Reviewed</Text>
+                          </View>
+                        )}
+                        {order.id && (
+                          <TouchableOpacity style={[s.orderChatBtn, { backgroundColor: '#2e7d32' }]} onPress={() => {
+                            try {
+                              router.push(`/screens/ChatScreen?orderId=${order.id}&role=cust&customerName=${encodeURIComponent(custName)}&techName=${encodeURIComponent(order.techName || '')}`)
+                            } catch (e) {
+                              console.log('Chat navigation error:', e)
+                            }
+                          }}>
+                            <Text style={s.orderChatTxt}>💬 Chat</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  )
+                })}
               </>
             )}
           </>
