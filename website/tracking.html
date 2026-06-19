@@ -290,6 +290,21 @@
         </a>
       </div>
 
+      <!-- Review Card (for completed orders) -->
+      <div id="reviewCard" class="card" style="display:none;">
+        <div style="text-align:center;padding:10px 0;">
+          <div style="font-size:40px;margin-bottom:8px;">⭐</div>
+          <h3 style="font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px;">Was your service good?</h3>
+          <p style="font-size:13px;color:var(--gray);margin-bottom:16px;">Rate your experience and help others choose the best technician.</p>
+          <div id="reviewCardActions">
+            <a id="rateBtn" href="#" class="btn btn-primary btn-lg" style="margin-bottom:8px;">⭐ Rate Your Technician</a>
+            <div id="alreadyReviewedBadge" style="display:none;padding:12px;background:var(--green-light);border-radius:var(--radius);">
+              <span style="font-size:14px;color:var(--green);font-weight:800;">✅ Already Reviewed</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Timeline -->
       <div class="card tracking-timeline">
         <div class="card-title">📋 Order Timeline</div>
@@ -999,6 +1014,24 @@
         document.getElementById('mapTitle').textContent = '✅ Repair Completed!';
         document.getElementById('mapDesc').textContent = 'Your device has been repaired. Thank you for choosing DoToR!';
         document.getElementById('openMapsBtn').style.display = 'none';
+
+        // Show review card
+        const reviewCard = document.getElementById('reviewCard');
+        const rateBtn = document.getElementById('rateBtn');
+        const alreadyReviewedBadge = document.getElementById('alreadyReviewedBadge');
+        if (currentOrderId && order.techName) {
+          reviewCard.style.display = 'block';
+          if (order.reviewed) {
+            rateBtn.style.display = 'none';
+            alreadyReviewedBadge.style.display = 'block';
+          } else {
+            rateBtn.style.display = 'inline-flex';
+            alreadyReviewedBadge.style.display = 'none';
+            rateBtn.href = `review.html?orderId=${currentOrderId}`;
+          }
+        } else {
+          reviewCard.style.display = 'none';
+        }
       }
     }
 
