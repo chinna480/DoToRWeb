@@ -27,6 +27,7 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('chat')
   const [techPhoto, setTechPhoto] = useState(null)
+  const techPhotoUnsubRef = useRef(null)
 
   const scrollRef = useRef(null)
   const mounted = useRef(true)
@@ -53,7 +54,7 @@ export default function ChatScreen() {
           setOtherPersonName(order.techName)
         }
         if (order.techPhone) {
-          fetchTechPhoto(order.techPhone)
+          listenTechPhoto(order.techPhone)
         }
       })
     } else if (role === 'tech') {
@@ -69,6 +70,10 @@ export default function ChatScreen() {
     return () => {
       mounted.current = false
       if (orderUnsub) orderUnsub()
+      if (techPhotoUnsubRef.current) {
+        techPhotoUnsubRef.current()
+        techPhotoUnsubRef.current = null
+      }
     }
   }, [orderId])
 
@@ -91,16 +96,29 @@ export default function ChatScreen() {
     return () => unsub()
   }, [orderId])
 
-  // Fetch technician profile photo
-  const fetchTechPhoto = async (phone) => {
+  // Listen to technician profile photo in real-time (replaces one-time get)
+  const listenTechPhoto = (phone) => {
+    // Clean up previous listener
+    if (techPhotoUnsubRef.current) {
+      techPhotoUnsubRef.current()
+      techPhotoUnsubRef.current = null
+    }
     if (!phone) return
     try {
-      const snap = await get(child(ref(db), `techUsers/${phone}/photo`))
-      if (snap.exists() && typeof snap.val() === 'string' && snap.val().startsWith('http')) {
-        setTechPhoto(snap.val())
-      }
+      const photoRef = ref(db, `techUsers/${phone}/photo`)
+      const unsub = onValue(photoRef, (snap) => {
+        if (!mounted.current) return
+        if (snap.exists() && typeof snap.val() === 'string' && snap.val().startsWith('http')) {
+          setTechPhoto(snap.val())
+        } else if (!snap.exists()) {
+          setTechPhoto(null)
+        }
+      }, (err) => {
+        console.log('techPhoto listener error:', err.message)
+      })
+      techPhotoUnsubRef.current = unsub
     } catch (e) {
-      console.log('fetchTechPhoto error:', e.message)
+      console.log('listenTechPhoto error:', e.message)
     }
   }
 

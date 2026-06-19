@@ -346,10 +346,11 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script type="module">
-    import { listenOrder, listenCustomerOrders, listenTechLocation, listenTechLocationByPhone, calcDistance, getTechRating, getTechProfile } from './firebase.js';
+    import { listenOrder, listenCustomerOrders, listenTechLocation, listenTechLocationByPhone, calcDistance, getTechRating, getTechProfile, listenTechPhoto } from './firebase.js';
 
     let unsubOrder = null;
     let unsubTechLoc = null;
+    let unsubTechPhoto = null;
     let unsubOrders = null;
     let currentOrderId = null;
     let currentOrder = null;
@@ -838,6 +839,7 @@
       // Clean up old listeners
       if (unsubOrder) unsubOrder();
       if (unsubTechLoc) unsubTechLoc();
+      if (unsubTechPhoto) { unsubTechPhoto(); unsubTechPhoto = null; }
       if (unsubOrders) { unsubOrders(); unsubOrders = null; }
 
       // Show tracking view
@@ -904,23 +906,24 @@
       // Tech info
       if (order.status === 'accepted' && order.techName) {
         document.getElementById('techInfoSection').style.display = 'block';
-        document.getElementById('techName').textContent = order.techName || 'Technician';
-
-        // Fetch technician profile (photo, verification, experience) + rating
+        document.getElementById('techName').textContent = order.techName || 'Technician';          // Fetch technician profile (photo, verification, experience) + rating
         if (order.techPhone) {
           let techProfile = null;
+
+          // Listen to tech photo in real-time (replaces one-time get)
+          if (unsubTechPhoto) { unsubTechPhoto(); unsubTechPhoto = null; }
+          unsubTechPhoto = listenTechPhoto(order.techPhone, (photoUrl) => {
+            const avatarEl = document.querySelector('.tech-avatar-lg');
+            if (photoUrl) {
+              avatarEl.innerHTML = `<img src="${photoUrl}" alt="${order.techName || 'Technician'}">`;
+            } else {
+              avatarEl.innerHTML = '🔧';
+            }
+          });
 
           getTechProfile(order.techPhone).then(profile => {
             techProfile = profile;
             if (profile) {
-              // Update avatar with photo if available
-              const avatarEl = document.querySelector('.tech-avatar-lg');
-              if (profile.photo) {
-                avatarEl.innerHTML = `<img src="${profile.photo}" alt="${profile.name}">`;
-              } else {
-                avatarEl.innerHTML = '🔧';
-              }
-
               // Show experience
               if (profile.experience) {
                 document.getElementById('techSubStatus').textContent = `⭐ ${profile.experience} experience`;

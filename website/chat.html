@@ -229,7 +229,7 @@
   <div class="footer">© 2025 DoToR - Doorstep Repair Service</div>
 
   <script type="module">
-    import { listenOrders, listenMessages, sendMessage as sendChatMsg, listenOrder, getTechProfile } from './firebase.js';
+    import { listenOrders, listenMessages, sendMessage as sendChatMsg, listenOrder, listenTechPhoto } from './firebase.js';
 
     let currentPhone = '';
     let currentOrderId = null;
@@ -237,6 +237,7 @@
     let currentTechPhone = '';
     let unsubMessages = null;
     let unsubOrder = null;
+    let unsubTechPhoto = null;
     let unsubOrders = null;
 
     // ── Init ──────────────────────────────────────────────────────────
@@ -262,6 +263,7 @@
     window.addEventListener('beforeunload', () => {
       if (unsubMessages) unsubMessages();
       if (unsubOrder) unsubOrder();
+      if (unsubTechPhoto) unsubTechPhoto();
       if (unsubOrders) unsubOrders();
     });
 
@@ -317,14 +319,17 @@
         document.getElementById('chatStatus').textContent =
           order.status === 'accepted' ? '🟢 Online' : '⚪ Offline';
 
-        // Fetch tech profile photo
+        // Listen to tech profile photo in real-time (replaces one-time get)
         if (order.techPhone) {
-          getTechProfile(order.techPhone).then(profile => {
+          if (unsubTechPhoto) { unsubTechPhoto(); unsubTechPhoto = null; }
+          unsubTechPhoto = listenTechPhoto(order.techPhone, (photoUrl) => {
             const avatarEl = document.getElementById('chatAvatar');
-            if (profile && profile.photo) {
-              avatarEl.innerHTML = `<img src="${profile.photo}" alt="${profile.name}">`;
+            if (photoUrl) {
+              avatarEl.innerHTML = `<img src="${photoUrl}" alt="${order.techName || 'Technician'}">`;
+            } else {
+              avatarEl.innerHTML = '🔧';
             }
-          }).catch(() => {});
+          });
         }
       });
 
@@ -396,6 +401,7 @@
     window.closeChat = function() {
       if (unsubMessages) { unsubMessages(); unsubMessages = null; }
       if (unsubOrder) { unsubOrder(); unsubOrder = null; }
+      if (unsubTechPhoto) { unsubTechPhoto(); unsubTechPhoto = null; }
       currentOrderId = null;
       document.getElementById('chatView').style.display = 'none';
       document.getElementById('orderSelect').style.display = 'block';

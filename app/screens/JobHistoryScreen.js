@@ -1,7 +1,7 @@
 // JobHistoryScreen.js — Full job history for technicians
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useRouter } from 'expo-router'
-import { get, child, onValue, ref } from 'firebase/database'
+import { onValue, ref } from 'firebase/database'
 import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
@@ -25,11 +25,19 @@ export default function JobHistoryScreen() {
   const [fullscreenImg, setFullscreenImg] = useState(null)
   const [techPhoto, setTechPhoto] = useState(null)
   const loadUnsub = useRef(null)
+  const techPhotoUnsubRef = useRef(null)
+  const mounted = useRef(true)
 
   useEffect(() => {
+    mounted.current = true
     loadJobHistory()
     return () => {
+      mounted.current = false
       if (loadUnsub.current) loadUnsub.current()
+      if (techPhotoUnsubRef.current) {
+        techPhotoUnsubRef.current()
+        techPhotoUnsubRef.current = null
+      }
     }
   }, [])
 
@@ -37,7 +45,7 @@ export default function JobHistoryScreen() {
     const myPhone = await AsyncStorage.getItem('techPhone')
     if (!myPhone) return
 
-    fetchTechPhoto(myPhone)
+    listenTechPhoto(myPhone)
 
     loadUnsub.current = onValue(ref(db, 'orders'), snap => {
       if (!snap.exists()) { setJobs([]); return }
@@ -121,16 +129,26 @@ export default function JobHistoryScreen() {
     )
   }
 
-  // Fetch own technician profile photo
-  const fetchTechPhoto = async (phone) => {
+  // Listen to own technician profile photo in real-time (replaces one-time get)
+  const listenTechPhoto = (phone) => {
+    if (techPhotoUnsubRef.current) {
+      techPhotoUnsubRef.current()
+      techPhotoUnsubRef.current = null
+    }
     if (!phone) return
     try {
-      const snap = await get(child(ref(db), `techUsers/${phone}/photo`))
-      if (snap.exists() && typeof snap.val() === 'string' && snap.val().startsWith('http')) {
-        setTechPhoto(snap.val())
-      }
+      const photoRef = ref(db, `techUsers/${phone}/photo`)
+      const unsub = onValue(photoRef, (snap) => {
+        if (!mounted.current) return
+        if (snap.exists() && typeof snap.val() === 'string' && snap.val().startsWith('http')) {
+          setTechPhoto(snap.val())
+        }
+      }, (err) => {
+        console.log('techPhoto listener error:', err.message)
+      })
+      techPhotoUnsubRef.current = unsub
     } catch (e) {
-      console.log('fetchTechPhoto error:', e.message)
+      console.log('listenTechPhoto error:', e.message)
     }
   }
 

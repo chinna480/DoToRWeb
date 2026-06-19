@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { get, child, onValue, push, ref } from 'firebase/database';
+import { onValue, push, ref } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -106,6 +106,7 @@ export default function HomeScreen() {
   const [mapPickLat, setMapPickLat]         = useState(null)
   const [mapPickLng, setMapPickLng]         = useState(null)
   const [techPhotos, setTechPhotos]         = useState({}) // {phone: url}
+  const techPhotoUnsubsRef = useRef({}) // {phone: unsubFn}
 
   const ordersUnsubRef = useRef(null)
 
@@ -117,7 +118,9 @@ export default function HomeScreen() {
     })
     return () => {
       if (ordersUnsubRef.current) { ordersUnsubRef.current(); ordersUnsubRef.current = null }
-    }
+      // Clean up all tech photo listeners
+      Object.values(techPhotoUnsubsRef.current).forEach(fn => { try { fn() } catch(e) {} })
+      techPhotoUnsubsRef.current = {}
   }, [])
 
   const loadUser = async () => {
@@ -155,25 +158,36 @@ export default function HomeScreen() {
       // Fetch tech photos for orders with techPhone
       const phonesToFetch = [...new Set(orders.filter(o => o.techPhone).map(o => o.techPhone))]
       if (phonesToFetch.length > 0) {
-        loadTechPhotos(phonesToFetch)
+        listenTechPhotos(phonesToFetch)
       }
     })
   }
 
-  // Fetch tech profile photos from Firebase
-  const loadTechPhotos = async (phones) => {
-    const photos = {}
-    await Promise.all(phones.map(async (phone) => {
+  // Listen to tech profile photos in real-time (replaces one-time get)
+  const listenTechPhotos = (phones) => {
+    // Clean up listeners for techs no longer in the list (prevent leaks)
+    Object.keys(techPhotoUnsubsRef.current).forEach(phone => {
+      if (!phones.includes(phone)) {
+        try { techPhotoUnsubsRef.current[phone](); } catch(e) {}
+        delete techPhotoUnsubsRef.current[phone]
+      }
+    })
+    phones.forEach(phone => {
+      if (!phone || techPhotoUnsubsRef.current[phone]) return
       try {
-        const snap = await get(child(ref(db), `techUsers/${phone}/photo`))
-        if (snap.exists() && typeof snap.val() === 'string' && snap.val().startsWith('http')) {
-          photos[phone] = snap.val()
-        }
-      } catch (_) {}
-    }))
-    if (Object.keys(photos).length > 0) {
-      setTechPhotos(prev => ({ ...prev, ...photos }))
-    }
+        const photoRef = ref(db, `techUsers/${phone}/photo`)
+        const unsub = onValue(photoRef, (snap) => {
+          if (snap.exists() && typeof snap.val() === 'string' && snap.val().startsWith('http')) {
+            setTechPhotos(prev => ({ ...prev, [phone]: snap.val() }))
+          }
+        }, (err) => {
+          console.log('techPhoto listener error:', err.message)
+        })
+        techPhotoUnsubsRef.current[phone] = unsub
+      } catch (e) {
+        console.log('listenTechPhotos error:', e.message)
+      }
+    })
   }
 
   // ── Image picker ───────────────────────────────────────────────────────

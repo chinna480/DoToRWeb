@@ -62,6 +62,7 @@ export default function TrackingScreen() {
   const [countdown, setCountdown]   = useState('--')
   const [techName, setTechName]   = useState('Connecting...')
   const [techPhoto, setTechPhoto] = useState(null)
+  const techPhotoUnsubRef = useRef(null)
 
   // Format seconds into readable countdown
   const formatCountdown = (s) => {
@@ -83,16 +84,29 @@ export default function TrackingScreen() {
   const [orderId, setOrderId]     = useState('')
   const [custName, setCustName]   = useState('Customer')
 
-  // Fetch tech profile photo when techPhone is known
-  const fetchTechPhoto = async (phone) => {
+  // Listen to tech photo in real-time (replaces one-time get)
+  const listenTechPhoto = (phone) => {
+    // Clean up previous listener
+    if (techPhotoUnsubRef.current) {
+      techPhotoUnsubRef.current()
+      techPhotoUnsubRef.current = null
+    }
     if (!phone) return
     try {
-      const snap = await get(child(ref(db), `techUsers/${phone}/photo`))
-      if (snap.exists() && typeof snap.val() === 'string' && snap.val().startsWith('http')) {
-        setTechPhoto(snap.val())
-      }
+      const photoRef = ref(db, `techUsers/${phone}/photo`)
+      const unsub = onValue(photoRef, (snap) => {
+        if (!mounted.current) return
+        if (snap.exists() && typeof snap.val() === 'string' && snap.val().startsWith('http')) {
+          setTechPhoto(snap.val())
+        } else if (!snap.exists()) {
+          setTechPhoto(null)
+        }
+      }, (err) => {
+        console.log('techPhoto listener error:', err.message)
+      })
+      techPhotoUnsubRef.current = unsub
     } catch (e) {
-      console.log('fetchTechPhoto error:', e.message)
+      console.log('listenTechPhoto error:', e.message)
     }
   }
   const [refreshingLocation, setRefreshingLocation] = useState(false)
@@ -117,7 +131,11 @@ export default function TrackingScreen() {
         watchRef.current = null
       }
       unsubsRef.current.forEach(fn => { try { fn() } catch(e) {} })
-      unsubsRef.current = []
+          unsubsRef.current = []
+          if (techPhotoUnsubRef.current) {
+            techPhotoUnsubRef.current()
+            techPhotoUnsubRef.current = null
+          }
     }
   }, [])
 
@@ -217,7 +235,7 @@ export default function TrackingScreen() {
             setTechName(o.techName)
             if (o.techPhone) {
               setTechPhone(o.techPhone)
-              fetchTechPhoto(o.techPhone)
+              listenTechPhoto(o.techPhone)
             }
           }
           if (o.modelName) setModelName(o.modelName)

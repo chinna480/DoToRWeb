@@ -538,6 +538,29 @@ export async function getTechProfile(techPhone) {
   }
 }
 
+// ── Listen to technician photo in real-time ──────────────────────────────
+// Uses onValue so the photo updates immediately when the tech changes it
+// Returns an unsubscribe function for cleanup
+export function listenTechPhoto(techPhone, callback) {
+  if (!techPhone) {
+    callback(null);
+    return () => {};
+  }
+  const cleanPhone = techPhone.replace('+91', '').replace(/^0+/, '');
+  const photoRef = ref(db, 'techUsers/' + cleanPhone + '/photo');
+  const listener = onValue(photoRef, (snapshot) => {
+    if (snapshot.exists() && typeof snapshot.val() === 'string' && snapshot.val().startsWith('http')) {
+      callback(snapshot.val());
+    } else {
+      callback(null);
+    }
+  }, (err) => {
+    console.log('techPhoto listener error:', err.message);
+    callback(null);
+  });
+  return () => off(photoRef, 'value', listener);
+}
+
 // ── CUSTOMER PROFILE MANAGEMENT ────────────────────────────────────────────
 export async function saveUserProfile(phone, data) {
   try {
