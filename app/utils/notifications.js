@@ -371,7 +371,17 @@ export async function notifyCustomerTechNearby(custPushToken, etaMinutes) {
   )
 }
 
-/** Called when tech marks distance < 0.2 km → notify customer "arrived" */
+/** Called when tech leaves their starting area (~0.3 km from origin) → notify customer "departed" */
+export async function notifyCustomerTechDeparted(custPushToken) {
+  await sendPushNotification(
+    custPushToken,
+    '🛵 Technician Started!',
+    'Your technician has started from their area and is on the way!',
+    { screen: 'TrackingScreen' }
+  )
+}
+
+/** Called when tech marks distance < 0.02 km → notify customer "arrived" */
 export async function notifyCustomerTechArrived(custPushToken) {
   await sendPushNotification(
     custPushToken,

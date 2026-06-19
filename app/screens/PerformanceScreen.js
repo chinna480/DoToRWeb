@@ -55,6 +55,8 @@ export default function PerformanceScreen() {
     const matchedByOrder = []
     allReviews.forEach(r => {
       if (matchedByTechPhone.has(r.id)) return
+      // ⛔ Skip reviews that already have a techPhone — they belong to another technician
+      if (r.techPhone) return
       const rName = (r.customerName || '').trim().toLowerCase()
       if (!rName) return
       const candidates = orderCustomerMap[rName] || []
@@ -261,9 +263,7 @@ export default function PerformanceScreen() {
                   <Text style={s.noComment}>No comment written</Text>
                 )}
 
-                {review.customerPhone && (
-                  <Text style={s.customerPhone}>📱 {review.customerPhone}</Text>
-                )}
+
               </View>
             ))}
           </View>
@@ -316,5 +316,4 @@ const s = StyleSheet.create({
 
   commentText:       { fontSize: 13, color: '#444', fontStyle: 'italic', marginTop: 8, lineHeight: 18, padding: 10, backgroundColor: '#f9f9f9', borderRadius: 10 },
   noComment:         { fontSize: 12, color: '#bbb', marginTop: 8, fontStyle: 'italic' },
-  customerPhone:     { fontSize: 11, color: '#aaa', fontWeight: '600', marginTop: 6 },
 })

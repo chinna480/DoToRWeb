@@ -22,6 +22,7 @@ import {
   notifyCustomerJobDone,
   notifyCustomerTechAccepted,
   notifyCustomerTechArrived,
+  notifyCustomerTechDeparted,
   notifyCustomerTechNearby,
   notifyTechJobDone,
   notifyTechNewJob,
@@ -114,6 +115,9 @@ export default function TechHomeScreen() {
   const techCatRef        = useRef([]) // e.g. ['mobile', 'tv', 'ac']
   const sentNearby        = useRef(false)
   const sentArrived       = useRef(false)
+  const sentDeparted      = useRef(false)
+  const startLatRef       = useRef(null)
+  const startLngRef       = useRef(null)
   const prevPendingIds    = useRef(new Set())
   const areaAssignments   = useRef({})
   const storedEtaRef      = useRef(null)
@@ -168,6 +172,9 @@ export default function TechHomeScreen() {
       }, err => console.log('custLocation listener error:', err))
       sentNearby.current  = false
       sentArrived.current = false
+      sentDeparted.current = false
+      startLatRef.current  = null
+      startLngRef.current  = null
     } else {
       if (watchRef.current) { watchRef.current.remove(); watchRef.current = null }
       if (custLocUnsubRef.current) { custLocUnsubRef.current(); custLocUnsubRef.current = null }
@@ -191,11 +198,29 @@ export default function TechHomeScreen() {
     storedEtaRef.current = secs
     setEtaSeconds(secs)
     const custToken = ongoingJob?.customerPushToken
-    if (etaMins <= 5 && !sentNearby.current) {
+    // Track starting position — first GPS fix after job accepted
+    if (startLatRef.current === null) {
+      startLatRef.current = myLat
+      startLngRef.current = myLng
+    }
+
+    // ── Technician departed from their area (moved >0.3 km from starting point) ──
+    if (!sentDeparted.current && startLatRef.current !== null) {
+      const distFromStart = parseFloat(calcDistance(startLatRef.current, startLngRef.current, myLat, myLng))
+      if (!isNaN(distFromStart) && distFromStart > 0.3) {
+        sentDeparted.current = true
+        notifyCustomerTechDeparted(custToken)
+      }
+    }
+
+    // ── Technician ~1 km away ──
+    if (d <= 1 && !sentNearby.current) {
       sentNearby.current = true
       notifyCustomerTechNearby(custToken, etaMins)
     }
-    if (d <= 0.2 && !sentArrived.current) {
+
+    // ── Technician arrived at doorstep (≤20 m / 0.02 km) ──
+    if (d <= 0.02 && !sentArrived.current) {
       sentArrived.current = true
       notifyCustomerTechArrived(custToken)
     }
