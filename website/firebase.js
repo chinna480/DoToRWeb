@@ -12,6 +12,11 @@ import {
   off,
   get,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+import {
+  getMessaging,
+  getToken,
+  onMessage,
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js';
 
 // ── Firebase Configuration (same as mobile app) ───────────────────────────
 const firebaseConfig = {
@@ -26,6 +31,104 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+
+// ── FCM / Push Notification setup ──────────────────────────────────────────
+// VAPID key from Firebase Console (needed for web push)
+// You can get this from Firebase Console > Project Settings > Cloud Messaging
+const FCM_VAPID_KEY = 'BKyTEa7xh-HWeQ14JX0PDp6z8tpWqpr-Ky5_dHmYNJdxrlQj_MqGW5zYyUJmTPrRnxnJjMk-d-jWEpkSDSaTmyY';
+
+let messagingInstance = null;
+let swRegistration = null;
+
+/**
+ * Initialize FCM messaging and register the service worker.
+ * Returns { token, swReg } or null if push not supported.
+ */
+export async function setupFCM() {
+  try {
+    // Check if service workers and push are supported
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      console.log('🔕 Push notifications not supported in this browser');
+      return null;
+    }
+
+    // Check for existing permission
+    if (Notification.permission === 'denied') {
+      console.log('🔕 Notification permission denied');
+      return null;
+    }
+
+    // Register the service worker
+    swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    console.log('✅ Service worker registered');
+
+    // Wait for the service worker to be ready
+    await navigator.serviceWorker.ready;
+
+    // Get FCM messaging instance
+    messagingInstance = getMessaging(app);
+
+    // Get FCM token (will prompt for permission if not already granted)
+    const token = await getToken(messagingInstance, {
+      vapidKey: FCM_VAPID_KEY,
+      serviceWorkerRegistration: swRegistration,
+    });
+
+    if (token) {
+      console.log('✅ FCM token obtained');
+
+      // Listen for foreground messages
+      onMessage(messagingInstance, (payload) => {
+        console.log('📩 Foreground push received:', payload);
+        // Show an in-app notification
+        const title = payload.notification?.title || 'DoToR';
+        const body = payload.notification?.body || '';
+        if (title && body) {
+          // Use the website's toast system if available
+          if (typeof window.showToast === 'function') {
+            window.showToast('📩 ' + title + ': ' + body, 'success');
+          }
+        }
+      });
+
+      return token;
+    }
+
+    console.warn('⚠️ No FCM token returned');
+    return null;
+  } catch (err) {
+    console.error('❌ FCM setup failed:', err);
+    return null;
+  }
+}
+
+/**
+ * Store the FCM token for a customer in Firebase.
+ * Stores at: users/{phone}/fcmToken
+ */
+export async function saveFcmToken(phone, token) {
+  if (!phone || !token) return;
+  try {
+    await set(ref(db, 'users/' + phone + '/fcmToken'), token);
+    await set(ref(db, 'users/' + phone + '/fcmTokenUpdatedAt'), Date.now());
+    console.log('✅ FCM token saved for user:', phone);
+  } catch (err) {
+    console.error('❌ Failed to save FCM token:', err);
+  }
+}
+
+/**
+ * Remove the FCM token (e.g., on logout)
+ */
+export async function removeFcmToken(phone) {
+  if (!phone) return;
+  try {
+    await set(ref(db, 'users/' + phone + '/fcmToken'), null);
+    console.log('✅ FCM token removed for user:', phone);
+  } catch (err) {
+    console.error('❌ Failed to remove FCM token:', err);
+  }
+}
 
 // ── Order fields matching the mobile app exactly ─────────────────────────
 // When booking, we create the same order structure as HomeScreen.js
@@ -75,8 +178,8 @@ export async function createOrder(orderData) {
     const orderId = orderRef.key;
 
     const order = {
-      customerName:    orderData.name,
-      customerPhone:   orderData.phone,
+      customerName:    orderData.customerName || orderData.name,
+      customerPhone:   orderData.customerPhone || orderData.phone,
       location:        orderData.location || '',
       pincode:         orderData.pincode || '',
       serviceCategory: orderData.serviceCategory || null,
@@ -209,16 +312,17 @@ export function listenTechLocation(callback) {
   return () => off(locRef, 'value', listener);
 }
 
-// ── Listen to a SPECIFIC technician's location (per-tech tracking) ──────
-// Reads from techsOnline/{techPhone} which the mobile app updates every ~4s.
-// This avoids the collision issue with the global techLocation path.
-export function listenTechLocationByPhone(techPhone, callback) {
-  if (!techPhone) {
+// ── Listen to a SPECIFIC technician's location (per-order tracking) ────
+// Reads from orders/{orderId}/techLocation which the mobile app updates every ~4s
+// when a technician has accepted the order.
+// This is the same path used by the mobile app's TrackingScreen.js and TechHomeScreen.js.
+export function listenTechLocationByPhone(techPhone, callback, orderId) {
+  if (!techPhone || !orderId) {
     callback(null);
     return () => {};
   }
-  const cleanPhone = techPhone.replace('+91', '').replace(/^0+/, '');
-  const locRef = ref(db, 'techsOnline/' + cleanPhone);
+  // Mobile app writes tech location to orders/{orderId}/techLocation — use that path
+  const locRef = ref(db, 'orders/' + orderId + '/techLocation');
   const listener = onValue(locRef, (snapshot) => {
     if (snapshot.exists()) {
       const val = snapshot.val();
@@ -675,6 +779,7 @@ export {
   push,
   set,
   update,
+  onValue,
   get,
   PHONE_BRANDS,
   LAPTOP_BRANDS,
