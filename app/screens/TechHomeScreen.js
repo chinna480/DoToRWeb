@@ -299,17 +299,29 @@ export default function TechHomeScreen() {
       pending = pending.filter(o => {
         const pincodeMatch = (o.pincode || '').toLowerCase().trim() === filterPincode
         if (pincodeMatch) return true
-        if (o.custLat == null || o.custLng == null) return false
+        if (o.custLat == null || o.custLng == null) {
+          // Customer has no GPS — show the order anyway (can't determine distance).
+          // This fixes the bug where nearby pincode orders were never shown
+          // because the customer only entered a pincode without GPS coords.
+          return true
+        }
         const dist = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
-        return dist <= 20
+        return dist <= 30
       })
     } else if (filterPincode) {
-      pending = pending.filter(o => (o.pincode || '').toLowerCase().trim() === filterPincode)
+      const prefix = filterPincode.slice(0, 3)
+      pending = pending.filter(o => {
+        const orderPincode = (o.pincode || '').toLowerCase().trim()
+        // Exact match OR first 3 digits match (same postal region/district)
+        // In India, the first 3 digits of a pincode represent a region,
+        // so e.g. 500081 and 500082 both map to the Hyderabad region.
+        return orderPincode === filterPincode || (orderPincode.length >= 3 && orderPincode.slice(0, 3) === prefix)
+      })
     } else if (techLat && techLng) {
       pending = pending.filter(o => {
         if (o.custLat == null || o.custLng == null) return true
         const dist = parseFloat(calcDistance(techLat, techLng, o.custLat, o.custLng))
-        return dist <= 20
+        return dist <= 30
       })
     }
 
@@ -360,7 +372,7 @@ export default function TechHomeScreen() {
     )
   }
 
-  /** Start low-accuracy GPS watcher for proximity-based pending job matching (20 km radius) */
+  /** Start low-accuracy GPS watcher for proximity-based pending job matching (30 km radius) */
   const startProximityWatching = async () => {
     if (proximityWatchRef.current || watchRef.current) return
     const { status } = await Location.requestForegroundPermissionsAsync()

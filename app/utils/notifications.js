@@ -440,7 +440,7 @@ export async function notifyCustomerBookingConfirmed(brand, repair) {
  * @param {number} orderId - The Firebase key of the new order
  */
 export async function notifyTechsForNewOrder(order, orderId) {
-  const RADIUS_KM = 10;
+  const RADIUS_KM = 30;
   const orderCat = order.serviceCategory; // e.g. 'mobile', 'tv', 'ac'
 
   const orderLat = order.custLat;
