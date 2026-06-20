@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 # Prevent infinite loop: skip runs triggered by our own [skip ci] commits
 jobs:
@@ -90,3 +90,15 @@ jobs:
         with:
           name: DoToR-APK-${{ env.APK_NAME }}
           path: ${{ env.APK_PATH }}
+
+      - name: Create GitHub Release with APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$(date +%Y.%m.%d)-${GITHUB_RUN_NUMBER}"
+          cp "${{ env.APK_PATH }}" DoToR.apk
+          gh release create "$TAG" DoToR.apk \
+            --title "DoToR APK $TAG" \
+            --notes "Latest DoToR APK build from commit ${{ github.sha }}" \
+            --latest
+          echo "✅ Release created: $TAG"
