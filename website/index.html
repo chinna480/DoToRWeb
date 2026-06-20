@@ -336,8 +336,15 @@
       display: none;
     }
     .loc-suggestions.show { display: block; }
-    /* Ensure Leaflet map panes don't overlap the suggestions */
-    .leaflet-pane { z-index: 1 !important; }
+    /* Ensure Leaflet map panes in the map picker don't overlap the suggestions */
+    #mapPickerContainer { position: relative; z-index: 1; }
+    #mapPickerContainer .leaflet-pane,
+    #mapPickerContainer .leaflet-tile-pane,
+    #mapPickerContainer .leaflet-overlay-pane,
+    #mapPickerContainer .leaflet-shadow-pane,
+    #mapPickerContainer .leaflet-marker-pane,
+    #mapPickerContainer .leaflet-tooltip-pane,
+    #mapPickerContainer .leaflet-popup-pane { z-index: 1 !important; }
     .loc-suggestion-item {
       padding: 12px 14px;
       cursor: pointer;
