@@ -144,6 +144,20 @@
           '</div>';
       }
 
+      var techInfoHtml = '';
+      if (order.techName) {
+        techInfoHtml = '<div class="order-tech-section">' +
+          '<div style="display:flex;align-items:center;gap:10px;margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0;">' +
+          '<div style="width:36px;height:36px;border-radius:50%;background:#1A3A6B;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;font-size:16px;">' +
+          (order.techPhoto ? '<img src="' + order.techPhoto + '" style="width:100%;height:100%;object-fit:cover;" alt="tech">' : '👨‍🔧') +
+          '</div>' +
+          '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:13px;font-weight:800;color:#1A3A6B;">🔧 ' + order.techName + '</div>' +
+          (order.techArea ? '<div style="font-size:11px;color:#888;font-weight:600;">📍 ' + order.techArea + '</div>' : '') +
+          (order.techExp ? '<div style="font-size:11px;color:#FF6B00;font-weight:700;">⭐ ' + order.techExp + ' experience</div>' : '') +
+          '</div></div></div>';
+      }
+
       return '<div class="order-card ' + statusClass + '">' +
         '<div class="order-left">' +
         '<div class="order-device">' + (order.brand ? order.brand + ' ' : '') + (order.modelName || order.device || label) + '</div>' +
@@ -151,6 +165,7 @@
         '<div class="order-detail-text">📍 ' + (order.location || '—') + '</div>' +
         '<div class="order-detail-text">🕐 ' + new Date(order.createdAt || Date.now()).toLocaleDateString() + '</div>' +
         imagesHtml +
+        techInfoHtml +
         '</div>' +
         '<div class="order-right">' +
         '<span class="order-status-badge ' + order.status + '">' + order.status + '</span>' +

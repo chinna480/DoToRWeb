@@ -55,7 +55,13 @@
       <div class="info-card-title">YOUR TECHNICIAN</div>
       <div class="tech-row">
         <div class="tech-avatar-lg" id="trackTechPhoto">👨‍🔧</div>
-        <div style="flex:1;"><div class="tech-name-lg" id="trackTechName">Connecting...</div><div class="tech-sub">⭐ Verified Expert Technician</div><div class="tech-phone-txt" id="trackTechPhone"></div></div>
+        <div style="flex:1;">
+          <div class="tech-name-lg" id="trackTechName">Connecting...</div>
+          <div class="tech-sub">⭐ Verified Expert Technician</div>
+          <div class="tech-detail-row" id="trackTechAreaRow" style="display:none;">📍 <span id="trackTechArea"></span></div>
+          <div class="tech-detail-row" id="trackTechExpRow" style="display:none;">⭐ <span id="trackTechExp"></span> experience</div>
+          <div class="tech-phone-txt" id="trackTechPhone"></div>
+        </div>
         <div class="rating-badge">⭐ 4.8</div>
       </div>
     </div>
@@ -151,6 +157,15 @@
       document.getElementById('trackCallBtn').style.display = 'block';
       document.getElementById('trackActions').style.display = 'flex';
       document.getElementById('trackChatBtn').onclick = function() { window.location.href = 'chat.html?orderId=' + orderId + '&techName=' + encodeURIComponent(order.techName); };
+      // Technician area and experience from order data
+      if (order.techArea) {
+        document.getElementById('trackTechAreaRow').style.display = 'block';
+        document.getElementById('trackTechArea').textContent = order.techArea;
+      }
+      if (order.techExp) {
+        document.getElementById('trackTechExpRow').style.display = 'block';
+        document.getElementById('trackTechExp').textContent = order.techExp;
+      }
     }
 
     // Tech photo
@@ -292,7 +307,9 @@
     if (countdownInterval) clearInterval(countdownInterval);
     if (unsubNotifs) unsubNotifs();
   });
-</script>
+</script>  <style>
+    .tech-detail-row { font-size:12px; color:#555; font-weight:600; margin-top:2px; }
+  </style>
 
 <script>if('serviceWorker' in navigator) { navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(function(e) { console.log('SW reg failed:', e); }); }</script>
 </body>

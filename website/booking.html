@@ -318,6 +318,17 @@
     backBtn.textContent = wizardStep <= 1 ? '← Cancel' : '← Back';
   }
 
+  async function geocodeAddress(address) {
+    try {
+      var res = await fetch('https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(address) + '&format=json&limit=1');
+      var data = await res.json();
+      if (data && data.length > 0) {
+        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      }
+    } catch(e) { console.warn('Geocode error:', e); }
+    return null;
+  }
+
   async function submitOrder() {
     syncWizInputs();
     var svc = CATEGORIES.find(function(s) { return s.key === selDevice; });
@@ -325,6 +336,15 @@
     if (!selDevice || !issueDesc.trim()) { window.showToast('Missing info', 'error'); return; }
     if (deviceFlow && (!selBrand || !modelName.trim())) { window.showToast('Missing brand/model', 'error'); return; }
     if (!locationInput.trim()) { window.showToast('Missing location', 'error'); return; }
+
+    // If no GPS pin was dropped, try to geocode the typed address for auto-assign
+    if ((mapLat == null || mapLng == null) && locationInput.trim()) {
+      try {
+        var coords = await geocodeAddress(locationInput.trim() + ', India');
+        if (coords) { mapLat = coords.lat; mapLng = coords.lng; }
+      } catch(e) { console.warn('Geocode fallback failed:', e); }
+    }
+
     isSubmitting = true; updateWizardButtons();
     try {
       var order = {

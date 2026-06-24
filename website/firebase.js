@@ -418,20 +418,37 @@ export async function autoAssignNearestTech(orderId, lat, lng, pincode, excludeP
         let score = 0;
         let distance = null;
 
+        // ── Both customer and tech have GPS: use distance ──
         if (t.lat && t.lng && lat && lng) {
           distance = parseFloat(calcDistance(lat, lng, t.lat, t.lng));
-        }
 
-        // 5 km radius filter — only eligible if within range OR no GPS on either side
-        if (distance !== null && distance > MAX_AUTO_ASSIGN_KM) {
-          return { ...t, score: -1, _distance: distance, _outOfRange: true };
-        }
+          // 5 km radius filter — exclude far-away techs
+          if (distance > MAX_AUTO_ASSIGN_KM) {
+            return { ...t, score: -1, _distance: distance, _outOfRange: true };
+          }
 
-        if (t.pincode && pincode && t.pincode.toString() === pincode.toString()) {
-          score += 100; // Same pincode = high priority
-        }
-        if (distance !== null) {
           score += Math.max(0, 50 - distance); // Closer = more points
+        }
+        // ── Customer has GPS but tech doesn't: only allow if same pincode/region ──
+        else if (lat && lng) {
+          const techPin = t.pincode ? t.pincode.toString() : '';
+          const custPin = pincode ? pincode.toString() : '';
+          const samePincode = techPin === custPin;
+          const sameRegion = techPin.length >= 3 && custPin.length >= 3 &&
+                             techPin.substring(0, 3) === custPin.substring(0, 3);
+
+          if (!samePincode && !sameRegion) {
+            return { ...t, score: -1, _distance: null, _outOfRange: true };
+          }
+
+          if (samePincode) score += 100;
+          else if (sameRegion) score += 50;
+        }
+        // ── Customer has no GPS: pincode-only matching ──
+        else {
+          if (t.pincode && pincode && t.pincode.toString() === pincode.toString()) {
+            score += 100;
+          }
         }
 
         return { ...t, score, _distance: distance, _outOfRange: false };
@@ -457,13 +474,16 @@ export async function autoAssignNearestTech(orderId, lat, lng, pincode, excludeP
     await update(ref(db, 'orders/' + orderId), {
       techPhone: bestTech.phone,
       techName: bestTech.name || 'Technician',
+      techPhoto: bestTech.photo || null,
+      techArea: bestTech.location || null,
+      techExp: bestTech.exp || bestTech.experience || null,
       status: 'accepted',
       assignedAt: Date.now(),
       autoAssigned: true,
     });
 
     console.log('✅ Auto-assigned tech:', bestTech.phone, 'to order:', orderId);
-    return { techPhone: bestTech.phone, techName: bestTech.name };
+    return { techPhone: bestTech.phone, techName: bestTech.name, techPhoto: bestTech.photo, techArea: bestTech.location, techExp: bestTech.exp || bestTech.experience };
   } catch (err) {
     console.error('❌ Auto-assign failed:', err);
     return null;

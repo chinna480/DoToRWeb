@@ -1,5 +1,6 @@
 /**
  * Unit tests for autoAssignNearestTech — scoring logic, 5 km radius filter,
+ * tech-without-GPS fallback (only allowed if same pincode/region),
  * and excludePhones (rejection) support.
  *
  * Firebase Database is fully mocked. The real calcDistance from
@@ -111,13 +112,42 @@ test('excludes techs beyond 5 km but includes closer one', async () => {
   expect(result).toEqual({ techPhone: '5555555555', techName: 'CloseBy' })
 })
 
-test('includes tech with no GPS coords even if far (fallback)', async () => {
-  // Tech has no lat/lng, so we can't determine distance — include them
+test('includes tech with no GPS but same pincode (pincode proximity)', async () => {
+  // Tech has no lat/lng, but same pincode as customer → eligible via pincode proximity
   __setMockTechs({
-    '6666666666': { name: 'NoGps', pincode: '500081' },
+    '6666666666': { name: 'NoGpsSamePin', pincode: '500081' },
   })
   const result = await autoAssignNearestTech('order5k5', CUST_LAT, CUST_LNG, CUST_PIN)
-  expect(result).toEqual({ techPhone: '6666666666', techName: 'NoGps' })
+  expect(result).toEqual({ techPhone: '6666666666', techName: 'NoGpsSamePin' })
+})
+
+test('excludes tech with no GPS and different pincode/region', async () => {
+  // Tech has no lat/lng AND a different pincode from a different region → excluded
+  __setMockTechs({
+    '7777777777': { name: 'FarNoGps', pincode: '110001' }, // Delhi, far from Hyderabad (500xxx)
+  })
+  const result = await autoAssignNearestTech('orderNoGpsDiff', CUST_LAT, CUST_LNG, CUST_PIN)
+  expect(result).toBeNull()
+  expect(mockUpdate).not.toHaveBeenCalled()
+})
+
+test('includes tech with no GPS but same region (first 3 pincode digits)', async () => {
+  // Tech has no lat/lng, different pincode but same first-3-digit region → eligible
+  __setMockTechs({
+    '8888888888': { name: 'SameRegion', pincode: '500032' }, // Same 500 region
+  })
+  const result = await autoAssignNearestTech('orderSameRegion', CUST_LAT, CUST_LNG, CUST_PIN)
+  expect(result).toEqual({ techPhone: '8888888888', techName: 'SameRegion' })
+})
+
+test('prefers same-pincode tech over same-region tech when both have no GPS', async () => {
+  __setMockTechs({
+    'AAA': { name: 'SamePin', pincode: '500081' },  // exact match
+    'BBB': { name: 'SameReg', pincode: '500032' },  // same region only
+  })
+  const result = await autoAssignNearestTech('orderPinVsReg', CUST_LAT, CUST_LNG, CUST_PIN)
+  // SamePin gets +100, SameReg gets +50 → SamePin wins
+  expect(result).toEqual({ techPhone: 'AAA', techName: 'SamePin' })
 })
 
 // ===================== EXCLUDE PHONES (Rejection) =====================
