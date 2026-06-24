@@ -1,0 +1,105 @@
+═══ DoToR - Amazon Appstore Upload Guide ═══
+══════════════════════════════════════════════
+          100% FREE - No Registration Fee
+══════════════════════════════════════════════
+
+
+▸ WHAT YOU NEED (already have):
+  • Signed APK from GitHub Releases
+  • Package name: com.dotor.app
+  • App icon: assets/images/icon.png (512×512)
+  • Privacy Policy: https://dotor-my7591829-ramb0s-projects.vercel.app/privacy.html
+  • Website: https://dotor-my7591829-ramb0s-projects.vercel.app
+  • Email: support@dotor.in
+
+
+══════════════════════════════════════════════
+STEP 1: Create Developer Account
+══════════════════════════════════════════════
+
+  1. Go to https://developer.amazon.com/
+  2. Sign in with your Amazon account (or create free one)
+  3. Click "Register as a Developer"
+  4. Fill in profile details
+  5. Accept terms & conditions
+
+  ✓ $0 - No credit card needed
+
+
+══════════════════════════════════════════════
+STEP 2: Get Your APK/AAB
+══════════════════════════════════════════════
+
+  Download latest APK from GitHub:
+  https://github.com/chinna480/DoToRApp/releases/latest/download/DoToR.apk
+
+  Or build fresh:
+  > eas build --platform android --profile production
+
+
+══════════════════════════════════════════════
+STEP 3: Prepare Store Assets
+══════════════════════════════════════════════
+
+  □ App Icon (512×512 PNG)       → Already have
+  □ Screenshots (2-4 minimum)    → Take from phone
+     Recommended: 1080×1920 px
+     Show: Home, Booking, Tracking, Profile
+  □ Feature Banner (1024×500)    → Optional, use Canva
+
+
+══════════════════════════════════════════════
+STEP 4: Fill Store Details (in Console)
+══════════════════════════════════════════════
+
+  Tab 1 - App File:
+    Upload APK or AAB
+
+  Tab 2 - Targeting & Distribution:
+    Devices: Amazon Fire Tablets + Android Phones
+    Countries: All Countries (or select specific)
+
+  Tab 3 - Store Details:
+    Title:         DoToR - Doorstep Repair Service
+    Short Desc:    Book expert repair service at your doorstep.
+                   Live tracking, chat, fast service.
+    Price:         Free
+    Category:      Lifestyle or Productivity
+    Dev Name:      (Your name)
+    Email:         support@dotor.in
+    Privacy URL:   (from step 1)
+    Website:       (from step 1)
+
+  Tab 4 - Images:
+    Upload icon, screenshots, banner
+
+
+══════════════════════════════════════════════
+STEP 5: Submit
+══════════════════════════════════════════════
+
+  1. Review everything
+  2. Click "Submit"
+  3. Wait 1-3 business days for review
+  4. Check email for approval/rejection
+
+
+══════════════════════════════════════════════
+PRO TIPS
+══════════════════════════════════════════════
+
+  • Update: upload new APK with higher versionCode
+  • Amazon Coins: users can buy in-app purchases
+  • Works on Fire Tablets, Fire TV + any Android phone
+  • Review is faster than Google Play
+
+
+══════════════════════════════════════════════
+QUICK REFERENCE
+══════════════════════════════════════════════
+
+  1. developer.amazon.com → Register (free)
+  2. Download APK from GitHub Releases
+  3. Take 2-4 screenshots
+  4. Submit via 4-step wizard
+  5. Wait 1-3 days ✓

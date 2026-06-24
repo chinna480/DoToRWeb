@@ -84,7 +84,7 @@
 <script src="auth.js"></script>
 
 <script type="module">
-  import { listenOrder, listenTechLocationByPhone, listenTechPhoto, calcDistance, getTechRating } from './firebase.js?v=2';
+  import { listenOrder, listenTechLocationByPhone, listenTechPhoto, calcDistance, getTechRating, listenForNotifications } from './firebase.js?v=2';
 
   // ── Auth & Order ID ─────────────────────────────────
   var custPhone = localStorage.getItem('custPhone') || '';
@@ -278,10 +278,19 @@
     );
   };
 
+  // ── Listen for in-app notifications (from tech actions) ──────────────
+  var unsubNotifs = null;
+  if (custPhone) {
+    unsubNotifs = listenForNotifications(custPhone, 'customers', function(title, body) {
+      window.showToast(title + ' — ' + body, 'success');
+    });
+  }
+
   // ── Cleanup on unload ─────────────────────────────
   window.addEventListener('beforeunload', function() {
     if (trackMyWatchId != null) navigator.geolocation.clearWatch(trackMyWatchId);
     if (countdownInterval) clearInterval(countdownInterval);
+    if (unsubNotifs) unsubNotifs();
   });
 </script>
 

@@ -61,11 +61,15 @@ export default function CustomerLoginScreen() {
       await AsyncStorage.setItem('custName', trimmed)
       await AsyncStorage.setItem('custPhone', phone)
 
-      const token = await registerForNotifications()
-      if (token) {
-        await AsyncStorage.setItem('pushToken', token)
+      const tokens = await registerForNotifications()
+      if (tokens) {
+        await AsyncStorage.setItem('pushToken', tokens.expoPushToken || '')
+        if (tokens.fcmToken) {
+          await AsyncStorage.setItem('fcmToken', tokens.fcmToken)
+        }
         await update(ref(db, 'users/' + phone), {
-          pushToken: token,
+          pushToken: tokens.expoPushToken || '',
+          fcmToken: tokens.fcmToken || '',
           name: trimmed,
           phone,
         })

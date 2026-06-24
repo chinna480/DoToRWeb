@@ -36,7 +36,83 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// ── FCM / Push Notification setup ──────────────────────────────────────────
+// ── In-App Notifications (free — no push API costs) ───────────────────────
+// Writes to Firebase inAppNotifications node; the recipient's app/website
+// listens and shows a toast banner. Mirrors the mobile app's implementation.
+
+export async function sendInAppNotification(recipientPhone, role, title, body, data = {}) {
+  if (!recipientPhone) {
+    console.warn('sendInAppNotification: no recipient phone, skipping.');
+    return;
+  }
+  const cleanPhone = recipientPhone.replace(/[^0-9]/g, '');
+  if (!cleanPhone) {
+    console.warn('sendInAppNotification: invalid phone, skipping.');
+    return;
+  }
+  try {
+    const notifRef = push(ref(db, 'inAppNotifications/' + role + '/' + cleanPhone));
+    await set(notifRef, {
+      title,
+      body,
+      data,
+      read: false,
+      createdAt: Date.now(),
+    });
+    console.log('📬 In-app notification saved for ' + role + '/' + cleanPhone + ': ' + title);
+  } catch (err) {
+    console.error('❌ In-app notification failed:', err);
+  }
+}
+
+let _notifListeners = {}; // track active listeners to avoid duplicates
+
+/**
+ * Listen for in-app notifications for a user.
+ * Calls callback(title, body, data) when new notifications arrive.
+ * Returns an unsubscribe function.
+ */
+export function listenForNotifications(phone, role, callback) {
+  if (!phone || !callback) return function() {};
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+  if (!cleanPhone) return function() {};
+
+  // Clean up existing listener for this phone+role
+  const listenerKey = role + '_' + cleanPhone;
+  if (_notifListeners[listenerKey]) {
+    _notifListeners[listenerKey]();
+    delete _notifListeners[listenerKey];
+  }
+
+  const notifRef = ref(db, 'inAppNotifications/' + role + '/' + cleanPhone);
+  const seenIds = new Set();
+
+  const listener = onValue(notifRef, (snap) => {
+    if (!snap.exists()) return;
+    snap.forEach((child) => {
+      const id = child.key;
+      if (seenIds.has(id)) return;
+      seenIds.add(id);
+      const val = child.val();
+      if (val && val.title && val.body) {
+        callback(val.title, val.body, val.data || {});
+        // Mark as read in Firebase
+        set(ref(db, 'inAppNotifications/' + role + '/' + cleanPhone + '/' + id + '/read'), true).catch(() => {});
+      }
+    });
+  }, (err) => {
+    console.log('inAppNotifications listener error (' + role + '/' + cleanPhone + '):', err.message);
+  });
+
+  _notifListeners[listenerKey] = function() {
+    off(notifRef, 'value', listener);
+    delete _notifListeners[listenerKey];
+  };
+
+  return _notifListeners[listenerKey];
+}
+
+// ── FCM / Push Notification setup (kept for background push via service worker) ──
 const FCM_VAPID_KEY = 'BKyTEa7xh-HWeQ14JX0PDp6z8tpWqpr-Ky5_dHmYNJdxrlQj_MqGW5zYyUJmTPrRnxnJjMk-d-jWEpkSDSaTmyY';
 
 let messagingInstance = null;
@@ -80,11 +156,16 @@ export async function setupFCM() {
   }
 }
 
-export async function saveFcmToken(phone, token) {
+export async function saveFcmToken(phone, token, role) {
   if (!phone || !token) return;
   try {
-    await set(ref(db, 'users/' + phone + '/fcmToken'), token);
-    await set(ref(db, 'users/' + phone + '/fcmTokenUpdatedAt'), Date.now());
+    const path = role === 'tech' ? 'techUsers/' + phone : 'users/' + phone;
+    await set(ref(db, path + '/fcmToken'), token);
+    await set(ref(db, path + '/fcmTokenUpdatedAt'), Date.now());
+    // Also save to users path for customers (backward compat)
+    if (role === 'tech') {
+      await set(ref(db, 'techs/' + phone + '/fcmToken'), token);
+    }
   } catch (err) {
     console.error('❌ Failed to save FCM token:', err);
   }
@@ -309,7 +390,10 @@ export async function countOnlineTechs() {
 }
 
 // ── AUTO-ASSIGN NEAREST TECHNICIAN ────────────────────────────────────────
-export async function autoAssignNearestTech(orderId, lat, lng, pincode) {
+// MAX_DISTANCE_KM: only techs within this radius from the customer are eligible
+const MAX_AUTO_ASSIGN_KM = 5;
+
+export async function autoAssignNearestTech(orderId, lat, lng, pincode, excludePhones = []) {
   if (!orderId) return null;
   try {
     // Get all available techs
@@ -327,19 +411,38 @@ export async function autoAssignNearestTech(orderId, lat, lng, pincode) {
       return null;
     }
 
-    // Score techs: prefer same pincode, then nearby
-    let scored = techs.map(t => {
-      let score = 0;
-      if (t.pincode && pincode && t.pincode.toString() === pincode.toString()) {
-        score += 100; // Same pincode = high priority
-      }
-      if (t.lat && t.lng && lat && lng) {
-        const dist = calcDistance(lat, lng, t.lat, t.lng);
-        score += Math.max(0, 50 - parseFloat(dist)); // Closer = more points
-        t._distance = parseFloat(dist);
-      }
-      return { ...t, score };
-    });
+    // Score & filter techs: prefer same pincode, within 5 km, exclude rejectors
+    const scored = techs
+      .filter(t => !excludePhones.includes(t.phone))
+      .map(t => {
+        let score = 0;
+        let distance = null;
+
+        if (t.lat && t.lng && lat && lng) {
+          distance = parseFloat(calcDistance(lat, lng, t.lat, t.lng));
+        }
+
+        // 5 km radius filter — only eligible if within range OR no GPS on either side
+        if (distance !== null && distance > MAX_AUTO_ASSIGN_KM) {
+          return { ...t, score: -1, _distance: distance, _outOfRange: true };
+        }
+
+        if (t.pincode && pincode && t.pincode.toString() === pincode.toString()) {
+          score += 100; // Same pincode = high priority
+        }
+        if (distance !== null) {
+          score += Math.max(0, 50 - distance); // Closer = more points
+        }
+
+        return { ...t, score, _distance: distance, _outOfRange: false };
+      })
+      // Remove out-of-range techs entirely
+      .filter(t => !t._outOfRange);
+
+    if (scored.length === 0) {
+      console.log('⚠️ No in-range technicians available for auto-assign (5 km radius)');
+      return null;
+    }
 
     // Sort by score descending, then by distance ascending
     scored.sort((a, b) => {

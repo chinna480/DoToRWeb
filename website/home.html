@@ -82,7 +82,9 @@
 <script src="utils.js"></script>
 <script>document.addEventListener("DOMContentLoaded",function(){if(window.initDarkMode)window.initDarkMode();});</script>
 <script src="auth.js"></script>
-<script>
+<script type="module">
+  import { listenForNotifications, setupFCM, saveFcmToken } from './firebase.js?v=2';
+
 // ── Navigate with params ──────────────────────────────
 window.navigateTo = function(page) {
   var params = new URLSearchParams();
@@ -96,6 +98,28 @@ document.addEventListener('DOMContentLoaded', function() {
   // Require auth
   window.syncAuth();
   if (!window.requireAuth()) return;
+
+  // Listen for in-app notifications
+  var custPhone = window._custPhone || localStorage.getItem('custPhone') || '';
+  if (custPhone) {
+    listenForNotifications(custPhone, 'customers', function(title, body) {
+      window.showToast(title + ' — ' + body, 'success');
+    });
+  }
+
+  // ── Set up FCM for offline/background push notifications ──
+  if (custPhone) {
+    // Delay FCM setup slightly to not block UI rendering
+    setTimeout(function() {
+      setupFCM().then(function(fcmToken) {
+        if (fcmToken) {
+          saveFcmToken(custPhone, fcmToken);
+        }
+      }).catch(function(err) {
+        console.log('FCM setup error:', err);
+      });
+    }, 2000);
+  }
 
   // Update greeting
   var hour = new Date().getHours();

@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { onValue, push, ref } from 'firebase/database';
+import { onValue, push, ref, update } from 'firebase/database';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,16 +19,17 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { db } from '../firebase/config';
+import { db, autoAssignNearestTech } from '../firebase/config';
 import {
+  listenForNotifications,
   notifyCustomerBookingConfirmed,
-  notifyTechsForNewOrder,
   registerForNotifications,
 } from '../utils/notifications';
 import { uploadImages, uploadVideos } from '../utils/uploadImage';
 import { Video, ResizeMode } from 'expo-av';
 import MapPickerModal from '../../components/MapPickerModal';
 import LocationAutocomplete from '../../components/LocationAutocomplete';
+import ToastBanner from '../../components/ToastBanner';
 import { useRouter } from 'expo-router';
 
 const PHONE_BRANDS  = ['iPhone','Samsung','OnePlus','Redmi','Vivo','Oppo','Realme','Nokia']
@@ -80,6 +81,7 @@ export default function HomeScreen() {
   const [custName, setCustName]           = useState('')
   const [custLocation, setCustLocation]   = useState('')
   const [custPhone, setCustPhone]         = useState('')
+  const notifUnsubRef = useRef(null)
   const [myOrders, setMyOrders]           = useState([])
 
   // ── Booking wizard state ──
@@ -106,6 +108,7 @@ export default function HomeScreen() {
   const [mapPickLat, setMapPickLat]         = useState(null)
   const [mapPickLng, setMapPickLng]         = useState(null)
   const [techPhotos, setTechPhotos]         = useState({}) // {phone: url}
+  const [toastInfo, setToastInfo]           = useState(null)
   const techPhotoUnsubsRef = useRef({}) // {phone: unsubFn}
 
   const ordersUnsubRef = useRef(null)
@@ -113,11 +116,21 @@ export default function HomeScreen() {
   // ── Load user data ─────────────────────────────────────────────────────
   useEffect(() => {
     loadUser()
-    registerForNotifications().then(token => {
-      if (token) AsyncStorage.setItem('pushToken', token)
+    registerForNotifications().then(tokens => {
+      if (tokens?.fcmToken) {
+        AsyncStorage.getItem('custPhone').then(phone => {
+          if (phone) {
+            update(ref(db, 'users/' + phone), {
+              fcmToken: tokens.fcmToken,
+              fcmTokenUpdatedAt: Date.now(),
+            }).catch(() => {})
+          }
+        })
+      }
     })
     return () => {
       if (ordersUnsubRef.current) { ordersUnsubRef.current(); ordersUnsubRef.current = null }
+      if (notifUnsubRef.current) { notifUnsubRef.current(); notifUnsubRef.current = null }
       // Clean up all tech photo listeners
       Object.values(techPhotoUnsubsRef.current).forEach(fn => { try { fn() } catch(e) {} })
       techPhotoUnsubsRef.current = {}
@@ -134,6 +147,14 @@ export default function HomeScreen() {
     setLocationInput(l || '')
     setPincodeInput(await AsyncStorage.getItem('custPincode') || '')
     listenOrders(p || '')
+
+    // Listen for in-app notifications (from technician actions)
+    if (notifUnsubRef.current) notifUnsubRef.current()
+    if (p) {
+      notifUnsubRef.current = listenForNotifications(p, 'customers', (title, body, data) => {
+        setToastInfo({ title, body, data: data || {} })
+      })
+    }
   }
 
   const listenOrders = (phone) => {
@@ -308,6 +329,7 @@ export default function HomeScreen() {
       const name              = custName || 'Customer'
       const phone             = custPhone || ''
       const customerPushToken = await AsyncStorage.getItem('pushToken') || ''
+      const customerFcmToken = await AsyncStorage.getItem('fcmToken') || ''
 
       const tempOrderId = Date.now().toString()
       let imageUrls = null
@@ -324,6 +346,7 @@ export default function HomeScreen() {
         customerName:       name,
         customerPhone:      phone,
         customerPushToken,
+        customerFcmToken,
         location:           locationInput.trim(),
         pincode:            pincodeInput.trim(),
         serviceCategory:    selectedDevice,
@@ -348,6 +371,12 @@ export default function HomeScreen() {
       orderId = newOrderRef.key
       orderSaved = true
 
+      // Auto-assign nearest tech if GPS coordinates available
+      let assignedTech = null
+      if (custLat != null && custLng != null) {
+        assignedTech = await autoAssignNearestTech(orderId, custLat, custLng, pincodeInput.trim())
+      }
+
       // Post-order: AsyncStorage + notifications (log failures, don't show error)
       try {
         await AsyncStorage.setItem('lastOrderId', orderId)
@@ -358,20 +387,23 @@ export default function HomeScreen() {
         if (pincodeInput) await AsyncStorage.setItem('custPincode', pincodeInput.trim())
         if (locationInput) await AsyncStorage.setItem('custLocation', locationInput.trim())
 
-        await notifyCustomerBookingConfirmed(svcCat?.label || selectedBrand, modelName.trim() || issueDesc.trim())
-        await notifyTechsForNewOrder(order, orderId)
+        await notifyCustomerBookingConfirmed(svcCat?.label || selectedBrand, modelName.trim() || issueDesc.trim(), phone)
+        // notifyTechsForNewOrder removed — techs already receive new orders via their orders listener
       } catch (postErr) {
         console.error('Post-order ops failed (order saved):', postErr?.message || postErr)
       }
 
       resetWizard()
 
+      const techInfo = assignedTech
+        ? '\n\n🔧 Assigned: ' + assignedTech.techName + ' (' + assignedTech.techPhone + ')'
+        : ''
       Alert.alert(
         '\u2705 Booking Confirmed!',
-        (svcCat?.label || 'Service') + ': ' + (selectedBrand ? selectedBrand + ' ' : '') + (modelName || issueDesc) + '\n\nTrack your technician?',
+        (svcCat?.label || 'Service') + ': ' + (selectedBrand ? selectedBrand + ' ' : '') + (modelName || issueDesc) + techInfo + '\n\nTrack your technician?',
         [
           { text: 'Track Now', onPress: () => router.push('/screens/TrackingScreen') },
-          { text: '\u{1F4AC} Chat', onPress: () => router.push('/screens/ChatScreen?orderId=' + orderId + '&role=cust&customerName=' + encodeURIComponent(name) + '&techName=') },
+          { text: '\u{1F4AC} Chat', onPress: () => router.push('/screens/ChatScreen?orderId=' + orderId + '&role=cust&customerName=' + encodeURIComponent(name) + '&techName=' + encodeURIComponent(assignedTech?.techName || '')) },
           { text: 'Later' }
         ]
       )
@@ -1065,6 +1097,17 @@ export default function HomeScreen() {
     </Modal>
   )
 
+  const handleToastNavigate = (screen, data) => {
+    // Navigate to the screen indicated by the notification
+    const screenMap = {
+      'TrackingScreen': '/screens/TrackingScreen',
+      'ReviewScreen': '/screens/ReviewScreen',
+      'TechHomeScreen': '/screens/TechHomeScreen',
+    }
+    const path = screenMap[screen] || '/screens/TrackingScreen'
+    router.push(path)
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
       {bookingStep > 0 ? renderWizard() : (
@@ -1081,6 +1124,15 @@ export default function HomeScreen() {
           </View>
         </>
       )}
+
+      {/* In-app toast banner for notifications */}
+      <ToastBanner
+        title={toastInfo?.title}
+        body={toastInfo?.body}
+        data={toastInfo?.data}
+        onDismiss={() => setToastInfo(null)}
+        onNavigate={handleToastNavigate}
+      />
 
       {/* Map Picker Modal */}
       <MapPickerModal

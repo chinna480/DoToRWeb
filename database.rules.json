@@ -87,6 +87,8 @@
         "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100" },
         "phone": { ".validate": "newData.isString() && newData.val().length >= 10" },
         "pushToken": { ".validate": "newData.isString()" },
+        "fcmToken": { ".validate": "newData.isString()" },
+        "fcmTokenUpdatedAt": { ".validate": "newData.isNumber()" },
         "location": { ".validate": "newData.isString() && newData.val().length <= 500" },
         "pincode": { ".validate": "newData.isString() && newData.val().length <= 10" },
         "email": { ".validate": "newData.isString()" },
@@ -101,6 +103,8 @@
         "name": { ".validate": "newData.isString()" },
         "phone": { ".validate": "newData.isString()" },
         "pushToken": { ".validate": "newData.isString()" },
+        "fcmToken": { ".validate": "newData.isString()" },
+        "fcmTokenUpdatedAt": { ".validate": "newData.isNumber()" },
         "location": { ".validate": "newData.isString()" },
         "pincode": { ".validate": "newData.isString()" },
         "$other": { ".validate": true }
@@ -115,6 +119,8 @@
         "name": { ".validate": "newData.isString()" },
         "phone": { ".validate": "newData.isString()" },
         "pushToken": { ".validate": "newData.isString()" },
+        "fcmToken": { ".validate": "newData.isString()" },
+        "fcmTokenUpdatedAt": { ".validate": "newData.isNumber()" },
         "location": { ".validate": "newData.isString()" },
         "pincode": { ".validate": "newData.isString()" },
         "photo": { ".validate": "newData.isString()" },
@@ -183,6 +189,37 @@
       "$phone": {
         "$field": {
           ".validate": true
+        }
+      }
+    },
+    "inAppNotifications": {
+      ".read": true,
+      "customers": {
+        "$phone": {
+          ".write": true,
+          "$notificationId": {
+            ".validate": "newData.hasChildren(['title', 'body', 'createdAt'])",
+            "title": { ".validate": "newData.isString()" },
+            "body": { ".validate": "newData.isString()" },
+            "data": { ".validate": true },
+            "read": { ".validate": "newData.isBoolean()" },
+            "createdAt": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        }
+      },
+      "techs": {
+        "$phone": {
+          ".write": true,
+          "$notificationId": {
+            ".validate": "newData.hasChildren(['title', 'body', 'createdAt'])",
+            "title": { ".validate": "newData.isString()" },
+            "body": { ".validate": "newData.isString()" },
+            "data": { ".validate": true },
+            "read": { ".validate": "newData.isBoolean()" },
+            "createdAt": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
         }
       }
     },

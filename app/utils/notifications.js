@@ -11,7 +11,7 @@ import * as FileSystem from 'expo-file-system'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import { db } from '../firebase/config'
-import { ref, get } from 'firebase/database'
+import { ref, get, push, set } from 'firebase/database'
 import { calcDistance } from './distance'
 
 // ── Configure how notifications appear when app is in foreground ──────────────
@@ -236,6 +236,9 @@ function createWav(samples, sampleRate) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. REGISTER DEVICE FOR PUSH NOTIFICATIONS
 //    Call this once on login (already done in CustomerLoginScreen & HomeScreen)
+//    Returns { expoPushToken, fcmToken } so callers can save both to Firebase.
+//    expoPushToken — used by the app's push notification system (Expo Push API)
+//    fcmToken      — native FCM token used by Firebase Console campaigns & Cloud Functions
 // ─────────────────────────────────────────────────────────────────────────────
 export async function registerForNotifications() {
   if (!Device.isDevice) {
@@ -267,13 +270,124 @@ export async function registerForNotifications() {
     })
   }
 
+  let expoPushToken = null
+  let fcmToken = null
+
   try {
-    const token = (await Notifications.getExpoPushTokenAsync()).data
-    console.log('✅ Push token:', token)
-    return token
+    expoPushToken = (await Notifications.getExpoPushTokenAsync()).data
+    console.log('✅ Expo push token:', expoPushToken)
   } catch (e) {
-    console.warn('Could not get push token:', e)
+    console.warn('Could not get Expo push token:', e)
+  }
+
+  // Get native device token (FCM on Android) for Firebase Console campaigns
+  try {
+    const deviceToken = await Notifications.getDevicePushTokenAsync()
+    fcmToken = deviceToken.data
+    console.log('✅ FCM device token (' + deviceToken.type + '):', fcmToken)
+  } catch (e) {
+    console.warn('Could not get device token (FCM):', e)
+  }
+
+  if (!expoPushToken && !fcmToken) return null
+
+  return { expoPushToken, fcmToken }
+}
+
+/**
+ * Get only the native FCM/device token (no Expo wrapper).
+ * Useful when you just need the FCM token without the Expo token.
+ */
+export async function getDeviceFcmToken() {
+  try {
+    const deviceToken = await Notifications.getDevicePushTokenAsync()
+    console.log('✅ FCM device token (' + deviceToken.type + '):', deviceToken.data)
+    return deviceToken.data
+  } catch (e) {
+    console.warn('Could not get device token:', e)
     return null
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. NOTIFICATION RESPONSE HANDLER
+//    Call setupNotificationNavigation(router) once at app startup (_layout.tsx)
+//    so that tapping a push notification when the app is closed / background
+//    navigates to the correct screen.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let _notificationResponseUnsub = null
+
+/**
+ * Set up a listener that handles when the user taps a push notification.
+ * Pass the router from expo-router so we can navigate.
+ * Returns an unsubscribe function.
+ *
+ * Also checks if the app was launched from a cold-start notification
+ * (getLastNotificationResponseAsync) and navigates immediately.
+ */
+export async function setupNotificationNavigation(router) {
+  // Remove any existing listener
+  if (_notificationResponseUnsub) {
+    _notificationResponseUnsub()
+    _notificationResponseUnsub = null
+  }
+
+  // Handle notification taps while app is running (background -> foreground)
+  _notificationResponseUnsub = Notifications.addNotificationResponseReceivedListener(response => {
+    handleNotificationResponse(response, router)
+  })
+
+  // Handle cold start — app was killed and launched by tapping a notification
+  try {
+    const lastResponse = await Notifications.getLastNotificationResponseAsync()
+    if (lastResponse) {
+      handleNotificationResponse(lastResponse, router)
+    }
+  } catch (e) {
+    console.log('getLastNotificationResponseAsync error:', e.message)
+  }
+
+  return () => {
+    if (_notificationResponseUnsub) {
+      _notificationResponseUnsub()
+      _notificationResponseUnsub = null
+    }
+  }
+}
+
+/**
+ * Parse the notification data payload and navigate to the target screen.
+ * FCM campaigns send data as { screen: 'HomeScreen', orderId: '...' }.
+ */
+function handleNotificationResponse(response, router) {
+  const data = response.notification?.request?.content?.data || {}
+  const screen = data.screen || ''
+  const orderId = data.orderId || ''
+
+  console.log('📲 Notification tap:', screen, 'orderId:', orderId)
+
+  // Build the navigation path based on screen name
+  const screenMap = {
+    'HomeScreen':        '/screens/HomeScreen',
+    'TechHomeScreen':    '/screens/TechHomeScreen',
+    'TrackingScreen':    '/screens/TrackingScreen',
+    'ReviewScreen':      '/screens/ReviewScreen',
+    'ChatScreen':        '/screens/ChatScreen',
+    'CustomerProfileScreen': '/screens/CustomerProfileScreen',
+    'TechProfileScreen': '/screens/TechProfileScreen',
+    'JobHistoryScreen':  '/screens/JobHistoryScreen',
+    'PerformanceScreen': '/screens/PerformanceScreen',
+  }
+
+  const path = screenMap[screen]
+  if (path) {
+    const params = orderId ? '?orderId=' + encodeURIComponent(orderId) + '&role=cust' : ''
+    router.push(path + params)
+  } else if (orderId) {
+    // If no screen specified but we have an orderId, go to tracking
+    router.push('/screens/TrackingScreen?orderId=' + encodeURIComponent(orderId))
   }
 }
 
@@ -337,68 +451,119 @@ export async function showLocalNotification(title, body) {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// IN-APP NOTIFICATION (free — no push API costs)
+// Writes to Firebase inAppNotifications/{role}/{phone} so that BOTH the mobile
+// app and the website PWA receive real-time notifications via the listener.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function sendInAppNotification(recipientPhone, role, title, body, data = {}) {
+  if (!recipientPhone) {
+    console.warn('sendInAppNotification: no recipient phone, skipping.')
+    return
+  }
+  const cleanPhone = recipientPhone.replace(/[^0-9]/g, '')
+  if (!cleanPhone) {
+    console.warn('sendInAppNotification: invalid phone, skipping.')
+    return
+  }
+  try {
+    const notifRef = push(ref(db, 'inAppNotifications/' + role + '/' + cleanPhone))
+    await set(notifRef, {
+      title,
+      body,
+      data,
+      read: false,
+      createdAt: Date.now(),
+    })
+    console.log('📬 In-app notification saved for ' + role + '/' + cleanPhone + ': ' + title)
+  } catch (err) {
+    console.error('❌ In-app notification failed:', err)
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 4. SMART NOTIFICATION TRIGGERS — Use these throughout your app
-//    Each function wraps sendPushNotification with the right message
+//    Each function sends BOTH a push (Expo) AND an in-app (Firebase) notification
+//    so the recipient gets it regardless of whether they're on mobile or website.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Called in TechHomeScreen when a new order arrives → notify technician */
-export async function notifyTechNewJob(techPushToken, customerName, brand, repair) {
-  await sendPushNotification(
-    techPushToken,
-    '🔔 New Job Request!',
-    `${customerName} needs ${brand} ${repair}. Accept now!`,
-    { screen: 'TechHomeScreen' }
-  )
+/**
+ * Called when a new order arrives → notify technician via push + in-app
+ * Message: "You have a new service request."
+ */
+export async function notifyTechNewJob(techPushToken, customerName, brand, repair, techPhone) {
+  const title = '🔔 New Service Request!'
+  const body = `${customerName} needs ${brand} ${repair}. Accept now!`
+  await sendPushNotification(techPushToken, title, body, { screen: 'TechHomeScreen' })
+  // Also send in-app notification so the website PWA receives it too
+  if (techPhone) {
+    await sendInAppNotification(techPhone, 'techs', title, body, { screen: 'TechHomeScreen' })
+  }
 }
 
-/** Called when tech accepts → notify customer */
-export async function notifyCustomerTechAccepted(custPushToken, techName) {
-  await sendPushNotification(
-    custPushToken,
-    '🛵 Technician Assigned!',
-    `${techName} is on the way to fix your device!`,
-    { screen: 'TrackingScreen' }
-  )
+/**
+ * Called when tech accepts → notify customer via push + in-app
+ * Message: "Your booking has been accepted."
+ */
+export async function notifyCustomerTechAccepted(custPushToken, techName, custPhone) {
+  const title = '🛵 Booking Accepted!'
+  const body = `${techName} has accepted your booking and is on the way!`
+  await sendPushNotification(custPushToken, title, body, { screen: 'TrackingScreen' })
+  if (custPhone) {
+    await sendInAppNotification(custPhone, 'customers', title, body, { screen: 'TrackingScreen' })
+  }
 }
 
-/** Called when tech is ~1 km away (check in TechHomeScreen useEffect) → notify customer */
-export async function notifyCustomerTechNearby(custPushToken, etaMinutes) {
-  await sendPushNotification(
-    custPushToken,
-    '📍 Almost There!',
-    `Your technician is ${etaMinutes} mins away. Please be available!`,
-    { screen: 'TrackingScreen' }
-  )
+/**
+ * Called when tech is ~1 km away → notify customer via push + in-app
+ * Message: "Your technician is nearby."
+ */
+export async function notifyCustomerTechNearby(custPushToken, etaMinutes, custPhone) {
+  const title = '📍 Technician Nearby!'
+  const body = `Your technician is just ${etaMinutes} min${etaMinutes > 1 ? 's' : ''} away — almost at your doorstep!`
+  await sendPushNotification(custPushToken, title, body, { screen: 'TrackingScreen' })
+  if (custPhone) {
+    await sendInAppNotification(custPhone, 'customers', title, body, { screen: 'TrackingScreen' })
+  }
 }
 
-/** Called when tech leaves their starting area (~0.3 km from origin) → notify customer "departed" */
-export async function notifyCustomerTechDeparted(custPushToken) {
-  await sendPushNotification(
-    custPushToken,
-    '🛵 Technician Started!',
-    'Your technician has started from their area and is on the way!',
-    { screen: 'TrackingScreen' }
-  )
+/**
+ * Called when tech leaves their starting area (~0.3 km from origin) → notify customer
+ * Message: "Your technician is on the way."
+ */
+export async function notifyCustomerTechDeparted(custPushToken, custPhone) {
+  const title = '🛵 Technician on the Way!'
+  const body = 'Your technician has started from their area and is on the way to you!'
+  await sendPushNotification(custPushToken, title, body, { screen: 'TrackingScreen' })
+  if (custPhone) {
+    await sendInAppNotification(custPhone, 'customers', title, body, { screen: 'TrackingScreen' })
+  }
 }
 
-/** Called when tech marks distance < 0.02 km → notify customer "arrived" */
-export async function notifyCustomerTechArrived(custPushToken) {
-  await sendPushNotification(
-    custPushToken,
-    '🏠 Technician Has Arrived!',
-    'Your technician is at your doorstep. Please open the door!',
-    { screen: 'TrackingScreen' }
-  )
+/**
+ * Called when tech arrives at doorstep (≤20 m) → notify customer via push + in-app
+ * Message: "Your technician has arrived."
+ */
+export async function notifyCustomerTechArrived(custPushToken, custPhone) {
+  const title = '🏠 Technician Has Arrived!'
+  const body = 'Your technician is at your doorstep. Please open the door!'
+  await sendPushNotification(custPushToken, title, body, { screen: 'TrackingScreen' })
+  if (custPhone) {
+    await sendInAppNotification(custPhone, 'customers', title, body, { screen: 'TrackingScreen' })
+  }
 }
 
-/** Called when tech marks job complete → notify customer */
-export async function notifyCustomerJobDone(custPushToken) {
-  await sendPushNotification(
-    custPushToken,
-    '✅ Repair Completed!',
-    'Your device is fixed! Please rate your technician.',
-    { screen: 'ReviewScreen' }
-  )
+/**
+ * Called when tech marks job complete → notify customer via push + in-app
+ * Message: "Your service has been completed. Please rate your experience."
+ */
+export async function notifyCustomerJobDone(custPushToken, custPhone) {
+  const title = '✅ Service Completed!'
+  const body = 'Your device has been repaired. Please rate your technician!'
+  await sendPushNotification(custPushToken, title, body, { screen: 'ReviewScreen' })
+  if (custPhone) {
+    await sendInAppNotification(custPhone, 'customers', title, body, { screen: 'ReviewScreen' })
+  }
 }
 
 /** Called when tech marks job complete → local notification for tech */
@@ -409,12 +574,52 @@ export async function notifyTechJobDone() {
   )
 }
 
-/** Called when customer books → local confirmation */
-export async function notifyCustomerBookingConfirmed(brand, repair) {
-  await showLocalNotification(
-    '✅ Booking Confirmed!',
-    `${brand} ${repair} — A technician will be assigned shortly.`
-  )
+/**
+ * Called when a tech rejects and the order is being re-assigned → notify customer
+ */
+export async function notifyCustomerTechReassigned(custPushToken, previousTechName, custPhone) {
+  const title = '🔄 Technician Changed'
+  const body = previousTechName
+    ? `${previousTechName} was unavailable. Finding you a new technician...`
+    : 'The first technician was unavailable. Finding you a new technician...'
+  await sendPushNotification(custPushToken, title, body, { screen: 'TrackingScreen' })
+  if (custPhone) {
+    await sendInAppNotification(custPhone, 'customers', title, body, { screen: 'TrackingScreen' })
+  }
+}
+
+/**
+ * Called when customer books → local + in-app notifications
+ * Message: "New booking request created"
+ */
+export async function notifyCustomerBookingConfirmed(brand, repair, custPhone) {
+  const title = '✅ Booking Confirmed!'
+  const body = `${brand} ${repair} — A technician will be assigned shortly.`
+  await showLocalNotification(title, body)
+  if (custPhone) {
+    await sendInAppNotification(custPhone, 'customers', title, body, { screen: 'HomeScreen' })
+  }
+}
+
+/**
+ * Called when a new order is placed → notify ALL matching techs via in-app
+ * (Push is handled separately by the caller with tech-specific tokens)
+ */
+export async function notifyTechsNewOrderInApp(techPhones, customerName, brand, description) {
+  const title = '🔔 New Service Request!'
+  const body = `${customerName} needs ${brand} ${description || 'repair'}.`
+  for (const phone of techPhones) {
+    await sendInAppNotification(phone, 'techs', title, body, { screen: 'TechHomeScreen' })
+  }
+}
+
+/**
+ * Notify the technician that a new order has been auto-assigned to them
+ */
+export async function notifyTechAutoAssigned(techPhone, customerName, brand, description) {
+  const title = '🔔 New Job Assigned!'
+  const body = `Order assigned to you: ${customerName} - ${brand} ${description || 'repair'}. Check now!`
+  await sendInAppNotification(techPhone, 'techs', title, body, { screen: 'TechHomeScreen' })
 }
 
 

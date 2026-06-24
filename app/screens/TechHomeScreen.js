@@ -16,18 +16,21 @@ import {
 } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import MiniMap from '../../components/MiniMap';
-import { db } from '../firebase/config';
+import { db, autoAssignNearestTech } from '../firebase/config';
 import { calcDistance } from '../utils/distance';
 import {
+  listenForNotifications,
   notifyCustomerJobDone,
   notifyCustomerTechAccepted,
   notifyCustomerTechArrived,
   notifyCustomerTechDeparted,
   notifyCustomerTechNearby,
+  notifyCustomerTechReassigned,
   notifyTechJobDone,
-  notifyTechNewJob,
   playTechJobAlertSound,
   playJobCompleteSound,
+  showLocalNotification,
+  registerForNotifications,
 } from '../utils/notifications';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -108,7 +111,7 @@ export default function TechHomeScreen() {
   const mapRef            = useRef(null)
   const techLatRef        = useRef(null)  // Always up-to-date tech GPS for closures (null until GPS fix acquired)
   const techLngRef        = useRef(null)
-  const techPushToken     = useRef(null)
+  const notifUnsubRef     = useRef(null)
   const techLocRef        = useRef('')
   const techPincodeRef    = useRef('')
   const techPhoneRef      = useRef('')
@@ -128,10 +131,33 @@ export default function TechHomeScreen() {
     let cancelled = false
     loadTech().then(() => {
       if (!cancelled) unsub = listenOrders()
+      // Start listening for in-app notifications (for this tech)
+      if (!cancelled) {
+        const phone = techPhoneRef.current
+        if (phone) {
+          notifUnsubRef.current = listenForNotifications(phone, 'techs', (title, body, data) => {
+            // Only show alerts from others (not self-triggered new job notifications)
+            Alert.alert(title, body)
+          })
+        }
+      }
+      // Register for push notifications & save FCM token (after techPhoneRef is populated)
+      if (!cancelled) {
+        registerForNotifications().then(tokens => {
+          const phone = techPhoneRef.current
+          if (tokens?.fcmToken && phone) {
+            update(ref(db, 'techUsers/' + phone), {
+              fcmToken: tokens.fcmToken,
+              fcmTokenUpdatedAt: Date.now(),
+            }).catch(() => {})
+          }
+        })
+      }
     })
     return () => {
       cancelled = true
       if (unsub) unsub()
+      if (notifUnsubRef.current) { notifUnsubRef.current(); notifUnsubRef.current = null }
       if (watchRef.current) watchRef.current.remove()
       if (proximityWatchRef.current) proximityWatchRef.current.remove()
     }
@@ -197,7 +223,7 @@ export default function TechHomeScreen() {
     const secs = mins * 60
     storedEtaRef.current = secs
     setEtaSeconds(secs)
-    const custToken = ongoingJob?.customerPushToken
+    const custPhone = ongoingJob?.customerPhone
     // Track starting position — first GPS fix after job accepted
     if (startLatRef.current === null) {
       startLatRef.current = myLat
@@ -209,20 +235,18 @@ export default function TechHomeScreen() {
       const distFromStart = parseFloat(calcDistance(startLatRef.current, startLngRef.current, myLat, myLng))
       if (!isNaN(distFromStart) && distFromStart > 0.3) {
         sentDeparted.current = true
-        notifyCustomerTechDeparted(custToken)
+        notifyCustomerTechDeparted(custPhone, custPhone)
       }
     }
 
     // ── Technician ~1 km away ──
     if (d <= 1 && !sentNearby.current) {
-      sentNearby.current = true
-      notifyCustomerTechNearby(custToken, etaMins)
+      sentNearby.current = true        notifyCustomerTechNearby(custPhone, etaMins, custPhone)
     }
 
     // ── Technician arrived at doorstep (≤20 m / 0.02 km) ──
     if (d <= 0.02 && !sentArrived.current) {
-      sentArrived.current = true
-      notifyCustomerTechArrived(custToken)
+      sentArrived.current = true        notifyCustomerTechArrived(custPhone, custPhone)
     }
   }, [custLat, myLat, ongoingJob])
 
@@ -251,7 +275,6 @@ export default function TechHomeScreen() {
     const n = await AsyncStorage.getItem('techName')
     const l = await AsyncStorage.getItem('techLocation')
     const pi = await AsyncStorage.getItem('techPincode')
-    const t = await AsyncStorage.getItem('pushToken')
     const p = await AsyncStorage.getItem('techPhone')
     const ph = await AsyncStorage.getItem('techPhoto')
     setTechName(n || 'Technician')
@@ -259,7 +282,6 @@ export default function TechHomeScreen() {
     techLocRef.current = (l || '').toLowerCase().trim()
     techPincodeRef.current = (pi || '').toLowerCase().trim()
     techPhoneRef.current = p || ''
-    if (t) techPushToken.current = t
     if (ph) setTechPhoto(ph)
 
     // Load tech's service categories from AsyncStorage
@@ -449,7 +471,8 @@ export default function TechHomeScreen() {
 
       pending.forEach(order => {
         if (!prevPendingIds.current.has(order.id)) {
-          notifyTechNewJob(techPushToken.current, order.customerName, order.brand, order.modelName || order.description || 'repair')
+          // Show local notification for new job (free — no push needed)
+          showLocalNotification('🔔 New Job Request!', `${order.customerName} needs ${order.brand} ${order.modelName || order.description || 'repair'}. Accept now!`)
           // 🔔 Play distinct in-app sound alert for new jobs
           playTechJobAlertSound()
         }
@@ -528,20 +551,58 @@ export default function TechHomeScreen() {
     }
 
     try {
-      if (order.customerPushToken) {
-        await notifyCustomerTechAccepted(order.customerPushToken, name)
+      if (order.customerPhone) {
+        await notifyCustomerTechAccepted(order.customerPhone, name, order.customerPhone)
       }
     } catch (e) {
       console.log('Accept notification failed (non-critical):', e.message)
     }
   }
 
-  const rejectJob = (orderId) => {
-    Alert.alert('Reject Job?', 'Are you sure?', [
+  const rejectJob = (orderId, order) => {
+    const orderPincode = (order && order.pincode) || ''
+    const orderLat = (order && order.custLat) || null
+    const orderLng = (order && order.custLng) || null
+
+    Alert.alert('Reject Job?', 'Are you sure you want to reject this job? It will be offered to another technician.', [
       { text: 'Cancel' },
       {
-        text: 'Reject', style: 'destructive', onPress: () => {
-          update(ref(db, 'orders/' + orderId), { status: 'rejected' })
+        text: 'Reject', style: 'destructive', onPress: async () => {
+          const myPhone = await AsyncStorage.getItem('techPhone') || ''
+          const myName = await AsyncStorage.getItem('techName') || 'Technician'
+
+          // Build list of rejectors: previous ones from the order + this tech
+          const existingRejected = (order && order.rejectedBy) || {}
+          const rejectedPhones = [...Object.keys(existingRejected), myPhone]
+
+          // Save rejection to Firebase: reset status to pending, track rejector
+          const updates = {}
+          updates['orders/' + orderId + '/status'] = 'pending'
+          updates['orders/' + orderId + '/rejectedBy/' + myPhone + '/name'] = myName
+          updates['orders/' + orderId + '/rejectedBy/' + myPhone + '/at'] = Date.now()
+          updates['orders/' + orderId + '/lastRejectedAt'] = Date.now()
+
+          await update(ref(db), updates)
+
+          // Notify customer that we're finding a new technician
+          if (order && order.customerPhone) {
+            try {
+              notifyCustomerTechReassigned(order.customerPhone, myName, order.customerPhone)
+            } catch (e) {
+              console.log('Re-assign notification failed:', e.message)
+            }
+          }
+
+          // Re-trigger auto-assign for the next best tech, excluding rejectors
+          if (orderLat && orderLng) {
+            try {
+              autoAssignNearestTech(orderId, orderLat, orderLng, orderPincode, rejectedPhones)
+            } catch (e) {
+              console.log('Re-assign after rejection failed:', e.message)
+            }
+          }
+
+          Alert.alert('Rejected', 'The job has been passed to another technician.')
         }
       }
     ])
@@ -557,8 +618,8 @@ export default function TechHomeScreen() {
           remove(ref(db, 'orders/' + orderId + '/techLocation'))
           if (custLocUnsubRef.current) { custLocUnsubRef.current(); custLocUnsubRef.current = null }
           if (watchRef.current) { watchRef.current.remove(); watchRef.current = null }
-          if (ongoingJob?.customerPushToken) {
-            await notifyCustomerJobDone(ongoingJob.customerPushToken)
+          if (ongoingJob?.customerPhone) {
+            await notifyCustomerJobDone(ongoingJob.customerPhone, ongoingJob.customerPhone)
           }
           await notifyTechJobDone()
           // 🔊 Play job completion celebration sound
@@ -917,7 +978,7 @@ export default function TechHomeScreen() {
                 </View>
               ) : (
                 <>
-                  <TouchableOpacity style={s.rejectBtn} onPress={() => rejectJob(order.id)}>
+                  <TouchableOpacity style={s.rejectBtn} onPress={() => rejectJob(order.id, order)}>
                     <Text style={s.rejectTxt}>✕ Reject</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={s.acceptBtn} onPress={() => acceptJob(order.id, order)}>

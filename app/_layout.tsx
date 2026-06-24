@@ -1,6 +1,7 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Component, type ReactNode } from 'react';
+import { Component, useEffect, type ReactNode } from 'react';
+import { setupNotificationNavigation } from './utils/notifications';
 
 // ── Top-level error boundary catches any unhandled React crash ──────────
 // Without this, a crash anywhere in the app produces a blank white screen.
@@ -37,6 +38,14 @@ const styles = StyleSheet.create({
 })
 
 export default function RootLayout() {
+  const router = useRouter()
+
+  useEffect(() => {
+    // Set up navigation handler for push notification taps
+    // (handles both background and cold-start notifications)
+    setupNotificationNavigation(router)
+  }, [])
+
   return (
     <AppErrorBoundary>
     <Stack screenOptions={{ headerShown: false }}>

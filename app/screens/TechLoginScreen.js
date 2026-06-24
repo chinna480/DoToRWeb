@@ -126,12 +126,16 @@ export default function TechLoginScreen() {
       await AsyncStorage.setItem('techExp',      exp)
       await AsyncStorage.setItem('techCategories',    JSON.stringify(selCategories))
 
-      const token = await registerForNotifications()
-      if (token) {
-        await AsyncStorage.setItem('pushToken', token)
-        // Save to multiple paths so Cloud Functions can find the token
+      const tokens = await registerForNotifications()
+      if (tokens) {
+        await AsyncStorage.setItem('pushToken', tokens.expoPushToken || '')
+        if (tokens.fcmToken) {
+          await AsyncStorage.setItem('fcmToken', tokens.fcmToken)
+        }
+        // Save to multiple paths so Cloud Functions & FCM campaigns can find the token
         await update(ref(db, 'techs/' + phone), {
-          pushToken: token,
+          pushToken: tokens.expoPushToken || '',
+          fcmToken: tokens.fcmToken || '',
           name,
           phone,
           location,
@@ -139,8 +143,8 @@ export default function TechLoginScreen() {
           exp,
         })
         // These paths are used by the newOrderNotification Cloud Function
-        await update(ref(db, 'techUsers/' + phone), { pushToken: token, name, phone, location, pincode, exp, serviceCategories: selCategories })
-        await update(ref(db, 'pushTokens/' + phone), token)
+        await update(ref(db, 'techUsers/' + phone), { pushToken: tokens.expoPushToken || '', fcmToken: tokens.fcmToken || '', name, phone, location, pincode, exp, serviceCategories: selCategories })
+        await update(ref(db, 'pushTokens/' + phone), tokens.expoPushToken || '')
       }
     } catch (e) {
       console.warn('Registration save error (data already saved locally):', e.message)
