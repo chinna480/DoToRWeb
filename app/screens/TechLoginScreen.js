@@ -136,9 +136,10 @@ export default function TechLoginScreen() {
           phone,
           location,
           pincode,
+          exp,
         })
         // These paths are used by the newOrderNotification Cloud Function
-        await update(ref(db, 'techUsers/' + phone), { pushToken: token, name, phone, location, pincode, serviceCategories: selCategories })
+        await update(ref(db, 'techUsers/' + phone), { pushToken: token, name, phone, location, pincode, exp, serviceCategories: selCategories })
         await update(ref(db, 'pushTokens/' + phone), token)
       }
     } catch (e) {

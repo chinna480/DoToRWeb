@@ -219,6 +219,7 @@
     .tech-name-lg { font-size: 15px; font-weight: 800; color: #1A3A6B; }
     .tech-sub { font-size: 11px; color: #888; margin-top: 2px; }
     .tech-phone-txt { font-size: 11px; color: #FF6B00; font-weight: 700; margin-top: 2px; }
+    .tech-exp-txt { font-size: 11px; color: #1A3A6B; font-weight: 700; margin-top: 2px; }
     .rating-badge { background: #fff5ee; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 800; color: #FF6B00; }
     .timeline { margin: 0 15px 12px; background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
     .timeline-step { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
@@ -410,10 +411,86 @@
     .track-label::before {
       display: none !important;
     }
+
+    /* ── Floating Download Button ──────────────── */
+    .float-download {
+      position: fixed;
+      bottom: 72px;
+      right: 16px;
+      z-index: 150;
+      background: #FF6B00;
+      color: #fff;
+      border: none;
+      border-radius: 16px;
+      padding: 12px 20px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(255,107,0,0.4);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      transition: all 0.25s ease;
+      animation: floatAppear 0.5s ease 2s both;
+      max-width: calc(100% - 32px);
+    }
+    .float-download:hover {
+      background: #e05e00;
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 6px 28px rgba(255,107,0,0.5);
+    }
+    .float-download .fd-icon { font-size: 20px; flex-shrink: 0; }
+    .float-download .fd-text { white-space: nowrap; }
+    .float-download .fd-sub { font-size: 9px; opacity: 0.8; font-weight: 600; margin-top: 1px; }
+    @keyframes floatAppear {
+      from { opacity: 0; transform: translateY(20px) scale(0.9); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @media (max-width: 600px) {
+      .float-download { bottom: 68px; right: 12px; padding: 10px 16px; font-size: 12px; border-radius: 14px; }
+      .float-download .fd-icon { font-size: 18px; }
+    }
+    @media (min-width: 801px) {
+      .float-download { right: calc(50% - 384px); }
+    }
+
+    /* ── Home Download Section ──────────────────── */
+    .home-download-section {
+      margin: 18px 15px 10px; padding: 20px;
+      background: linear-gradient(135deg, #1A3A6B, #2a5298);
+      border-radius: 16px; color: #fff;
+      box-shadow: 0 4px 16px rgba(26,58,107,0.2);
+    }
+    .home-download-section .hds-header { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+    .home-download-section .hds-icon { font-size: 36px; flex-shrink: 0; }
+    .home-download-section .hds-title { font-size: 17px; font-weight: 800; }
+    .home-download-section .hds-sub { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+    .home-download-section .hds-features { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+    .home-download-section .hds-feat { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; opacity: 0.9; }
+    .home-download-section .hds-feat .feat-icon { font-size: 16px; }
+    .home-download-section .hds-btn {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      background: #FF6B00; color: #fff; padding: 14px; border-radius: 12px;
+      text-decoration: none; font-size: 14px; font-weight: 800; transition: all 0.2s;
+    }
+    .home-download-section .hds-btn:hover { background: #e05e00; transform: translateY(-2px); }
+    .home-download-section .hds-btn .btn-icon { font-size: 22px; }
+    .home-download-section .hds-btn .btn-sub { font-size: 10px; opacity: 0.8; font-weight: 600; }
+    @media (max-width: 400px) {
+      .home-download-section .hds-features { grid-template-columns: 1fr; }
+    }
     .leaflet-tooltip-top.track-label {
       margin-top: -8px !important;
     }
   </style>
+
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#FF6B00">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="DoToR">
+  <link rel="apple-touch-icon" sizes="192x192" href="/favicon-192x192.png">
 </head>
 <body>
 <div class="app-container" id="app">
@@ -432,6 +509,7 @@
       📲 Download App
     </a>
     <div style="margin-top:10px;font-size:11px;color:#aaa;font-weight:600;">Free • Android APK</div>
+    <a href="privacy.html" style="margin-top:14px;font-size:11px;color:#bbb;font-weight:600;text-decoration:none;display:inline-block;" target="_blank">🔒 Privacy Policy</a>
   </div>
 
   <!-- ════════════════════════════════════════════════════════ -->
@@ -444,9 +522,6 @@
         <div class="login-title">Welcome to DoToR</div>
         <div class="login-sub" id="loginSub">Enter your phone number to get started</div>
       </div>
-      <a href="https://github.com/chinna480/DoToRApp/releases/latest/download/DoToR.apk" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:20px;background:#1A3A6B;color:#fff;padding:12px 20px;border-radius:12px;text-decoration:none;font-size:14px;font-weight:800;transition:all 0.2s;" onmouseover="this.style.background='#112a52'" onmouseout="this.style.background='#1A3A6B'">
-        📲 Download Android App
-      </a>
       <div class="step-row" id="loginSteps">
         <div class="step-dot active"><span class="step-dot-txt">1</span></div>
         <div class="step-dot"><span class="step-dot-txt">2</span></div>
@@ -494,6 +569,11 @@
           </div>
         </div>
         <button class="btn-primary" onclick="completeLogin()" id="loginCompleteBtn">🚀 Let's Go!</button>
+      </div>
+
+      <!-- Privacy Policy link on login screen -->
+      <div style="text-align:center;margin-top:24px;padding-top:16px;border-top:1px solid #f0f0f0;">
+        <a href="privacy.html" style="font-size:12px;color:#aaa;font-weight:600;text-decoration:none;" target="_blank">🔒 Privacy Policy</a>
       </div>
     </div>
   </div>
@@ -612,7 +692,7 @@
         <div class="info-card-title">YOUR TECHNICIAN</div>
         <div class="tech-row">
           <div class="tech-avatar-lg" id="trackTechPhoto">👨‍🔧</div>
-          <div style="flex:1;"><div class="tech-name-lg" id="trackTechName">Connecting...</div><div class="tech-sub">⭐ Verified Expert Technician</div><div class="tech-phone-txt" id="trackTechPhone"></div></div>
+          <div style="flex:1;"><div class="tech-name-lg" id="trackTechName">Connecting...</div><div class="tech-sub" id="trackTechSub">⭐ Verified Expert Technician</div><div class="tech-exp-txt" id="trackTechExp"></div><div class="tech-phone-txt" id="trackTechPhone"></div></div>
           <div class="rating-badge">⭐ 4.8</div>
         </div>
       </div>
@@ -775,13 +855,167 @@
   <!-- File Input (hidden) -->
   <input type="file" id="fileInput" accept="image/*" multiple>
 
+  <!-- ── Floating Download App Button ───────────────── -->
+  <a href="https://github.com/chinna480/DoToRApp/releases/latest/download/DoToR.apk" class="float-download" id="floatDownload" target="_blank" download>
+    <span class="fd-icon">📲</span>
+    <div>
+      <div class="fd-text">Download App</div>
+      <div class="fd-sub">Free Android APK</div>
+    </div>
+  </a>
+
 </div><!-- /app-container -->
 
 <!-- ════════════════════════════════════════════════════════ -->
 <!-- SCRIPTS -->
 <!-- ════════════════════════════════════════════════════════ -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- Splash screen animation (runs independently of module) -->
+<!-- ════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  var bar = document.getElementById('splashBar');
+  if (!bar) return;
+  var w = 0;
+  function step() {
+    w += 2;
+    bar.style.width = w + '%';
+    if (w < 100) { setTimeout(step, 18); return; }
+    var splash = document.getElementById('splashScreen');
+    if (!splash) return;
+    splash.classList.add('hide');
+    setTimeout(function(){ splash.style.display = 'none'; }, 400);
+  }
+  setTimeout(step, 50);
+})();
+// Safety: If the module fails to load, check for missing UI and show login as fallback
+setTimeout(function(){
+  var splash = document.getElementById('splashScreen');
+  if (splash) splash.style.display = 'none';
+  var login = document.getElementById('screen-login');
+  var mainApp = document.getElementById('mainApp');
+  // If main app is NOT visible AND login is NOT already active, show login
+  if (login && mainApp && mainApp.style.display !== 'block' && !login.classList.contains('active')) {
+    login.classList.add('active');
+  }
+}, 6000);
+</script>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- Login flow (non-module script - works even if module fails) -->
+<!-- ════════════════════════════════════════════════════════ -->
+<script>
+// ── Login state (shared via window so module can access) ──
+window._loginPhone = '';
+window._loginStep = 1;
+window._custName = localStorage.getItem('custName') || 'Customer';
+window._custPhone = localStorage.getItem('custPhone') || '';
+
+// ── Toast (no dependencies) ────────────────────────────────
+function _showToast(msg, type) {
+  var existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  var toast = document.createElement('div');
+  toast.className = 'toast ' + (type || 'success');
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(function() { toast.remove(); }, 3500);
+}
+window.showToast = window.showToast || _showToast;
+
+// ── Login step navigation (no dependencies) ────────────────
+window.goLoginStep = window.goLoginStep || function(step) {
+  window._loginStep = step;
+  var steps = document.querySelectorAll('#screen-login .form-step');
+  for (var i = 0; i < steps.length; i++) { steps[i].style.display = 'none'; }
+  var target = document.getElementById('loginStep' + step);
+  if (target) target.style.display = 'block';
+  var dots = document.querySelectorAll('#loginSteps .step-dot');
+  for (var i = 0; i < dots.length; i++) {
+    dots[i].className = 'step-dot';
+    if (i + 1 === step) dots[i].classList.add('active');
+    else if (i + 1 < step) dots[i].classList.add('done');
+  }
+};
+
+// ── Send OTP (no dependencies) ─────────────────────────────
+window.sendOtp = window.sendOtp || function() {
+  var phone = document.getElementById('loginPhone').value.trim();
+  if (phone.length !== 10) { _showToast('Enter a valid 10-digit phone number!', 'error'); return; }
+  window._loginPhone = phone;
+  document.getElementById('otpPhoneDisplay').textContent = '📱 +91 ' + phone.slice(0,5) + 'XXXXX';
+  document.getElementById('loginSub').textContent = 'Enter the OTP sent to your phone';
+  window.goLoginStep(2);
+  _showToast('📱 Demo OTP: 123456', 'success');
+};
+
+// ── Verify OTP (no dependencies) ───────────────────────────
+window.verifyOtp = window.verifyOtp || function() {
+  var otp = document.getElementById('otpInput').value.trim();
+  if (otp !== '123456') { _showToast('Invalid OTP. Use 123456', 'error'); return; }
+  _showToast('✅ Verified!', 'success');
+  document.getElementById('loginSub').textContent = 'One last step — what should we call you?';
+  window.goLoginStep(3);
+};
+
+// ── AsyncStorage polyfill (localStorage only, no deps) ────
+window._AsyncStorageSet = window._AsyncStorageSet || function(key, value) {
+  try { localStorage.setItem(key, value); } catch(e) {}
+};
+
+// ── Enter main app (basic version without Firebase) ────────
+function _enterMainApp() {
+  document.getElementById('screen-login').classList.remove('active');
+  document.getElementById('mainApp').style.display = 'block';
+  document.getElementById('tabBar').style.display = 'flex';
+  _updateHomeUI();
+  // If module loaded, it will re-run enterMainApp with Firebase features
+  setTimeout(function() { window.switchTab && window.switchTab('home'); }, 50);
+  _showToast('👋 Welcome, ' + (window._custName || 'Customer') + '!', 'success');
+}
+
+function _updateHomeUI() {
+  var hour = new Date().getHours();
+  var greeting = hour < 12 ? 'Good Morning! 👋' : hour < 17 ? 'Good Afternoon! 👋' : 'Good Evening! 👋';
+  var nameEl = document.getElementById('homeName');
+  if (nameEl) nameEl.textContent = window._custName || 'Customer';
+  var greetingEl = document.getElementById('homeGreeting');
+  if (greetingEl) greetingEl.textContent = greeting;
+  var locEl = document.getElementById('homeLoc');
+  if (locEl) locEl.textContent = '📍 ' + (localStorage.getItem('custLocation') || 'Your Location');
+  var pNameEl = document.getElementById('profileName');
+  if (pNameEl) pNameEl.textContent = window._custName || 'Customer';
+  var pPhoneEl = document.getElementById('profilePhone');
+  if (pPhoneEl) pPhoneEl.textContent = window._custPhone ? '+91 ' + window._custPhone : 'Add phone number';
+}
+
+// ── Complete Login (basic version, saves to localStorage only) ──
+window.completeLogin = window.completeLogin || async function() {
+  var name = document.getElementById('loginName').value.trim();
+  if (!name) { _showToast('Please enter your name!', 'error'); return; }
+  var btn = document.getElementById('loginCompleteBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Logging in...'; }
+  try {
+    window._custName = name;
+    window._custPhone = window._loginPhone;
+    try { localStorage.setItem('custName', name); } catch(e) {}
+    try { localStorage.setItem('custPhone', window._loginPhone); } catch(e) {}
+    _enterMainApp();
+  } catch(e) {
+    _showToast('Something went wrong. Please try again.', 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = "🚀 Let's Go!"; }
+  }
+};
+
+// Flag so module knows if login was handled already
+window._MODULE_LOADED = false;
+</script>
+
 <script type="module">
+  // Mark module as loaded
+  window._MODULE_LOADED = true;
   // ── Import firebase functions ────────────────────────────
   import {
     createOrder, listenOrders, listenCustomerOrders, listenOrder, updateOrderStatus,
@@ -857,18 +1091,15 @@
   // ════════════════════════════════════════════════════════════
   // INIT
   // ════════════════════════════════════════════════════════════
-  document.addEventListener('DOMContentLoaded', async () => {
-    // Splash animation
-    const bar = document.getElementById('splashBar');
-    for (let i = 0; i <= 100; i += 2) {
-      await new Promise(r => setTimeout(r, 18));
-      bar.style.width = i + '%';
-    }
-    document.getElementById('splashScreen').classList.add('hide');
-    setTimeout(() => {
-      document.getElementById('splashScreen').style.display = 'none';
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
       initApp();
-    }, 400);
+    } catch(e) {
+      console.error('DoToR init error:', e);
+      // Fallback: show login screen if init fails
+      const login = document.getElementById('screen-login');
+      if (login) login.classList.add('active');
+    }
   });
 
   function initApp() {
@@ -890,25 +1121,13 @@
   }
 
   // ════════════════════════════════════════════════════════════
-  // LOGIN FLOW (matching CustomerLoginScreen.js)
+  // LOGIN FLOW (overrides non-module stubs to add Firebase save)
   // ════════════════════════════════════════════════════════════
-  window.sendOtp = function() {
-    const phone = document.getElementById('loginPhone').value.trim();
-    if (phone.length !== 10) { showToast('Enter a valid 10-digit phone number!', 'error'); return; }
-    loginPhone = phone;
-    document.getElementById('otpPhoneDisplay').textContent = '📱 +91 ' + phone.slice(0,5) + 'XXXXX';
-    document.getElementById('loginSub').textContent = 'Enter the OTP sent to your phone';
-    goLoginStep(2);
-    showToast('📱 Demo OTP: 123456', 'success');
-  };
-
-  window.verifyOtp = function() {
-    const otp = document.getElementById('otpInput').value.trim();
-    if (otp !== '123456') { showToast('Invalid OTP. Use 123456', 'error'); return; }
-    showToast('✅ Verified!', 'success');
-    document.getElementById('loginSub').textContent = 'One last step — what should we call you?';
-    goLoginStep(3);
-  };
+  // Sync state from window (set by non-module login script)
+  custName = window._custName || custName;
+  custPhone = window._custPhone || custPhone;
+  loginPhone = window._loginPhone || loginPhone;
+  loginStep = window._loginStep || loginStep;
 
   window.completeLogin = async function() {
     const name = document.getElementById('loginName').value.trim();
@@ -919,14 +1138,17 @@
 
     try {
       custName = name;
-      custPhone = loginPhone;
+      custPhone = window._loginPhone || loginPhone;
 
-      await AsyncStorageSet('custName', name);
-      await AsyncStorageSet('custPhone', loginPhone);
+      // Save to localStorage
+      try { localStorage.setItem('custName', name); } catch(e) {}
+      try { localStorage.setItem('custPhone', window._loginPhone || loginPhone); } catch(e) {}
+      window._custName = name;
+      window._custPhone = window._loginPhone || loginPhone;
 
-      // Save to Firebase
+      // Save to Firebase (non-critical, wrapped in try-catch)
       try {
-        await saveUserProfile(loginPhone, { name, role: 'customer' });
+        await saveUserProfile(window._loginPhone || loginPhone, { name, role: 'customer' });
       } catch(e) { console.warn('Firebase save failed:', e); }
 
       enterMainApp();
@@ -936,20 +1158,8 @@
     }
   };
 
-  function goLoginStep(step) {
-    loginStep = step;
-    document.querySelectorAll('#screen-login .form-step').forEach(s => s.style.display = 'none');
-    document.getElementById('loginStep' + step).style.display = 'block';
-    document.querySelectorAll('#loginSteps .step-dot').forEach((dot, i) => {
-      dot.className = 'step-dot';
-      if (i + 1 === step) dot.classList.add('active');
-      else if (i + 1 < step) dot.classList.add('done');
-    });
-  }
-  window.goLoginStep = goLoginStep;
-
   // ════════════════════════════════════════════════════════════
-  // ENTER MAIN APP
+  // ENTER MAIN APP (overrides non-module version)
   // ════════════════════════════════════════════════════════════
   function enterMainApp() {
     isLoggedIn = true;
@@ -1056,7 +1266,34 @@
     ];
     document.getElementById('whySection').innerHTML = items.map(item => `
       <div class="why-item"><div class="why-icon">${item.icon}</div><div><div class="why-title">${item.title}</div><div class="why-desc">${item.desc}</div></div></div>
-    `).join('');
+    `).join('') + renderHomeDownloadSection();
+  }
+
+  function renderHomeDownloadSection() {
+    return `
+      <div class="home-download-section">
+        <div class="hds-header">
+          <div class="hds-icon">📲</div>
+          <div>
+            <div class="hds-title">Get the DoToR App</div>
+            <div class="hds-sub">Faster booking, live tracking, and more!</div>
+          </div>
+        </div>
+        <div class="hds-features">
+          <div class="hds-feat"><span class="feat-icon">⚡</span> One-tap repair booking</div>
+          <div class="hds-feat"><span class="feat-icon">📍</span> Live technician tracking</div>
+          <div class="hds-feat"><span class="feat-icon">💬</span> In-app chat with tech</div>
+          <div class="hds-feat"><span class="feat-icon">🔔</span> Push notifications</div>
+        </div>
+        <a href="https://github.com/chinna480/DoToRApp/releases/latest/download/DoToR.apk" class="hds-btn" target="_blank" download>
+          <span class="btn-icon">📲</span>
+          <div>
+            <div>Download Android App</div>
+            <div class="btn-sub">Free APK • 5MB</div>
+          </div>
+        </a>
+      </div>
+    `;
   }
 
   // ════════════════════════════════════════════════════════════
@@ -1896,6 +2133,7 @@
   function renderProfileMenu() {
     const items = [
       { icon:'📋', label:'My Orders', sub:null, action:'switchTab(\'orders\')' },
+      { icon:'📲', label:'Download App', sub:'Android APK • Free', action:'window.open(\'https://github.com/chinna480/DoToRApp/releases/latest/download/DoToR.apk\',\'_blank\')' },
       { icon:'📍', label:'Track Technician', sub:null, action:'showScreen(\'tracking\');startTracking(localStorage.getItem(\'lastOrderId\'))' },
       { icon:'🆔', label:'Aadhar Verification', sub:null, action:'showScreen(\'digilocker\')' },
       { icon:'📄', label:'Privacy Policy', sub:null, action:'window.open(\'privacy.html\',\'_self\')' },
@@ -1977,7 +2215,7 @@
       document.getElementById('trackLivePill').textContent = order.status === 'completed' ? '✅ Done' : '🟢 Live';
       document.getElementById('trackLivePill').style.background = order.status === 'completed' ? '#2e7d32' : '#FF6B00';
       document.getElementById('trackCustLoc').textContent = order.location || '--';
-      document.getElementById('trackTechStatus').textContent = order.techName ? order.techName + ' assigned' : 'Being assigned...';
+      document.getElementById('trackTechStatus').textContent = order.techName ? '📍 Locating technician...' : 'Being assigned...';
 
       // Order details
       document.getElementById('trackOrderInfo').innerHTML = `
@@ -2000,6 +2238,18 @@
         document.getElementById('techInfoCard').style.display = 'block';
         document.getElementById('trackTechName').textContent = order.techName;
         document.getElementById('trackTechPhone').textContent = order.techPhone ? '📱 +91' + order.techPhone : '';
+        // Fetch tech profile to show experience and area
+        getTechProfile(order.techPhone).then(function(profile) {
+          var expEl = document.getElementById('trackTechExp');
+          if (profile && profile.experience && expEl) {
+            expEl.textContent = '⭐ ' + profile.experience + ' exp';
+          }
+          // Show tech's area (not full address) in the technician location card
+          var statusEl = document.getElementById('trackTechStatus');
+          if (profile && profile.location && statusEl) {
+            statusEl.textContent = '📍 ' + profile.location;
+          }
+        }).catch(function() {});
         document.getElementById('trackCallBtn').style.display = 'block';
         document.getElementById('trackCallBtn').href = 'tel:+91' + (order.techPhone || '').replace(/[^0-9]/g,'');
 
@@ -2387,11 +2637,6 @@
   }
   window.updateCharCount = updateCharCount;
 
-  // AsyncStorage polyfill (localStorage-based)
-  async function AsyncStorageSet(key, value) {
-    try { localStorage.setItem(key, value); } catch(e) {}
-  }
-
   // Expose functions globally
   window.switchTab = switchTab;
   window.showScreen = showScreen;
@@ -2399,5 +2644,6 @@
 
   console.log('✅ DoToR SPA initialized');
 </script>
+<script>if('serviceWorker' in navigator) { navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(function(e) { console.log('SW reg failed:', e); }); }</script>
 </body>
 </html>

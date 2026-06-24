@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DigiLocker - DoToR</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="app.css">
+
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#FF6B00">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="DoToR">
+  <link rel="apple-touch-icon" sizes="192x192" href="/favicon-192x192.png">
+</head>
+<body>
+<div class="app-container">
+
+  <!-- DIGILOCKER SCREEN -->
+  <div id="screen-digilocker" class="screen active">
+    <div class="top-header navy">
+      <button class="back-btn" onclick="history.back()">←</button>
+      <span class="title">🏛️ DigiLocker Verification</span>
+      <span class="spacer"></span>
+    </div>
+    <div class="digi-container">
+      <div class="digi-icon-big">🆔</div>
+      <div class="digi-title">Aadhar Verification</div>
+      <div class="digi-desc">DigiLocker is a government-authorized platform to verify your identity securely.</div>
+
+      <div class="digi-steps">
+        <div class="digi-step"><span style="width:22px;height:22px;border-radius:50%;background:#1A3A6B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;margin-top:1px;">1</span> Open DigiLocker and sign in with your Aadhar-linked mobile number</div>
+        <div class="digi-step"><span style="width:22px;height:22px;border-radius:50%;background:#1A3A6B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;margin-top:1px;">2</span> Go to Issued Documents and open your Aadhar card</div>
+        <div class="digi-step"><span style="width:22px;height:22px;border-radius:50%;background:#1A3A6B;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;margin-top:1px;">3</span> Your name and last 4 digits will be captured automatically</div>
+        <div class="digi-step"><span style="width:22px;height:22px;border-radius:50%;background:#2e7d32;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;margin-top:1px;">✅</span> Identity verified! Your data is encrypted and secure</div>
+      </div>
+
+      <button class="btn-primary" onclick="window.open('https://www.digilocker.gov.in','_blank')">🔗 Open DigiLocker</button>
+
+      <div style="margin-top:16px;padding:14px;background:#f0f4ff;border-radius:12px;text-align:left;font-size:12px;color:#1A3A6B;display:flex;gap:10px;">
+        <span style="font-size:18px;">🔒</span>
+        <div><strong>Your privacy matters.</strong> We only store your name and verification status. Your full Aadhar number is never stored.</div>
+      </div>
+
+      <div style="border-top:1px solid #eee;margin-top:20px;padding-top:16px;">
+        <p style="font-size:12px;color:#888;font-weight:600;text-align:center;margin-bottom:12px;">⚡ Or verify manually</p>
+        <div class="form-group"><label>Name on Aadhar Card</label><div class="input-field"><span class="icon">👤</span><input type="text" id="aadharName" placeholder="Enter name as on Aadhar"></div></div>
+        <div class="form-group"><label>Last 4 Digits of Aadhar</label><div class="input-field"><span class="icon">🔢</span><input type="tel" id="aadharLast" placeholder="e.g. 1234" maxlength="4" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div></div>
+        <button class="btn-outline" onclick="verify()">✅ Verify Manually</button>
+        <div id="verifyStatus" style="margin-top:12px;"></div>
+      </div>
+    </div>
+    <div class="tab-bottom-pad"></div>
+  </div>
+
+</div>
+
+<script src="utils.js"></script>
+<script>document.addEventListener("DOMContentLoaded",function(){if(window.initDarkMode)window.initDarkMode();});</script>
+<script src="auth.js"></script>
+
+<script type="module">
+  import { saveAadharVerification, getAadharStatus } from './firebase.js?v=2';
+
+  var custPhone = localStorage.getItem('custPhone') || '';
+  var custName  = localStorage.getItem('custName') || '';
+  if (!custPhone && !custName) { window.location.href = 'index.html'; }
+
+  // Check if already verified
+  if (custPhone) {
+    getAadharStatus(custPhone).then(function(status) {
+      if (status && status.verified) {
+        document.getElementById('verifyStatus').innerHTML = '<div style="padding:14px;background:#e8f5e9;border-radius:12px;color:#2e7d32;font-weight:800;">✅ Aadhar Verified! Name: ' + (status.name || '') + '</div>';
+      }
+    });
+  }
+
+  window.verify = async function() {
+    var name = document.getElementById('aadharName').value.trim();
+    var last = document.getElementById('aadharLast').value.trim();
+    if (!name) { window.showToast('Please enter your name as on Aadhar', 'error'); return; }
+    if (last.length !== 4) { window.showToast('Please enter the last 4 digits of your Aadhar', 'error'); return; }
+
+    var btn = event.target || document.querySelector('.btn-outline');
+    btn.disabled = true;
+    try {
+      await saveAadharVerification(custPhone, { name: name, lastFourDigits: last });
+      document.getElementById('verifyStatus').innerHTML = '<div style="padding:14px;background:#e8f5e9;border-radius:12px;color:#2e7d32;font-weight:800;">✅ Aadhar Verified Successfully!</div>';
+      window.showToast('✅ Aadhar Verified!', 'success');
+    } catch(e) {
+      window.showToast('❌ Verification failed. Please try again.', 'error');
+    } finally { btn.disabled = false; }
+  };
+</script>
+
+<script>if('serviceWorker' in navigator) { navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(function(e) { console.log('SW reg failed:', e); }); }</script>
+</body>
+</html>

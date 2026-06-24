@@ -61,6 +61,7 @@ export default function TrackingScreen() {
   const [etaSeconds, setEtaSeconds] = useState(null)
   const [countdown, setCountdown]   = useState('--')
   const [techName, setTechName]   = useState('Connecting...')
+  const [techExp, setTechExp]     = useState('')
   const [techPhoto, setTechPhoto] = useState(null)
   const techPhotoUnsubRef = useRef(null)
 
@@ -231,11 +232,21 @@ export default function TrackingScreen() {
           if (!mounted.current || !snap.exists()) return
           const o = snap.val()
           if (!o) return
-          if (o.techName) {
-            setTechName(o.techName)
-            if (o.techPhone) {
-              setTechPhone(o.techPhone)
-              listenTechPhoto(o.techPhone)
+          if (o.techName) {                          setTechName(o.techName)
+                          if (o.techExp) {
+                            setTechExp(o.techExp)
+                          }
+                          if (o.techPhone) {
+                            setTechPhone(o.techPhone)
+                            listenTechPhoto(o.techPhone)
+                            // Fetch experience from Firebase profile
+                            try {
+                              const cleanPhone = o.techPhone.replace('+91', '').replace(/^0+/, '')
+                              const snap = await get(ref(db, 'techUsers/' + cleanPhone + '/exp'))
+                              if (snap.exists()) {
+                                setTechExp(snap.val())
+                              }
+                            } catch(_) {}
             }
           }
           if (o.modelName) setModelName(o.modelName)
@@ -487,6 +498,9 @@ export default function TrackingScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={s.techName}>{techName}</Text>
                 <Text style={s.techSub}>⭐ Verified Expert Technician</Text>
+                {techExp ? (
+                  <Text style={s.techExpTxt}>⭐ {techExp} exp</Text>
+                ) : null}
                 {techPhone ? (
                   <Text style={s.techPhone}>📱 +91{techPhone}</Text>
                 ) : null}
@@ -604,6 +618,7 @@ const s = StyleSheet.create({
   techAvatar:     { width: 50, height: 50, backgroundColor: '#1A3A6B', borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
   techName:       { fontSize: 15, fontWeight: '800', color: '#1A3A6B' },
   techSub:        { fontSize: 12, color: '#888', marginTop: 2 },
+  techExpTxt:     { fontSize: 12, color: '#FF6B00', fontWeight: '700', marginTop: 2 },
   techPhone:      { fontSize: 12, color: '#FF6B00', fontWeight: '700', marginTop: 2 },
   ratingBadge:    { backgroundColor: '#fff5ee', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   ratingTxt:      { color: '#FF6B00', fontSize: 12, fontWeight: '800' },

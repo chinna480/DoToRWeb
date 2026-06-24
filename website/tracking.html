@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Live Tracking - DoToR</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    #trackingMap { width: 100%; height: 260px; border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
+    #trackingMap .leaflet-container { border-radius: 16px; }
+  </style>
+
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#FF6B00">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="DoToR">
+  <link rel="apple-touch-icon" sizes="192x192" href="/favicon-192x192.png">
+</head>
+<body>
+<div class="app-container">
+
+  <!-- TRACKING SCREEN -->
+  <div id="screen-tracking" class="screen active">
+    <div class="top-header" style="background:#FF6B00;">
+      <button class="back-btn" onclick="goBack()">←</button>
+      <span class="title">🛵 Live Tracking</span>
+      <span class="track-pill live" id="trackLivePill">🟢 Live</span>
+      <button class="dark-mode-toggle" id="darkModeToggle" onclick="toggleDarkMode()">🌙</button><span class="spacer"></span>
+    </div>
+    <div style="padding:8px 20px;background:#FF6B00;">
+      <div style="font-size:12px;color:rgba(255,255,255,0.9);" id="trackStatusMsg">⏳ Waiting for technician...</div>
+    </div>
+    <div id="trackingMap"></div>
+
+    <button class="track-my-loc-btn" id="trackMyLocBtn" onclick="trackMyLocation()">
+      <span class="dot-pulse" id="trackMyLocDot"></span>
+      📍 Show My Location
+    </button>
+
+    <div class="dist-banner" id="trackDistBanner" style="display:none;">
+      <div><div class="dist-label">Distance</div><div class="dist-val" id="trackDist">--</div></div>
+      <div style="text-align:right;"><div class="dist-label">ETA</div><div class="countdown" id="trackEta">--</div></div>
+    </div>
+
+    <div class="loc-row">
+      <div class="loc-card"><div class="loc-card-icon">🏠</div><div class="loc-card-label">YOUR LOCATION</div><div class="loc-card-name" id="trackCustLoc">--</div></div>
+      <div class="loc-card"><div class="loc-card-icon">🛵</div><div class="loc-card-label">TECHNICIAN</div><div class="loc-card-name" id="trackTechStatus">Being assigned...</div></div>
+    </div>
+
+    <div class="info-card" id="techInfoCard" style="display:none;">
+      <div class="info-card-title">YOUR TECHNICIAN</div>
+      <div class="tech-row">
+        <div class="tech-avatar-lg" id="trackTechPhoto">👨‍🔧</div>
+        <div style="flex:1;"><div class="tech-name-lg" id="trackTechName">Connecting...</div><div class="tech-sub">⭐ Verified Expert Technician</div><div class="tech-phone-txt" id="trackTechPhone"></div></div>
+        <div class="rating-badge">⭐ 4.8</div>
+      </div>
+    </div>
+
+    <div class="info-card" id="trackOrderDetails">
+      <div class="info-card-title">ORDER DETAILS</div>
+      <div id="trackOrderInfo"></div>
+    </div>
+
+    <div class="timeline" id="trackTimeline"></div>
+
+    <a class="call-btn" id="trackCallBtn" href="#" style="display:none;">📞 Call Technician</a>
+    <div class="action-row" id="trackActions" style="display:none;">
+      <button class="btn-primary" id="trackChatBtn" onclick="openChat()">💬 Chat</button>
+      <button class="btn-primary" id="trackRateBtn" style="display:none;background:#2e7d32;" onclick="openReview()">⭐ Rate</button>
+    </div>
+
+    <div class="tab-bottom-pad"></div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="utils.js"></script>
+<script>document.addEventListener("DOMContentLoaded",function(){if(window.initDarkMode)window.initDarkMode();});</script>
+<script src="auth.js"></script>
+
+<script type="module">
+  import { listenOrder, listenTechLocationByPhone, listenTechPhoto, calcDistance, getTechRating } from './firebase.js?v=2';
+
+  // ── Auth & Order ID ─────────────────────────────────
+  var custPhone = localStorage.getItem('custPhone') || '';
+  var custName  = localStorage.getItem('custName') || '';
+  if (!custPhone || !custName) { window.location.href = 'index.html'; }
+
+  var urlParams = new URLSearchParams(window.location.search);
+  var orderId = urlParams.get('orderId') || localStorage.getItem('lastOrderId') || '';
+
+  if (!orderId) { window.showToast('No order to track', 'error'); window.location.href = 'home.html'; }
+
+  // ── State ─────────────────────────────────────────────
+  var trackMap = null, techMarker = null, custMarker = null, myMarker = null, myAccCircle = null;
+  var trackMyLat = null, trackMyLng = null, trackMyWatchId = null, trackMyActive = false;
+  var countdownInterval = null, storedEtaSeconds = null;
+  var previousOrderStatus = null, techPhone = null;
+
+  window.goBack = function() { document.referrer ? history.back() : window.location.href = 'orders.html'; };
+
+  // ── Init Map ─────────────────────────────────────────
+  function initTrackMap(lat, lng) {
+    if (trackMap) { trackMap.invalidateSize(); return; }
+    trackMap = L.map('trackingMap', { zoomControl: true, attributionControl: false }).setView([lat, lng], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(trackMap);
+    // Customer marker (their repair location)
+    var custIcon = L.divIcon({ html: '🏠', className: '', iconSize: [30,30], iconAnchor: [15,15] });
+    custMarker = L.marker([lat, lng], { icon: custIcon }).addTo(trackMap).bindTooltip('📍 Your Location', { className: 'track-label', direction: 'top', offset: [0,-10] }).openTooltip();
+    custMarker._lat = lat; custMarker._lng = lng;
+    setTimeout(function() { trackMap.invalidateSize(); }, 300);
+  }
+
+  // ── Listen to Order ─────────────────────────────────
+  var unsubOrder = listenOrder(orderId, function(order) {
+    if (!order) { window.showToast('Order not found', 'error'); window.location.href = 'orders.html'; return; }
+
+    // Status
+    document.getElementById('trackStatusMsg').textContent =
+      order.status === 'pending' ? '⏳ Waiting for technician to accept...' :
+      order.status === 'accepted' ? (order.techName ? '🔧 ' + order.techName + ' is on the way!' : '🔧 Technician assigned!') :
+      order.status === 'completed' ? '✅ Repair completed! Thank you!' : '⏳ ' + (order.status || 'Processing...');
+
+    if (order.status === 'completed') { document.getElementById('trackLivePill').textContent = '✅ Done'; }
+
+    // Order info
+    var svc = order.serviceLabel || order.serviceCategory || 'Repair';
+    document.getElementById('trackOrderInfo').innerHTML =
+      '<div style="font-size:14px;font-weight:800;color:#1A3A6B;">' + svc + '</div>' +
+      '<div style="font-size:12px;color:#888;margin-top:4px;">📍 ' + (order.location || '—') + '</div>' +
+      '<div style="font-size:12px;color:#888;">🕐 ' + new Date(order.createdAt || Date.now()).toLocaleString() + '</div>';
+
+    // Customer location from order
+    if (order.lat && order.lng && !trackMap) { initTrackMap(order.lat, order.lng); }
+    if (order.lat && order.lng) {
+      document.getElementById('trackCustLoc').textContent = order.location ? order.location.split(',')[0] : order.lat.toFixed(4) + ',' + order.lng.toFixed(4);
+    }
+
+    // Technician info
+    if (order.techPhone) { techPhone = order.techPhone; }
+    if (order.techName) {
+      document.getElementById('techInfoCard').style.display = 'block';
+      document.getElementById('trackTechName').textContent = order.techName;
+      document.getElementById('trackTechPhone').textContent = order.techPhone ? '+91 ' + order.techPhone : '';
+      document.getElementById('trackCallBtn').href = order.techPhone ? 'tel:+91' + order.techPhone.replace('+91','') : '#';
+      document.getElementById('trackCallBtn').style.display = 'block';
+      document.getElementById('trackActions').style.display = 'flex';
+      document.getElementById('trackChatBtn').onclick = function() { window.location.href = 'chat.html?orderId=' + orderId + '&techName=' + encodeURIComponent(order.techName); };
+    }
+
+    // Tech photo
+    if (order.techPhone) {
+      var unsubPhoto = listenTechPhoto(order.techPhone, function(photoUrl) {
+        if (photoUrl) { document.getElementById('trackTechPhoto').innerHTML = '<img src="' + photoUrl + '" alt="tech" style="width:100%;height:100%;object-fit:cover;">'; }
+      });
+    }
+
+    // Rating
+    if (order.techPhone) {
+      getTechRating(order.techPhone).then(function(rating) {
+        if (rating) { document.querySelector('.rating-badge').textContent = '⭐ ' + rating.average; }
+      });
+    }
+
+    // Review button
+    if (order.status === 'completed' && order.techName && !order.reviewed) {
+      document.getElementById('trackRateBtn').style.display = 'block';
+      document.getElementById('trackRateBtn').onclick = function() {
+        window.location.href = 'review.html?orderId=' + orderId + '&techPhone=' + encodeURIComponent(order.techPhone || '') + '&techName=' + encodeURIComponent(order.techName || '');
+      };
+    }
+
+    // Timeline
+    renderTimeline(order);
+
+    // Tech location tracking
+    if (order.techPhone && (order.status === 'accepted' || order.status === 'pending')) {
+      setupTechLocationTracking(order.techPhone, order.lat, order.lng);
+    }
+
+    // Notify on status change
+    if (previousOrderStatus && previousOrderStatus !== order.status) {
+      window.showToast('📢 Order status: ' + order.status, 'success');
+    }
+    previousOrderStatus = order.status;
+  });
+
+  // ── Tech Location Tracking ─────────────────────────
+  function setupTechLocationTracking(techPhone, custLat, custLng) {
+    var unsubLoc = listenTechLocationByPhone(techPhone, function(loc) {
+      if (!loc || !trackMap) return;
+      var icon = L.divIcon({ html: '🛵', className: '', iconSize: [30,30], iconAnchor: [15,15] });
+      if (techMarker) { techMarker.setLatLng([loc.lat, loc.lng]); }
+      else { techMarker = L.marker([loc.lat, loc.lng], { icon: icon }).addTo(trackMap).bindTooltip('🔧 Technician', { className: 'track-label', direction: 'top', offset: [0,-10] }).openTooltip(); }
+
+      document.getElementById('trackTechStatus').textContent = '📍 ' + loc.lat.toFixed(4) + ', ' + loc.lng.toFixed(4);
+
+      // Calculate distance
+      if (custLat && custLng) {
+        var dist = parseFloat(calcDistance(loc.lat, loc.lng, custLat, custLng));
+        trackMap.setView([(loc.lat + custLat)/2, (loc.lng + custLng)/2], trackMap.getZoom());
+        document.getElementById('trackDistBanner').style.display = 'flex';
+        document.getElementById('trackDist').textContent = dist < 1 ? (dist * 1000).toFixed(0) + ' m' : dist.toFixed(1) + ' km';
+        // Simple ETA: assume 30 km/h average speed
+        storedEtaSeconds = Math.round((dist / 30) * 3600);
+        updateCountdown();
+      }
+    }, orderId);
+  }
+
+  function updateCountdown() {
+    if (countdownInterval) clearInterval(countdownInterval);
+    if (storedEtaSeconds == null) { document.getElementById('trackEta').textContent = '--'; return; }
+    var etaEl = document.getElementById('trackEta');
+    function tick() {
+      if (storedEtaSeconds <= 0) { etaEl.textContent = 'Arrived!'; clearInterval(countdownInterval); return; }
+      var m = Math.floor(storedEtaSeconds / 60);
+      var s = storedEtaSeconds % 60;
+      etaEl.textContent = m + 'm ' + s + 's';
+      storedEtaSeconds--;
+    }
+    tick();
+    countdownInterval = setInterval(tick, 1000);
+  }
+
+  // ── Timeline ────────────────────────────────────────
+  function renderTimeline(order) {
+    var steps = [
+      { key:'pending', label:'📝 Order Placed' },
+      { key:'accepted', label:'🔧 Technician Assigned' },
+      { key:'completed', label:'✅ Repair Completed' },
+    ];
+    var statusOrder = ['pending', 'accepted', 'completed'];
+    var currentIdx = statusOrder.indexOf(order.status);
+    if (currentIdx < 0) currentIdx = 0;
+
+    document.getElementById('trackTimeline').innerHTML = steps.map(function(s, i) {
+      var cls = i < currentIdx ? 'timeline-dot done' : i === currentIdx ? 'timeline-dot active' : 'timeline-dot pending';
+      return '<div class="timeline-step"><div class="' + cls + '"></div><div class="timeline-label">' + s.label + '</div></div>';
+    }).join('');
+  }
+
+  // ── My Location (live GPS) ──────────────────────────
+  window.trackMyLocation = function() {
+    if (!navigator.geolocation) { window.showToast('GPS not supported', 'error'); return; }
+    if (trackMyActive) {
+      if (trackMyWatchId != null) { navigator.geolocation.clearWatch(trackMyWatchId); trackMyWatchId = null; }
+      trackMyActive = false;
+      document.getElementById('trackMyLocBtn').classList.remove('active');
+      document.getElementById('trackMyLocBtn').innerHTML = '<span class="dot-pulse"></span> 📍 Show My Location';
+      if (myMarker) { trackMap.removeLayer(myMarker); myMarker = null; }
+      if (myAccCircle) { trackMap.removeLayer(myAccCircle); myAccCircle = null; }
+      return;
+    }
+    trackMyActive = true;
+    document.getElementById('trackMyLocBtn').classList.add('active');
+    document.getElementById('trackMyLocBtn').innerHTML = '<span class="dot-pulse" style="background:#fff;"></span> 📍 Live GPS Active';
+    trackMyWatchId = navigator.geolocation.watchPosition(
+      function(pos) {
+        trackMyLat = pos.coords.latitude;
+        trackMyLng = pos.coords.longitude;
+        var acc = pos.coords.accuracy || 0;
+        if (trackMap) {
+          var myIcon = L.divIcon({ html: '📍', className: '', iconSize: [24,24], iconAnchor: [12,12] });
+          if (myMarker) { myMarker.setLatLng([trackMyLat, trackMyLng]); }
+          else { myMarker = L.marker([trackMyLat, trackMyLng], { icon: myIcon }).addTo(trackMap).bindTooltip('You are here', { className: 'track-label', direction: 'top' }).openTooltip(); }
+          if (myAccCircle) { trackMap.removeLayer(myAccCircle); }
+          myAccCircle = L.circle([trackMyLat, trackMyLng], { radius: acc, color: '#4CAF50', fillColor: '#4CAF50', fillOpacity: 0.1 }).addTo(trackMap);
+        }
+      },
+      function() { window.showToast('⚠️ GPS error', 'error'); },
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+  };
+
+  // ── Cleanup on unload ─────────────────────────────
+  window.addEventListener('beforeunload', function() {
+    if (trackMyWatchId != null) navigator.geolocation.clearWatch(trackMyWatchId);
+    if (countdownInterval) clearInterval(countdownInterval);
+  });
+</script>
+
+<script>if('serviceWorker' in navigator) { navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(function(e) { console.log('SW reg failed:', e); }); }</script>
+</body>
+</html>

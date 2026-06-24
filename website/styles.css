@@ -1004,3 +1004,85 @@ body {
   font-family: inherit;
   background: transparent;
 }
+
+/* ─── DARK MODE ──────────────────────────────────────── */
+[data-theme="dark"] {
+  --primary: #FF8C38;
+  --primary-dark: #e67e2e;
+  --primary-light: #2a1a0e;
+  --navy: #8ab4ff;
+  --navy-dark: #66a0ff;
+  --navy-light: #1a1a2e;
+  --green: #4caf50;
+  --green-light: #1a3a1a;
+  --red: #ef5350;
+  --red-light: #2a1a1a;
+  --gray: #aaa;
+  --gray-light: #1a1a1a;
+  --gray-border: #333;
+  --white: #1e1e1e;
+  --shadow: 0 2px 8px rgba(0,0,0,0.3);
+  --shadow-lg: 0 4px 20px rgba(0,0,0,0.4);
+}
+[data-theme="dark"] body { background: #121212; color: #e0e0e0; }
+[data-theme="dark"] .app-container { background: #121212; }
+[data-theme="dark"] .card,
+[data-theme="dark"] .order-card,
+[data-theme="dark"] .info-card,
+[data-theme="dark"] .timeline,
+[data-theme="dark"] .review-card,
+[data-theme="dark"] .input-card,
+[data-theme="dark"] .media-section,
+[data-theme="dark"] .profile-card,
+[data-theme="dark"] .menu-card,
+[data-theme="dark"] .profile-stat,
+[data-theme="dark"] .quick-item,
+[data-theme="dark"] .why-item,
+[data-theme="dark"] .loc-card,
+[data-theme="dark"] .filter-row,
+[data-theme="dark"] .tab-bar { background: #1e1e1e; border-color: #333; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+[data-theme="dark"] .service-card,
+[data-theme="dark"] .brand-card,
+[data-theme="dark"] .chat-bubble.received,
+[data-theme="dark"] .modal-content { background: #1e1e1e; color: #e0e0e0; }
+[data-theme="dark"] .step-title,
+[data-theme="dark"] .section-title,
+[data-theme="dark"] .why-title,
+[data-theme="dark"] .order-brand,
+[data-theme="dark"] .order-device,
+[data-theme="dark"] .profile-name-txt,
+[data-theme="dark"] .menu-label,
+[data-theme="dark"] .tech-name-lg,
+[data-theme="dark"] .timeline-label,
+[data-theme="dark"] .review-value,
+[data-theme="dark"] .brand-card .name,
+[data-theme="dark"] .service-card .name,
+[data-theme="dark"] .quick-item-label,
+[data-theme="dark"] .loc-card-name { color: #e0e0e0; }
+[data-theme="dark"] .step-subtitle,
+[data-theme="dark"] .why-desc,
+[data-theme="dark"] .order-detail-text,
+[data-theme="dark"] .profile-phone-txt,
+[data-theme="dark"] .menu-sub,
+[data-theme="dark"] .tech-sub,
+[data-theme="dark"] .review-label,
+[data-theme="dark"] .info-card-title,
+[data-theme="dark"] .loc-card-label,
+[data-theme="dark"] .progress-label,
+[data-theme="dark"] .media-hint,
+[data-theme="dark"] .char-count { color: #999; }
+[data-theme="dark"] .input-field,
+[data-theme="dark"] .chat-input-row input,
+[data-theme="dark"] .wizard-bottom { background: #1e1e1e; border-color: #333; }
+[data-theme="dark"] .chat-input-row { background: #1e1e1e; border-color: #333; }
+[data-theme="dark"] .progress-container { background: #1e1e1e; }
+[data-theme="dark"] .empty-state h3 { color: #e0e0e0; }
+[data-theme="dark"] .digi-steps { background: #1a1a2e; }
+
+/* ─── DARK MODE TOGGLE ──────────────────────────────── */
+.dark-mode-toggle {
+  background: none; border: none; font-size: 18px; cursor: pointer;
+  padding: 6px; border-radius: 8px; transition: background 0.2s; line-height: 1;
+}
+.dark-mode-toggle:hover { background: rgba(255,255,255,0.15); }
+[data-theme="dark"] .dark-mode-toggle:hover { background: rgba(255,255,255,0.1); }

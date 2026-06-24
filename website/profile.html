@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Profile - DoToR</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="app.css">
+
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#FF6B00">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="DoToR">
+  <link rel="apple-touch-icon" sizes="192x192" href="/favicon-192x192.png">
+</head>
+<body>
+<div class="app-container">
+
+  <!-- PROFILE TAB -->
+  <div id="screen-profile" class="screen active">
+    <div class="profile-header">
+      <span class="title" style="font-size:20px;font-weight:800;color:#111;">My Profile</span><button class="dark-mode-toggle" id="darkModeToggle" onclick="toggleDarkMode()">🌙</button>
+    </div>
+
+    <div class="profile-card">
+      <div class="profile-row">
+        <div class="profile-photo" id="profilePhoto">👤</div>
+        <div>
+          <div class="profile-name-txt" id="profileName">Customer</div>
+          <div class="profile-phone-txt" id="profilePhone">Add phone number</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="profile-stats-row" id="profileStats">
+      <div class="profile-stat"><div class="profile-stat-num" id="statTotal">0</div><div class="profile-stat-label">My Orders</div></div>
+      <div class="profile-stat"><div class="profile-stat-num" id="statCompleted">0</div><div class="profile-stat-label">Completed</div></div>
+      <div class="profile-stat"><div class="profile-stat-num" id="statPending">0</div><div class="profile-stat-label">Pending</div></div>
+    </div>
+
+    <div class="menu-card">
+      <a class="menu-item" href="orders.html">
+        <div class="menu-left"><div class="menu-icon-box">📋</div><div><div class="menu-label">My Orders</div></div></div>
+        <div class="menu-arrow">›</div>
+      </a>
+      <a class="menu-item" href="https://github.com/chinna480/DoToRApp/releases/latest/download/DoToR.apk" target="_blank">
+        <div class="menu-left"><div class="menu-icon-box">📲</div><div><div class="menu-label">Download App</div><div class="menu-sub">Android APK • Free</div></div></div>
+        <div class="menu-arrow">›</div>
+      </a>
+      <a class="menu-item" href="digilocker.html">
+        <div class="menu-left"><div class="menu-icon-box">🆔</div><div><div class="menu-label">Aadhar Verification</div></div></div>
+        <div class="menu-arrow">›</div>
+      </a>
+      <a class="menu-item" href="privacy.html" target="_blank">
+        <div class="menu-left"><div class="menu-icon-box">🔒</div><div><div class="menu-label">Privacy Policy</div></div></div>
+        <div class="menu-arrow">›</div>
+      </a>
+      <div class="menu-separator"></div>
+      <a class="menu-item danger" href="#" onclick="logoutUser();return false;">
+        <div class="menu-left"><div class="menu-icon-box">🚪</div><div><div class="menu-label">Logout</div></div></div>
+        <div class="menu-arrow">›</div>
+      </a>
+    </div>
+
+    <div class="tab-bottom-pad"></div>
+  </div>
+
+  <!-- BOTTOM TAB BAR -->
+  <div class="tab-bar">
+    <button class="tab-item" onclick="window.location.href='home.html'">
+      <span class="tab-icon">🏠</span>
+      <span class="tab-label">Home</span>
+    </button>
+    <button class="tab-item" onclick="window.location.href='booking.html'">
+      <span class="tab-icon">🔧</span>
+      <span class="tab-label">Repair</span>
+    </button>
+    <button class="tab-item" onclick="window.location.href='orders.html'">
+      <span class="tab-icon">📋</span>
+      <span class="tab-label">Orders</span>
+    </button>
+    <button class="tab-item active" onclick="window.location.href='profile.html'">
+      <span class="tab-icon active">👤</span>
+      <span class="tab-label active">Profile</span>
+      <div class="tab-indicator"></div>
+    </button>
+  </div>
+
+</div>
+
+<script type="module">
+  import { listenCustomerOrders } from './firebase.js?v=2';
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var name  = localStorage.getItem('custName') || 'Customer';
+    var phone = localStorage.getItem('custPhone') || '';
+
+    if (!name && !phone) { window.location.href = 'index.html'; return; }
+
+    document.getElementById('profileName').textContent = name;
+    document.getElementById('profilePhone').textContent = phone ? '+91 ' + phone : 'Add phone number';
+
+    // Load stats from orders
+    if (phone) {
+      var unsub = listenCustomerOrders(phone, function(orders) {
+        var total = orders.length;
+        var completed = orders.filter(function(o) { return o.status === 'completed'; }).length;
+        var pending = orders.filter(function(o) { return o.status === 'pending' || o.status === 'accepted'; }).length;
+        document.getElementById('statTotal').textContent = total;
+        document.getElementById('statCompleted').textContent = completed;
+        document.getElementById('statPending').textContent = pending;
+      });
+    }
+  });
+</script>
+
+<script src="utils.js"></script>
+<script>document.addEventListener("DOMContentLoaded",function(){if(window.initDarkMode)window.initDarkMode();});</script>
+<script src="auth.js"></script>
+
+<script>if('serviceWorker' in navigator) { navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(function(e) { console.log('SW reg failed:', e); }); }</script>
+</body>
+</html>

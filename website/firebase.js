@@ -11,6 +11,10 @@ import {
   onValue,
   off,
   get,
+  query,
+  orderByChild,
+  equalTo,
+  limitToLast,
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 import {
   getMessaging,
@@ -33,67 +37,41 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 // ── FCM / Push Notification setup ──────────────────────────────────────────
-// VAPID key from Firebase Console (needed for web push)
-// You can get this from Firebase Console > Project Settings > Cloud Messaging
 const FCM_VAPID_KEY = 'BKyTEa7xh-HWeQ14JX0PDp6z8tpWqpr-Ky5_dHmYNJdxrlQj_MqGW5zYyUJmTPrRnxnJjMk-d-jWEpkSDSaTmyY';
 
 let messagingInstance = null;
 let swRegistration = null;
 
-/**
- * Initialize FCM messaging and register the service worker.
- * Returns { token, swReg } or null if push not supported.
- */
 export async function setupFCM() {
   try {
-    // Check if service workers and push are supported
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       console.log('🔕 Push notifications not supported in this browser');
       return null;
     }
-
-    // Check for existing permission
     if (Notification.permission === 'denied') {
       console.log('🔕 Notification permission denied');
       return null;
     }
-
-    // Register the service worker
     swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     console.log('✅ Service worker registered');
-
-    // Wait for the service worker to be ready
     await navigator.serviceWorker.ready;
-
-    // Get FCM messaging instance
     messagingInstance = getMessaging(app);
-
-    // Get FCM token (will prompt for permission if not already granted)
     const token = await getToken(messagingInstance, {
       vapidKey: FCM_VAPID_KEY,
       serviceWorkerRegistration: swRegistration,
     });
-
     if (token) {
       console.log('✅ FCM token obtained');
-
-      // Listen for foreground messages
       onMessage(messagingInstance, (payload) => {
         console.log('📩 Foreground push received:', payload);
-        // Show an in-app notification
         const title = payload.notification?.title || 'DoToR';
         const body = payload.notification?.body || '';
-        if (title && body) {
-          // Use the website's toast system if available
-          if (typeof window.showToast === 'function') {
-            window.showToast('📩 ' + title + ': ' + body, 'success');
-          }
+        if (title && body && typeof window.showToast === 'function') {
+          window.showToast('📩 ' + title + ': ' + body, 'success');
         }
       });
-
       return token;
     }
-
     console.warn('⚠️ No FCM token returned');
     return null;
   } catch (err) {
@@ -102,36 +80,26 @@ export async function setupFCM() {
   }
 }
 
-/**
- * Store the FCM token for a customer in Firebase.
- * Stores at: users/{phone}/fcmToken
- */
 export async function saveFcmToken(phone, token) {
   if (!phone || !token) return;
   try {
     await set(ref(db, 'users/' + phone + '/fcmToken'), token);
     await set(ref(db, 'users/' + phone + '/fcmTokenUpdatedAt'), Date.now());
-    console.log('✅ FCM token saved for user:', phone);
   } catch (err) {
     console.error('❌ Failed to save FCM token:', err);
   }
 }
 
-/**
- * Remove the FCM token (e.g., on logout)
- */
 export async function removeFcmToken(phone) {
   if (!phone) return;
   try {
     await set(ref(db, 'users/' + phone + '/fcmToken'), null);
-    console.log('✅ FCM token removed for user:', phone);
   } catch (err) {
     console.error('❌ Failed to remove FCM token:', err);
   }
 }
 
-// ── Order fields matching the mobile app exactly ─────────────────────────
-// When booking, we create the same order structure as HomeScreen.js
+// ── Constants ──────────────────────────────────────────────────────────────
 const PHONE_BRANDS  = ['iPhone','Samsung','OnePlus','Redmi','Vivo','Oppo','Realme','Nokia'];
 const LAPTOP_BRANDS = ['Dell','HP','Lenovo','MacBook','Asus','Acer','MSI','Sony'];
 const TV_BRANDS = ['Samsung','LG','Sony','Panasonic','Toshiba','MI','OnePlus','TCL'];
@@ -152,7 +120,7 @@ const SERVICE_CATEGORIES = [
   { key: 'wifi',         icon: '🌐', label: 'Wi-Fi Router Setup',        hasDeviceFlow: false },
   { key: 'ro',           icon: '💧', label: 'RO Water Purifier Service', hasDeviceFlow: false },
   { key: 'inverter',     icon: '🔋', label: 'Inverter & UPS Service',    hasDeviceFlow: false },
-]
+];
 
 const SERVICE_BRANDS = {
   mobile: PHONE_BRANDS,
@@ -161,7 +129,7 @@ const SERVICE_BRANDS = {
   ac: AC_BRANDS,
   refrigerator: FRIDGE_BRANDS,
   washing: WM_BRANDS,
-}
+};
 
 const TIME_SLOTS = [
   '09:00 - 10:00', '10:00 - 11:00', '11:00 - 12:00', '12:00 - 13:00',
@@ -171,7 +139,252 @@ const TIME_SLOTS = [
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-// ── Create a new repair order (same format as mobile app HomeScreen.js) ───
+// ── SERVICE PRICING ─────────────────────────────────────────────────────────
+// Returns estimated price range for a given service category
+export function getServicePriceEstimate(serviceKey) {
+  const prices = {
+    mobile:       { min: 199,  max: 1499, label: 'Mobile Repair',          eta: '30-45 mins' },
+    laptop:       { min: 299,  max: 2499, label: 'Laptop Repair',          eta: '45-60 mins' },
+    tv:           { min: 299,  max: 1999, label: 'TV Repair',              eta: '45-60 mins' },
+    ac:           { min: 399,  max: 2999, label: 'AC Service',             eta: '45-60 mins' },
+    refrigerator: { min: 299,  max: 1999, label: 'Refrigerator Repair',    eta: '45-60 mins' },
+    washing:      { min: 299,  max: 1999, label: 'Washing Machine Repair', eta: '45-60 mins' },
+    electrician:  { min: 149,  max: 999,  label: 'Electrician',            eta: '30-45 mins' },
+    plumbing:     { min: 149,  max: 999,  label: 'Plumbing',               eta: '30-45 mins' },
+    cctv:         { min: 499,  max: 3999, label: 'CCTV',                   eta: '45-60 mins' },
+    wifi:         { min: 199,  max: 999,  label: 'Wi-Fi Setup',            eta: '30-45 mins' },
+    ro:           { min: 299,  max: 1499, label: 'RO Purifier',            eta: '45-60 mins' },
+    inverter:     { min: 299,  max: 1999, label: 'Inverter/UPS',           eta: '45-60 mins' },
+  };
+  return prices[serviceKey] || { min: 199, max: 999, label: 'Service', eta: '30-45 mins' };
+}
+
+// ── REFERRAL / REWARDS SYSTEM ──────────────────────────────────────────────
+export async function saveReferralCode(phone, referralCode) {
+  if (!phone || !referralCode) return;
+  try {
+    await set(ref(db, 'referrals/' + phone + '/myCode'), referralCode);
+    await set(ref(db, 'referrals/' + phone + '/createdAt'), Date.now());
+    console.log('✅ Referral code saved:', referralCode);
+  } catch (err) {
+    console.error('❌ Failed to save referral code:', err);
+  }
+}
+
+export async function applyReferralCode(phone, referredByCode) {
+  if (!phone || !referredByCode) return null;
+  try {
+    // Find who owns this referral code
+    const refsSnap = await get(ref(db, 'referrals'));
+    let referrerPhone = null;
+    if (refsSnap.exists()) {
+      refsSnap.forEach(child => {
+        const data = child.val();
+        if (data.myCode === referredByCode) {
+          referrerPhone = child.key;
+        }
+      });
+    }
+    if (!referrerPhone || referrerPhone === phone) return null;
+
+    // Save referral relationship
+    await set(ref(db, 'referrals/' + phone + '/referredBy'), referredByCode);
+    await set(ref(db, 'referrals/' + phone + '/referredByPhone'), referrerPhone);
+    await set(ref(db, 'referrals/' + phone + '/referredAt'), Date.now());
+
+    // Add rewards (₹50 off for both parties)
+    await set(ref(db, 'rewards/' + phone + '/discount'), 50);
+    await set(ref(db, 'rewards/' + phone + '/reason'), 'Signup via referral');
+    await set(ref(db, 'rewards/' + phone + '/updatedAt'), Date.now());
+
+    if (referrerPhone) {
+      // Get existing rewards for referrer
+      const rSnap = await get(ref(db, 'rewards/' + referrerPhone));
+      const existingDiscount = rSnap.exists() ? (rSnap.val().discount || 0) : 0;
+      await set(ref(db, 'rewards/' + referrerPhone + '/discount'), existingDiscount + 50);
+      await set(ref(db, 'rewards/' + referrerPhone + '/reason'), 'Referral bonus');
+      await set(ref(db, 'rewards/' + referrerPhone + '/updatedAt'), Date.now());
+    }
+
+    console.log('✅ Referral applied:', referredByCode);
+    return { discount: 50, referrerPhone };
+  } catch (err) {
+    console.error('❌ Failed to apply referral:', err);
+    return null;
+  }
+}
+
+export async function getRewards(phone) {
+  if (!phone) return { discount: 0 };
+  try {
+    const snap = await get(ref(db, 'rewards/' + phone));
+    return snap.exists() ? snap.val() : { discount: 0 };
+  } catch (err) {
+    return { discount: 0 };
+  }
+}
+
+export async function useReward(phone, amount) {
+  if (!phone || !amount) return false;
+  try {
+    const snap = await get(ref(db, 'rewards/' + phone));
+    if (!snap.exists()) return false;
+    const current = snap.val().discount || 0;
+    if (current < amount) return false;
+    await set(ref(db, 'rewards/' + phone + '/discount'), current - amount);
+    await set(ref(db, 'rewards/' + phone + '/lastUsed'), Date.now());
+    return true;
+  } catch (err) {
+    console.error('❌ Failed to use reward:', err);
+    return false;
+  }
+}
+
+// ── SUPPORT TICKET SYSTEM ─────────────────────────────────────────────────
+export async function createSupportTicket(customerPhone, orderId, subject, message) {
+  try {
+    const ticketRef = push(ref(db, 'supportTickets'));
+    const ticket = {
+      customerPhone,
+      orderId: orderId || null,
+      subject: subject || 'General Issue',
+      message: message || '',
+      status: 'open',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    await set(ticketRef, ticket);
+    console.log('✅ Support ticket created:', ticketRef.key);
+    return { ticketId: ticketRef.key, ...ticket };
+  } catch (err) {
+    console.error('❌ Failed to create support ticket:', err);
+    throw err;
+  }
+}
+
+export function listenSupportTickets(customerPhone, callback) {
+  const ticketsRef = ref(db, 'supportTickets');
+  const listener = onValue(ticketsRef, (snapshot) => {
+    if (!snapshot.exists()) { callback([]); return; }
+    const tickets = [];
+    snapshot.forEach(child => {
+      const val = child.val();
+      if (val.customerPhone === customerPhone) {
+        tickets.push({ id: child.key, ...val });
+      }
+    });
+    callback(tickets.reverse());
+  });
+  return () => off(ticketsRef, 'value', listener);
+}
+
+// ── COUNT TECHNICIANS AVAILABLE IN AREA ──────────────────────────────────
+export async function countTechsInPincode(pincode) {
+  if (!pincode || pincode.length < 4) return 0;
+  try {
+    let count = 0;
+    const usersSnap = await get(ref(db, 'techUsers'));
+    if (usersSnap.exists()) {
+      usersSnap.forEach(child => {
+        const data = child.val();
+        if (data.pincode && data.pincode.toString() === pincode.toString()) {
+          count++;
+        }
+      });
+    }
+    return count;
+  } catch (err) {
+    console.error('❌ Failed to count techs:', err);
+    return 0;
+  }
+}
+
+export async function countOnlineTechs() {
+  try {
+    const snap = await get(ref(db, 'techsOnline'));
+    return snap.exists() ? (snap.size || Object.keys(snap.val()).length) : 0;
+  } catch (err) {
+    return 0;
+  }
+}
+
+// ── AUTO-ASSIGN NEAREST TECHNICIAN ────────────────────────────────────────
+export async function autoAssignNearestTech(orderId, lat, lng, pincode) {
+  if (!orderId) return null;
+  try {
+    // Get all available techs
+    const techs = [];
+    const usersSnap = await get(ref(db, 'techUsers'));
+    if (usersSnap.exists()) {
+      usersSnap.forEach(child => {
+        const data = child.val();
+        techs.push({ phone: child.key, ...data });
+      });
+    }
+
+    if (techs.length === 0) {
+      console.log('⚠️ No technicians available for auto-assign');
+      return null;
+    }
+
+    // Score techs: prefer same pincode, then nearby
+    let scored = techs.map(t => {
+      let score = 0;
+      if (t.pincode && pincode && t.pincode.toString() === pincode.toString()) {
+        score += 100; // Same pincode = high priority
+      }
+      if (t.lat && t.lng && lat && lng) {
+        const dist = calcDistance(lat, lng, t.lat, t.lng);
+        score += Math.max(0, 50 - parseFloat(dist)); // Closer = more points
+        t._distance = parseFloat(dist);
+      }
+      return { ...t, score };
+    });
+
+    // Sort by score descending, then by distance ascending
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return (a._distance || 999) - (b._distance || 999);
+    });
+
+    const bestTech = scored[0];
+    if (!bestTech) return null;
+
+    // Assign the tech to the order
+    await update(ref(db, 'orders/' + orderId), {
+      techPhone: bestTech.phone,
+      techName: bestTech.name || 'Technician',
+      status: 'accepted',
+      assignedAt: Date.now(),
+      autoAssigned: true,
+    });
+
+    console.log('✅ Auto-assigned tech:', bestTech.phone, 'to order:', orderId);
+    return { techPhone: bestTech.phone, techName: bestTech.name };
+  } catch (err) {
+    console.error('❌ Auto-assign failed:', err);
+    return null;
+  }
+}
+
+// ── SCHEDULED BOOKING REMINDER ────────────────────────────────────────────
+export async function scheduleReminder(orderId, appointmentTime, phone) {
+  if (!orderId || !appointmentTime) return;
+  try {
+    await set(ref(db, 'reminders/' + orderId), {
+      orderId,
+      phone,
+      appointmentTime,
+      createdAt: Date.now(),
+      sent: false,
+    });
+    console.log('✅ Reminder scheduled for order:', orderId);
+  } catch (err) {
+    console.error('❌ Failed to schedule reminder:', err);
+  }
+}
+
+// ── CREATE ORDER ──────────────────────────────────────────────────────────
 export async function createOrder(orderData) {
   try {
     const orderRef = push(ref(db, 'orders'));
@@ -203,10 +416,28 @@ export async function createOrder(orderData) {
         timeSlot: orderData.timeSlot,
         reminderSent: false,
       }),
+      // Multi-service support
+      multiServices: orderData.multiServices || null,
+      // Rewards
+      discountApplied: orderData.discountApplied || 0,
+      referralCode: orderData.referralCode || null,
     };
 
     await set(ref(db, 'orders/' + orderId), order);
     console.log('✅ Order created:', orderId);
+
+    // Auto-assign if GPS coords available
+    if (orderData.lat && orderData.lng) {
+      setTimeout(() => {
+        autoAssignNearestTech(orderId, orderData.lat, orderData.lng, orderData.pincode);
+      }, 100);
+    }
+
+    // Schedule reminder if appointment
+    if (orderData.isAppointment && orderData.appointmentTime) {
+      scheduleReminder(orderId, orderData.appointmentTime, orderData.customerPhone);
+    }
+
     return { orderId, order };
   } catch (err) {
     console.error('❌ Failed to create order:', err);
@@ -214,23 +445,18 @@ export async function createOrder(orderData) {
   }
 }
 
-// ── Get all orders (with optional filter) ────────────────────────────────
+// ── ORDER LISTENERS ───────────────────────────────────────────────────────
 export function listenOrders(callback) {
   const ordersRef = ref(db, 'orders');
   const listener = onValue(ordersRef, (snapshot) => {
-    if (!snapshot.exists()) {
-      callback([]);
-      return;
-    }
+    if (!snapshot.exists()) { callback([]); return; }
     const orders = [];
     snapshot.forEach(child => {
       const val = child.val();
       const order = { id: child.key, ...val };
-      // Normalize images (Firebase stores arrays as objects)
       if (order.images && !Array.isArray(order.images)) {
         order.images = Object.values(order.images);
       }
-      // Normalize videos (Firebase stores arrays as objects)
       if (order.videos && !Array.isArray(order.videos)) {
         order.videos = Object.values(order.videos);
       }
@@ -241,14 +467,10 @@ export function listenOrders(callback) {
   return () => off(ordersRef, 'value', listener);
 }
 
-// ── Get orders for a specific customer ───────────────────────────────────
 export function listenCustomerOrders(phone, callback) {
   const ordersRef = ref(db, 'orders');
   const listener = onValue(ordersRef, (snapshot) => {
-    if (!snapshot.exists()) {
-      callback([]);
-      return;
-    }
+    if (!snapshot.exists()) { callback([]); return; }
     const orders = [];
     snapshot.forEach(child => {
       const val = child.val();
@@ -268,14 +490,10 @@ export function listenCustomerOrders(phone, callback) {
   return () => off(ordersRef, 'value', listener);
 }
 
-// ── Listen to a single order (for tracking) ──────────────────────────────
 export function listenOrder(orderId, callback) {
   const orderRef = ref(db, 'orders/' + orderId);
   const listener = onValue(orderRef, (snapshot) => {
-    if (!snapshot.exists()) {
-      callback(null);
-      return;
-    }
+    if (!snapshot.exists()) { callback(null); return; }
     const val = snapshot.val();
     const order = { id: orderId, ...val };
     if (order.images && !Array.isArray(order.images)) {
@@ -289,7 +507,6 @@ export function listenOrder(orderId, callback) {
   return () => off(orderRef, 'value', listener);
 }
 
-// ── Update order status ──────────────────────────────────────────────────
 export async function updateOrderStatus(orderId, status, extraData = {}) {
   try {
     await update(ref(db, 'orders/' + orderId), { status, ...extraData });
@@ -301,9 +518,7 @@ export async function updateOrderStatus(orderId, status, extraData = {}) {
   }
 }
 
-// ── Listen to technician location (for customer tracking) ────────────────
-// ⚠️  Uses a GLOBAL path — can be overwritten by other active techs.
-// Prefer listenTechLocationByPhone() for per-tech accuracy.
+// ── TECHNICIAN LOCATION ───────────────────────────────────────────────────
 export function listenTechLocation(callback) {
   const locRef = ref(db, 'techLocation');
   const listener = onValue(locRef, (snapshot) => {
@@ -312,16 +527,11 @@ export function listenTechLocation(callback) {
   return () => off(locRef, 'value', listener);
 }
 
-// ── Listen to a SPECIFIC technician's location (per-order tracking) ────
-// Reads from orders/{orderId}/techLocation which the mobile app updates every ~4s
-// when a technician has accepted the order.
-// This is the same path used by the mobile app's TrackingScreen.js and TechHomeScreen.js.
 export function listenTechLocationByPhone(techPhone, callback, orderId) {
   if (!techPhone || !orderId) {
     callback(null);
     return () => {};
   }
-  // Mobile app writes tech location to orders/{orderId}/techLocation — use that path
   const locRef = ref(db, 'orders/' + orderId + '/techLocation');
   const listener = onValue(locRef, (snapshot) => {
     if (snapshot.exists()) {
@@ -334,9 +544,8 @@ export function listenTechLocationByPhone(techPhone, callback, orderId) {
   return () => off(locRef, 'value', listener);
 }
 
-// ── Get all registered technicians ───────────────────────────────────────
+// ── TECHNICIAN DATA ───────────────────────────────────────────────────────
 export function listenTechnicians(callback) {
-  // Try techUsers first, then techs
   const load = async () => {
     const all = [];
     const usersSnap = await get(ref(db, 'techUsers'));
@@ -357,20 +566,15 @@ export function listenTechnicians(callback) {
     callback(all);
   };
   load();
-  // Also listen for real-time updates
   const unsub1 = onValue(ref(db, 'techUsers'), () => load());
   const unsub2 = onValue(ref(db, 'techs'), () => load());
   return () => { unsub1(); unsub2(); };
 }
 
-// ── Listen to techsOnline (currently active techs with GPS) ─────────────
 export function listenTechsOnline(callback) {
   const ref_ = ref(db, 'techsOnline');
   const listener = onValue(ref_, (snapshot) => {
-    if (!snapshot.exists()) {
-      callback([]);
-      return;
-    }
+    if (!snapshot.exists()) { callback([]); return; }
     const techs = [];
     snapshot.forEach(child => {
       techs.push({ phone: child.key, ...child.val() });
@@ -380,7 +584,7 @@ export function listenTechsOnline(callback) {
   return () => off(ref_, 'value', listener);
 }
 
-// ── Get order counts (for admin dashboard) ───────────────────────────────
+// ── STATS ─────────────────────────────────────────────────────────────────
 export async function getOrderStats() {
   const snap = await get(ref(db, 'orders'));
   if (!snap.exists()) {
@@ -398,7 +602,6 @@ export async function getOrderStats() {
   return { total, pending, accepted, completed, rejected };
 }
 
-// ── Get technician count ─────────────────────────────────────────────────
 export async function getTechCount() {
   let count = 0;
   const usersSnap = await get(ref(db, 'techUsers'));
@@ -413,7 +616,7 @@ export async function getTechCount() {
   return count;
 }
 
-// ── Distance calculation (same as mobile app) ────────────────────────────
+// ── DISTANCE ──────────────────────────────────────────────────────────────
 export function calcDistance(lat1, lng1, lat2, lng2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -422,14 +625,10 @@ export function calcDistance(lat1, lng1, lat2, lng2) {
   return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))).toFixed(1);
 }
 
-// ── Get technician rating from past reviews ────────────────────────────────
-// Returns { average, count, totalRating } or null if no ratings found
-// Reads from techRatings/{techPhone} path, with fallback to computing from reviews
+// ── RATINGS & REVIEWS ─────────────────────────────────────────────────────
 export async function getTechRating(techPhone) {
   if (!techPhone) return null;
-
   try {
-    // First try dedicated ratings path (pre-computed averages)
     const ratingSnap = await get(ref(db, 'techRatings/' + techPhone));
     if (ratingSnap.exists()) {
       const data = ratingSnap.val();
@@ -439,9 +638,6 @@ export async function getTechRating(techPhone) {
         totalRating: data.totalRating || 0,
       };
     }
-
-    // Fallback: scan reviews and try to match by tech phone
-    // Handles both +91 and non-+91 formats in both directions
     const cleanPhone = techPhone.replace('+91', '').replace(/^0+/, '');
     const reviewsSnap = await get(ref(db, 'reviews'));
     if (reviewsSnap.exists()) {
@@ -457,14 +653,9 @@ export async function getTechRating(techPhone) {
         }
       });
       if (count > 0) {
-        return {
-          average: Math.round((totalRating / count) * 10) / 10,
-          count,
-          totalRating,
-        };
+        return { average: Math.round((totalRating / count) * 10) / 10, count, totalRating };
       }
     }
-
     return null;
   } catch (err) {
     console.error('❌ Failed to get tech rating:', err);
@@ -472,57 +663,32 @@ export async function getTechRating(techPhone) {
   }
 }
 
-// ── Save a review for a technician (from website) ─────────────────────────
 export async function submitTechReview(techPhone, techName, customerName, rating, comment = '', orderId = null, customerPhone = '') {
   try {
     const reviewId = Date.now().toString();
     await set(ref(db, 'reviews/' + reviewId), {
-      techPhone,
-      techName,
-      customerName,
-      customerPhone,
-      orderId,
-      rating,
-      comment,
-      time: new Date().toLocaleString(),
-      timestamp: Date.now(),
+      techPhone, techName, customerName, customerPhone, orderId, rating, comment,
+      time: new Date().toLocaleString(), timestamp: Date.now(),
     });
-
-    // If orderId is provided, mark the order as reviewed (non-critical — log only)
     if (orderId) {
-      try {
-        await update(ref(db, 'orders/' + orderId), { reviewed: true });
-        console.log('✅ Order marked as reviewed:', orderId);
-      } catch (updateErr) {
-        console.error('⚠️ Failed to mark order reviewed (review saved):', updateErr);
-      }
+      try { await update(ref(db, 'orders/' + orderId), { reviewed: true }); } catch(e) {}
     }
-
-    // Also update the aggregated ratings path (non-critical — log only)
     if (techPhone) {
       try {
         const existingSnap = await get(ref(db, 'techRatings/' + techPhone));
         let totalRating = rating;
         let count = 1;
-
         if (existingSnap.exists()) {
           const existing = existingSnap.val();
           totalRating = (existing.totalRating || 0) + rating;
           count = (existing.count || 0) + 1;
         }
-
         await set(ref(db, 'techRatings/' + techPhone), {
-          average: Math.round((totalRating / count) * 10) / 10,
-          count,
-          totalRating,
+          average: Math.round((totalRating / count) * 10) / 10, count, totalRating,
           lastUpdated: Date.now(),
         });
-      } catch (ratingErr) {
-        console.error('⚠️ Failed to update tech ratings (review saved):', ratingErr);
-      }
+      } catch(e) {}
     }
-
-    console.log('✅ Review saved for tech:', techPhone);
     return true;
   } catch (err) {
     console.error('❌ Failed to save review:', err);
@@ -530,13 +696,11 @@ export async function submitTechReview(techPhone, techName, customerName, rating
   }
 }
 
-// ── Get all reviews for a technician ───────────────────────────────────────
 export async function getTechReviews(techPhone) {
   if (!techPhone) return [];
   try {
     const reviewsSnap = await get(ref(db, 'reviews'));
     if (!reviewsSnap.exists()) return [];
-
     const cleanPhone = techPhone.replace('+91', '').replace(/^0+/, '');
     const reviews = [];
     reviewsSnap.forEach(child => {
@@ -549,40 +713,24 @@ export async function getTechReviews(techPhone) {
     });
     return reviews.reverse();
   } catch (err) {
-    console.error('❌ Failed to get tech reviews:', err);
     return [];
   }
 }
 
-// ── Get technician profile (photo, experience, verification status) ───────
-// Reads from techUsers/{techPhone} which stores: name, phone, location, pincode
-// Additionally checks for verification data in dedicated verification paths
+// ── TECH PROFILE ──────────────────────────────────────────────────────────
 export async function getTechProfile(techPhone) {
   if (!techPhone) return null;
-
   try {
     const cleanPhone = techPhone.replace('+91', '').replace(/^0+/, '');
-
-    // Primary: techUsers path
     let userSnap = await get(ref(db, 'techUsers/' + cleanPhone));
     if (!userSnap.exists()) {
       userSnap = await get(ref(db, 'techs/' + cleanPhone));
     }
-
     const profile = {
-      name: 'Technician',
-      phone: cleanPhone,
-      location: '',
-      pincode: '',
-      experience: '',
-      skills: [],
-      photo: null,
-      aadharVerified: false,
-      certificateUploaded: false,
-      verifiedBadge: false,
-      memberSince: null,
+      name: 'Technician', phone: cleanPhone, location: '', pincode: '', experience: '',
+      skills: [], photo: null, aadharVerified: false, certificateUploaded: false,
+      verifiedBadge: false, memberSince: null,
     };
-
     if (userSnap.exists()) {
       const data = userSnap.val();
       profile.name = data.name || 'Technician';
@@ -592,49 +740,28 @@ export async function getTechProfile(techPhone) {
       profile.skills = data.skills || data.selSkills || [];
       profile.photo = data.photo || null;
     }
-
-    // Check for Aadhar verification status (non-critical — errors don't block profile)
     try {
       const aadharSnap = await get(ref(db, 'techVerification/' + cleanPhone + '/aadhar'));
-      if (aadharSnap.exists()) {
-        profile.aadharVerified = aadharSnap.val().verified === true;
-      }
-    } catch (_) {}
-
-    // Check for certificate upload (non-critical)
+      if (aadharSnap.exists()) profile.aadharVerified = aadharSnap.val().verified === true;
+    } catch(_) {}
     try {
       const certSnap = await get(ref(db, 'techVerification/' + cleanPhone + '/certificate'));
-      if (certSnap.exists()) {
-        profile.certificateUploaded = certSnap.val().uploaded === true;
-      }
-    } catch (_) {}
-
-    // Check for verified badge (admin-approved) (non-critical)
+      if (certSnap.exists()) profile.certificateUploaded = certSnap.val().uploaded === true;
+    } catch(_) {}
     try {
       const badgeSnap = await get(ref(db, 'techVerification/' + cleanPhone + '/verifiedBadge'));
-      if (badgeSnap.exists()) {
-        profile.verifiedBadge = badgeSnap.val() === true;
-      }
-    } catch (_) {}
-
-    // Check member since (non-critical)
+      if (badgeSnap.exists()) profile.verifiedBadge = badgeSnap.val() === true;
+    } catch(_) {}
     try {
       const memberSnap = await get(ref(db, 'techVerification/' + cleanPhone + '/memberSince'));
-      if (memberSnap.exists()) {
-        profile.memberSince = memberSnap.val();
-      }
-    } catch (_) {}
-
-    // If Aadhar is stored in legacy format (AsyncStorage-only), check techVerification
+      if (memberSnap.exists()) profile.memberSince = memberSnap.val();
+    } catch(_) {}
     if (!profile.aadharVerified) {
       try {
         const legacySnap = await get(ref(db, 'techUsers/' + cleanPhone + '/aadharVerified'));
-        if (legacySnap.exists()) {
-          profile.aadharVerified = legacySnap.val() === true;
-        }
-      } catch (_) {}
+        if (legacySnap.exists()) profile.aadharVerified = legacySnap.val() === true;
+      } catch(_) {}
     }
-
     return profile;
   } catch (err) {
     console.error('❌ Failed to get tech profile:', err);
@@ -642,22 +769,14 @@ export async function getTechProfile(techPhone) {
   }
 }
 
-// ── Listen to technician photo in real-time ──────────────────────────────
-// Uses onValue so the photo updates immediately when the tech changes it
-// Returns an unsubscribe function for cleanup
 export function listenTechPhoto(techPhone, callback) {
-  if (!techPhone) {
-    callback(null);
-    return () => {};
-  }
+  if (!techPhone) { callback(null); return () => {}; }
   const cleanPhone = techPhone.replace('+91', '').replace(/^0+/, '');
   const photoRef = ref(db, 'techUsers/' + cleanPhone + '/photo');
   const listener = onValue(photoRef, (snapshot) => {
     if (snapshot.exists() && typeof snapshot.val() === 'string' && snapshot.val().startsWith('http')) {
       callback(snapshot.val());
-    } else {
-      callback(null);
-    }
+    } else { callback(null); }
   }, (err) => {
     console.log('techPhoto listener error:', err.message);
     callback(null);
@@ -665,16 +784,10 @@ export function listenTechPhoto(techPhone, callback) {
   return () => off(photoRef, 'value', listener);
 }
 
-// ── CUSTOMER PROFILE MANAGEMENT ────────────────────────────────────────────
+// ── USER PROFILE ──────────────────────────────────────────────────────────
 export async function saveUserProfile(phone, data) {
   try {
-    await set(ref(db, 'users/' + phone), {
-      ...data,
-      phone,
-      updatedAt: Date.now(),
-      createdAt: Date.now(),
-    });
-    console.log('✅ User profile saved:', phone);
+    await set(ref(db, 'users/' + phone), { ...data, phone, updatedAt: Date.now(), createdAt: Date.now() });
     return true;
   } catch (err) {
     console.error('❌ Failed to save user profile:', err);
@@ -687,14 +800,11 @@ export async function getUserProfile(phone) {
     const snap = await get(ref(db, 'users/' + phone));
     return snap.exists() ? snap.val() : null;
   } catch (err) {
-    console.error('❌ Failed to get user profile:', err);
     return null;
   }
 }
 
 // ── CHAT SYSTEM ─────────────────────────────────────────────────────────────
-// Messages stored at chats/{orderId}/messages/{messageId}
-// Metadata stored at chats/{orderId}/metadata
 export async function sendMessage(orderId, messageData) {
   try {
     const msgRef = push(ref(db, 'chats/' + orderId + '/messages'));
@@ -702,18 +812,15 @@ export async function sendMessage(orderId, messageData) {
       ...messageData,
       timestamp: Date.now(),
       read: false,
+      readAt: null,
     };
     await set(msgRef, message);
-
-    // Update metadata
     await update(ref(db, 'chats/' + orderId + '/metadata'), {
       lastMessage: messageData.text || '',
       lastSender: messageData.senderRole || messageData.sender || '',
       lastTime: Date.now(),
       unread: true,
     });
-
-    console.log('✅ Message sent:', msgRef.key);
     return { messageId: msgRef.key };
   } catch (err) {
     console.error('❌ Failed to send message:', err);
@@ -724,10 +831,7 @@ export async function sendMessage(orderId, messageData) {
 export function listenMessages(orderId, callback) {
   const messagesRef = ref(db, 'chats/' + orderId + '/messages');
   const listener = onValue(messagesRef, (snapshot) => {
-    if (!snapshot.exists()) {
-      callback([]);
-      return;
-    }
+    if (!snapshot.exists()) { callback([]); return; }
     const messages = [];
     snapshot.forEach(child => {
       messages.push({ id: child.key, ...child.val() });
@@ -745,32 +849,47 @@ export function listenChatMetadata(orderId, callback) {
   return () => off(metaRef, 'value', listener);
 }
 
-// ── AADHAR / DIGILOCKER VERIFICATION ────────────────────────────────────────
+// Mark messages as read
+export async function markChatRead(orderId, role) {
+  if (!orderId) return;
+  try {
+    const msgsSnap = await get(ref(db, 'chats/' + orderId + '/messages'));
+    if (msgsSnap.exists()) {
+      const updates = {};
+      msgsSnap.forEach(child => {
+        const msg = child.val();
+        if (!msg.read && msg.senderRole !== role) {
+          updates['chats/' + orderId + '/messages/' + child.key + '/read'] = true;
+          updates['chats/' + orderId + '/messages/' + child.key + '/readAt'] = Date.now();
+        }
+      });
+      if (Object.keys(updates).length > 0) {
+        await update(ref(db), updates);
+      }
+    }
+    // Clear unread metadata
+    await update(ref(db, 'chats/' + orderId + '/metadata'), { unread: false });
+  } catch (err) {
+    console.error('❌ Failed to mark chat read:', err);
+  }
+}
+
+// ── AADHAR / DIGILOCKER ──────────────────────────────────────────────────
 export async function saveAadharVerification(phone, data) {
   try {
     await set(ref(db, 'users/' + phone + '/aadhar'), {
-      verified: true,
-      name: data.name || '',
-      lastFourDigits: data.lastFourDigits || '',
-      verifiedAt: Date.now(),
-      ...data,
+      verified: true, name: data.name || '', lastFourDigits: data.lastFourDigits || '',
+      verifiedAt: Date.now(), ...data,
     });
-    console.log('✅ Aadhar verification saved for:', phone);
     return true;
-  } catch (err) {
-    console.error('❌ Failed to save Aadhar verification:', err);
-    throw err;
-  }
+  } catch (err) { throw err; }
 }
 
 export async function getAadharStatus(phone) {
   try {
     const snap = await get(ref(db, 'users/' + phone + '/aadhar'));
     return snap.exists() ? snap.val() : null;
-  } catch (err) {
-    console.error('❌ Failed to get Aadhar status:', err);
-    return null;
-  }
+  } catch (err) { return null; }
 }
 
 export {
@@ -781,6 +900,9 @@ export {
   update,
   onValue,
   get,
+  query,
+  orderByChild,
+  equalTo,
   PHONE_BRANDS,
   LAPTOP_BRANDS,
   TV_BRANDS,

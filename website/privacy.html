@@ -87,6 +87,13 @@
       }
     }
   </style>
+
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#FF6B00">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="DoToR">
+  <link rel="apple-touch-icon" sizes="192x192" href="/favicon-192x192.png">
 </head>
 <body>
   <nav class="nav">
@@ -265,5 +272,6 @@
     © 2026 DoToR - Doorstep Repair Service &nbsp;|&nbsp;
     <a href="/privacy.html" style="color:var(--primary);font-weight:600;text-decoration:none;">Privacy Policy</a>
   </div>
+<script>if('serviceWorker' in navigator) { navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(function(e) { console.log('SW reg failed:', e); }); }</script>
 </body>
 </html>
