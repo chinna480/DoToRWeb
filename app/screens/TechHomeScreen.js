@@ -241,12 +241,14 @@ export default function TechHomeScreen() {
 
     // ── Technician ~1 km away ──
     if (d <= 1 && !sentNearby.current) {
-      sentNearby.current = true        notifyCustomerTechNearby(custPhone, etaMins, custPhone)
+      sentNearby.current = true;
+      notifyCustomerTechNearby(custPhone, etaMins, custPhone)
     }
 
     // ── Technician arrived at doorstep (≤20 m / 0.02 km) ──
     if (d <= 0.02 && !sentArrived.current) {
-      sentArrived.current = true        notifyCustomerTechArrived(custPhone, custPhone)
+      sentArrived.current = true;
+      notifyCustomerTechArrived(custPhone, custPhone)
     }
   }, [custLat, myLat, ongoingJob])
 
