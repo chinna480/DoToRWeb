@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>DoToR - Door-to-Door Repair Service</title>
+  <meta name="description" content="We are the Doctor of your Device - Door-to-Door Repair Service" />
+  <meta name="theme-color" content="#FF6B00" />
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+
+  <!-- Leaflet for Maps -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- App Styles -->
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- App Scripts -->
+  <script src="js/firebase-config.js"></script>
+  <script src="js/utils/distance.js"></script>
+  <script src="js/app.js"></script>
+
+  <!-- Screen Scripts (must load after app.js for Router) -->
+  <script src="js/screens/splash.js"></script>
+  <script src="js/screens/role.js"></script>
+  <script src="js/screens/customer-login.js"></script>
+  <script src="js/screens/tech-login.js"></script>
+  <script src="js/screens/home.js"></script>
+  <script src="js/screens/tracking.js"></script>
+  <script src="js/screens/tech-home.js"></script>
+  <script src="js/screens/chat.js"></script>
+  <script src="js/screens/payment.js"></script>
+  <script src="js/screens/review.js"></script>
+  <script src="js/screens/schedule.js"></script>
+  <script src="js/screens/customer-profile.js"></script>
+  <script src="js/screens/tech-profile.js"></script>
+
+</head>
+<body>
+  <!-- Download App Banner -->
+  <div id="downloadBanner" class="download-banner">
+    <div class="download-banner-content" onclick="window.downloadApp()">
+      <span class="download-banner-icon">📱</span>
+      <div class="download-banner-text">
+        <div class="download-banner-title">Get the DoToR App</div>
+        <div class="download-banner-sub">Faster booking &amp; live tracking</div>
+      </div>
+      <button class="download-banner-btn" onclick="event.stopPropagation();window.downloadApp()">Download</button>
+    </div>
+    <button class="download-banner-close" onclick="event.stopPropagation();window.dismissDownloadBanner()" aria-label="Close">✕</button>
+  </div>
+  <script>
+    // Check dismissed state immediately after banner is in DOM
+    if (Store && Store.get('dismissedDownloadBanner', false)) {
+      document.getElementById('downloadBanner').classList.add('hidden');
+    }
+  </script>
+  <div id="app"></div>
+
+  <!-- Bottom Navigation Bar -->
+  <nav id="bottomNav" class="bottom-nav" style="display:none">
+    <div class="nav-items" id="navItems"></div>
+  </nav>
+
+  <!-- Initialize the app -->
+  <script>
+    Router.navigate('splash').catch(function(e) {
+      console.error('App init error:', e);
+      document.getElementById('app').innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif"><h2>Something went wrong</h2><p style="color:#888">' + e.message + '</p><button onclick="location.reload()" style="padding:10px 30px;background:#FF6B00;color:white;border:none;border-radius:10px;margin-top:20px;cursor:pointer">Retry</button></div>';
+    });
+  </script>
+</body>
+</html>

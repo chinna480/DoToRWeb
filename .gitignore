@@ -1,6 +1,6 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-# dependencies
+# Node modules
 node_modules/
 
 # Expo
@@ -34,9 +34,20 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# Firebase
+firebase-debug.log
+.firebase/
+
 # local env files
 .env
 .env*.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # stray tarballs
 *.tgz
@@ -53,6 +64,9 @@ app-example
 nul
 null
 exclude.txt
+
+# OS files
+Thumbs.db
 
 # Firebase cloud functions (not part of the app)
 functions/
