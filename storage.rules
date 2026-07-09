@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Firebase Storage Rules — DoToR App
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// NOTE: This app uses Cloudinary for all image uploads (see utils/uploadImage.js).
+// Firebase Storage is NOT used by the app. These rules are set to deny all
+// as a security best practice. If you ever switch back to Firebase Storage,
+// update these rules accordingly.
+//
+// ═══════════════════════════════════════════════════════════════════════════
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Deny all access — app uses Cloudinary for image uploads
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
