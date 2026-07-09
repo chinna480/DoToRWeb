@@ -276,23 +276,6 @@ const NavBar = {
   }
 };
 
-// ─── Dark Mode Toggle ────────────────────────────────────
-function toggleDarkMode() {
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const newTheme = isDark ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', newTheme);
-  Store.set('theme', newTheme);
-  return newTheme === 'dark';
-}
-
-function initTheme() {
-  const theme = Store.get('theme', 'light');
-  document.documentElement.setAttribute('data-theme', theme);
-}
-
-// Initialize theme early
-initTheme();
-
 // ─── Download App Banner ─────────────────────────────────────
 window.downloadApp = () => {
   // Direct download of the APK hosted on this site
