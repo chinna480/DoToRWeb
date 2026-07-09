@@ -30,18 +30,17 @@ Router.register('home', {
         <div class="screen">
           <div class="header">
             <div>
-              <div class="home-greeting">Good Morning! 👋</div>
+              <div class="home-greeting" id="greeting">${getGreeting()}</div>
               <div class="home-name">${name}</div>
               <div class="home-loc">📍 ${loc}</div>
             </div>
             <div class="home-avatar" onclick="Router.navigate('customer-profile')">
               <span style="font-size:24px">👤</span>
             </div>
-          </div>
-          <div class="search-bar">
-            <span style="font-size:16px">🔍</span>
-            <input class="form-input" placeholder="Search repair service..." />
-          </div>
+          </div>            <div class="search-bar">
+              <span style="font-size:16px">🔍</span>
+              <input class="form-input" id="searchInput" placeholder="Search devices, brands or repairs..." oninput="window.filterHome(event)" />
+            </div>
           <div class="banner" onclick="Router.navigate('schedule')">
             <div>
               <div class="banner-text">🔧 Expert Repair at Your Doorstep!</div>
@@ -146,7 +145,27 @@ Router.register('home', {
           } catch (e) { showAlert('Error', 'Booking failed! Try again.'); }
         };
 
-        return () => { delete window.selectDevice; delete window.selectBrand; delete window.bookRepair; };
+        // Search filtering
+        window.filterHome = (e) => {
+          const q = e.target.value.toLowerCase().trim();
+          // Filter device cards
+          document.querySelectorAll('.device-card').forEach(c => {
+            const name = c.querySelector('.device-name')?.textContent?.toLowerCase() || '';
+            c.style.display = (!q || name.includes(q)) ? '' : 'none';
+          });
+          // Filter brand cards
+          document.querySelectorAll('.brand-card').forEach(c => {
+            const name = c.querySelector('.device-name')?.textContent?.toLowerCase() || '';
+            c.style.display = (!q || name.includes(q)) ? '' : 'none';
+          });
+          // Filter repair items
+          document.querySelectorAll('.repair-item').forEach(c => {
+            const text = c.querySelector('.repair-text')?.textContent?.toLowerCase() || '';
+            c.style.display = (!q || text.includes(q)) ? '' : 'none';
+          });
+        };
+
+        return () => { delete window.selectDevice; delete window.selectBrand; delete window.bookRepair; delete window.filterHome; };
       }
     };
   }

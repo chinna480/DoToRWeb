@@ -29,11 +29,12 @@ Router.register('customer-profile', {
       { icon: '⚙️', label: 'Settings', sub: null },
       { icon: '📄', label: 'Privacy Policy', sub: null },
       { icon: '📜', label: 'Terms of Service', sub: null },
+      { icon: '🌙', label: 'Dark Mode', sub: null, toggle: true, id: 'darkMode' },
       { icon: '🚪', label: 'Logout', sub: null, danger: true },
     ];
 
     const menuHtml = MENU.map((item, i) => `
-      <div class="menu-item" onclick="${item.toggle ? 'event.preventDefault()' : item.danger ? 'window.custLogout()' : 'window.custMenuAction(\'' + item.label + '\')'}">
+      <div class="menu-item" onclick="${item.toggle && item.id !== 'darkMode' ? 'event.preventDefault()' : item.danger ? 'window.custLogout()' : 'window.custMenuAction(\'' + item.label + '\')'}">
         <div class="menu-left">
           <div class="menu-icon-box ${item.danger ? 'menu-icon-danger' : ''}">
             <span class="menu-icon-emoji">${item.icon}</span>
@@ -44,7 +45,7 @@ Router.register('customer-profile', {
           </div>
         </div>
         ${item.toggle
-          ? `<button class="toggle on" onclick="event.stopPropagation();this.classList.toggle('on')"><div class="toggle-knob"></div></button>`
+          ? `<button class="toggle on" data-id="${item.id || ''}" onclick="event.stopPropagation();${item.id === 'darkMode' ? 'window.toggleDarkMode();' : ''}this.classList.toggle('on')"><div class="toggle-knob"></div></button>`
           : `<span class="menu-chevron ${item.danger ? 'menu-chevron-danger' : ''}">›</span>`
         }
       </div>
@@ -143,9 +144,19 @@ Router.register('customer-profile', {
             'Settings': () => showAlert('Settings', 'Coming Soon!'),
             'Privacy Policy': () => showAlert('Privacy', 'Your data is secure!'),
             'Terms of Service': () => showAlert('Terms', 'Use DoToR responsibly!'),
+            'Dark Mode': () => {
+              const isNowDark = toggleDarkMode();
+              const toggle = document.querySelector('.toggle[data-id="darkMode"]');
+              if (toggle) toggle.classList.toggle('on', isNowDark);
+            },
           };
           if (actions[label]) actions[label]();
         };
+
+        // Initialize dark mode toggle state
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const darkToggle = document.querySelector('.toggle[data-id="darkMode"]');
+        if (darkToggle) darkToggle.classList.toggle('on', isDark);
 
         window.custLogout = () => {
           showAlert('Logout?', 'Are you sure you want to logout?', [

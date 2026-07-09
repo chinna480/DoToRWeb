@@ -18,23 +18,52 @@
   --shadow: 0 2px 8px rgba(0,0,0,0.08);
   --radius: 14px;
   --radius-sm: 12px;
+  --bg: var(--light-gray);
+  --card-bg: var(--white);
+  --text: #111;
+  --chat-bg: #f0f0f0;
+  --bubble-other: var(--white);
+  --input-bg: var(--light-gray);
+  --nav-border: #e8e8e8;
+}
+
+[data-theme="dark"] {
+  --primary: #FF8C38;
+  --primary-light: #2a1a0e;
+  --dark: #e0e0e0;
+  --success: #4caf50;
+  --danger: #ef5350;
+  --gray: #999;
+  --light-gray: #1a1a1a;
+  --border: #333;
+  --white: #1e1e1e;
+  --shadow: 0 2px 12px rgba(0,0,0,0.4);
+  --bg: #121212;
+  --card-bg: #1e1e1e;
+  --text: #e0e0e0;
+  --chat-bg: #121212;
+  --bubble-other: #2a2a2a;
+  --input-bg: #2a2a2a;
+  --nav-border: #2a2a2a;
 }
 
 html, body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--light-gray);
-  color: #111;
+  background: var(--bg);
+  color: var(--text);
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  transition: background 0.3s, color 0.3s;
 }
 
 #app {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
-  background: var(--light-gray);
+  background: var(--bg);
   position: relative;
+  transition: background 0.3s;
 }
 
 /* ─── Screen Transitions ─── */
@@ -108,11 +137,12 @@ html, body {
 
 /* ─── Cards ─── */
 .card {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 16px;
   padding: 18px;
   margin-bottom: 12px;
   box-shadow: var(--shadow);
+  transition: background 0.3s, box-shadow 0.3s;
 }
 .card-title {
   font-size: 11px;
@@ -141,7 +171,8 @@ html, body {
   border: 2px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
-  background: var(--white);
+  background: var(--card-bg);
+  transition: border-color 0.2s, background 0.3s;
 }
 .form-field:focus-within { border-color: var(--primary); }
 .form-icon { font-size: 18px; }
@@ -168,6 +199,8 @@ html, body {
   resize: vertical;
   font-family: inherit;
   outline: none;
+  background: var(--card-bg);
+  transition: border-color 0.2s, background 0.3s, color 0.3s;
 }
 .form-textarea:focus-within { border-color: var(--primary); }
 .form-textarea::placeholder { color: #aaa; }
@@ -179,8 +212,9 @@ html, body {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: var(--white);
+  background: var(--card-bg);
   padding: 30px;
+  transition: background 0.3s;
 }
 .loading-spinner {
   width: 40px;
@@ -199,8 +233,9 @@ html, body {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: var(--white);
+  background: var(--card-bg);
   padding: 30px;
+  transition: background 0.3s;
 }
 .splash-logo {
   width: 120px;
@@ -264,8 +299,9 @@ html, body {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: var(--white);
+  background: var(--card-bg);
   padding: 30px;
+  transition: background 0.3s;
 }
 .role-brand { font-size: 40px; color: var(--primary); font-weight: 800; }
 .role-brand-sub { font-size: 12px; color: var(--dark); letter-spacing: 2px; font-weight: 700; margin-top: 4px; }
@@ -401,11 +437,12 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--white);
+  background: var(--card-bg);
   padding: 12px 15px;
   border-radius: var(--radius);
   margin: 15px;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 
 /* ─── Banner ─── */
@@ -438,14 +475,14 @@ html, body {
 .device-grid { display: flex; gap: 12px; margin: 0 15px; }
 .device-card {
   flex: 1;
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 16px;
   padding: 22px;
   text-align: center;
   border: 2px solid transparent;
   box-shadow: var(--shadow);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s, background 0.3s;
 }
 .device-card:active { transform: scale(0.97); }
 .device-card.active { border-color: var(--primary); }
@@ -461,14 +498,14 @@ html, body {
 }
 .brand-card {
   width: calc(33.33% - 7px);
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: var(--radius-sm);
   padding: 12px 8px;
   text-align: center;
   border: 2px solid transparent;
   box-shadow: var(--shadow);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s, background 0.3s;
 }
 .brand-card:active { transform: scale(0.97); }
 .brand-card.active { border-color: var(--primary); }
@@ -478,13 +515,13 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--white);
+  background: var(--card-bg);
   padding: 15px;
   margin: 0 15px 10px;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s, background 0.3s;
 }
 .repair-item:active { transform: scale(0.98); }
 .repair-text { font-size: 13px; font-weight: 700; color: var(--dark); }
@@ -495,11 +532,12 @@ html, body {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: var(--white);
+  background: var(--card-bg);
   padding: 14px;
   margin: 0 15px 10px;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .why-icon { font-size: 28px; }
 .why-title { font-size: 13px; font-weight: 800; color: var(--dark); }
@@ -663,11 +701,12 @@ html, body {
 .earnings-row { display: flex; gap: 10px; margin: 15px; }
 .earn-card {
   flex: 1;
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: var(--radius);
   padding: 14px;
   text-align: center;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .earn-label { font-size: 11px; color: var(--gray); font-weight: 700; }
 .earn-value { font-size: 18px; font-weight: 800; color: var(--dark); margin-top: 4px; }
@@ -675,13 +714,14 @@ html, body {
 
 /* ─── Job Cards ─── */
 .job-card {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 16px;
   padding: 18px;
   margin: 0 15px 12px;
   box-shadow: var(--shadow);
   border-left: 4px solid var(--primary);
   position: relative;
+  transition: background 0.3s;
 }
 .job-card.pending { border-left-color: var(--primary); }
 .job-card.ongoing { border-left-color: var(--primary); }
@@ -706,23 +746,25 @@ html, body {
 
 /* ─── Empty State ─── */
 .empty-card {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 16px;
   padding: 20px;
   margin: 0 15px 5px;
   text-align: center;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .empty-text { color: var(--gray); font-weight: 600; font-size: 13px; }
 
 /* ─── Ongoing Job ─── */
 .ongoing-card {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 16px;
   padding: 18px;
   margin: 0 15px 12px;
   box-shadow: var(--shadow);
   border-left: 4px solid var(--primary);
+  transition: background 0.3s;
 }
 .ongoing-progress { font-size: 12px; font-weight: 800; color: var(--primary); margin: 8px 0 5px; }
 
@@ -741,14 +783,15 @@ html, body {
 
 /* ─── Completed Job List ─── */
 .completed-card {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: var(--radius);
-  padding: 15px;
   margin: 0 15px 10px;
+  padding: 15px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .comp-left { flex: 1; }
 .comp-customer { font-size: 13px; font-weight: 800; color: var(--dark); }
@@ -762,7 +805,8 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #f0f0f0;
+  background: var(--chat-bg);
+  transition: background 0.3s;
 }
 .chat-header {
   background: var(--dark);
@@ -835,9 +879,10 @@ html, body {
 }
 .chat-bubble-other {
   align-self: flex-start;
-  background: var(--white);
+  background: var(--bubble-other);
   border-bottom-left-radius: 4px;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .chat-sender-name { font-size: 11px; font-weight: 800; color: var(--primary); margin-bottom: 3px; }
 .chat-text { font-size: 14px; color: var(--dark); font-weight: 500; line-height: 20px; }
@@ -850,10 +895,11 @@ html, body {
 }
 .chat-time-my { color: rgba(255,255,255,0.7); }
 .chat-input-bar {
-  background: var(--white);
+  background: var(--card-bg);
   padding: 8px 12px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--nav-border);
   flex-shrink: 0;
+  transition: background 0.3s, border-color 0.3s;
 }
 .chat-input-row {
   display: flex;
@@ -862,7 +908,7 @@ html, body {
 }
 .chat-input {
   flex: 1;
-  background: var(--light-gray);
+  background: var(--input-bg);
   border-radius: 22px;
   padding: 10px 16px;
   font-size: 14px;
@@ -872,6 +918,7 @@ html, body {
   outline: none;
   font-family: inherit;
   max-height: 100px;
+  transition: background 0.3s;
 }
 .chat-input::placeholder { color: #999; }
 .chat-send-btn {
@@ -893,23 +940,25 @@ html, body {
 
 /* ─── Payment ─── */
 .payment-amount-card {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 18px;
   margin: 15px;
   padding: 22px;
   text-align: center;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .payment-amount-label { font-size: 12px; color: var(--gray); font-weight: 700; letter-spacing: 1px; }
 .payment-amount-value { font-size: 40px; font-weight: 800; color: var(--dark); margin-top: 6px; }
 .payment-amount-sub { font-size: 11px; color: #aaa; margin-top: 5px; }
 
 .payment-methods {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 18px;
   margin: 0 15px;
   overflow: hidden;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .payment-method {
   display: flex;
@@ -965,11 +1014,12 @@ html, body {
 
 /* ─── UPI Screen ─── */
 .upi-card {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 18px;
   margin: 15px;
   padding: 20px;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .upi-label { font-size: 13px; font-weight: 700; color: var(--dark); margin-bottom: 12px; }
 .upi-input-row { display: flex; gap: 10px; margin-bottom: 18px; }
@@ -989,11 +1039,12 @@ html, body {
 
 /* ─── Card Form ─── */
 .card-form {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 18px;
   margin: 15px;
   padding: 20px;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .card-form-label {
   font-size: 11px;
@@ -1060,8 +1111,9 @@ html, body {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: var(--white);
+  background: var(--card-bg);
   padding: 30px;
+  transition: background 0.3s;
 }
 .thank-icon { font-size: 60px; }
 .thank-title { font-size: 26px; font-weight: 800; color: var(--dark); margin-top: 15px; }
@@ -1072,11 +1124,12 @@ html, body {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: var(--white);
+  background: var(--card-bg);
   margin: 15px;
   padding: 16px;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .schedule-banner-icon { font-size: 36px; }
 .schedule-banner-title { font-size: 14px; font-weight: 800; color: var(--dark); }
@@ -1092,14 +1145,14 @@ html, body {
 }
 .date-card {
   min-width: 68px;
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: var(--radius);
   padding: 12px;
   text-align: center;
   box-shadow: var(--shadow);
   border: 2px solid transparent;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s, background 0.3s;
   flex-shrink: 0;
 }
 .date-card:hover { border-color: var(--primary); }
@@ -1119,14 +1172,14 @@ html, body {
 }
 .slot-btn {
   width: calc(50% - 5px);
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: var(--radius-sm);
   padding: 14px;
   text-align: center;
   border: 2px solid transparent;
   box-shadow: var(--shadow);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s, background 0.3s;
   font-size: 13px;
   font-weight: 700;
   color: var(--dark);
@@ -1136,11 +1189,12 @@ html, body {
 .slot-btn.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
 
 .summary-card {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 16px;
   margin: 15px;
   padding: 18px;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .summary-title { font-size: 15px; font-weight: 800; color: var(--dark); margin-bottom: 14px; }
 .summary-row {
@@ -1154,11 +1208,12 @@ html, body {
 
 /* ─── Profile ─── */
 .profile-card {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 18px;
   margin: 0 15px 12px;
   padding: 18px;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .profile-row {
   display: flex;
@@ -1213,22 +1268,24 @@ html, body {
 .stats-row-profile { display: flex; gap: 10px; margin: 0 15px 12px; }
 .stat-card {
   flex: 1;
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: var(--radius);
   padding: 14px;
   text-align: center;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .stat-number { font-size: 22px; font-weight: 800; color: var(--primary); }
 .stat-label-small { font-size: 11px; color: var(--gray); font-weight: 600; margin-top: 3px; }
 
 /* ─── Profile Menu ─── */
 .menu-card {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 18px;
   margin: 0 15px 12px;
   overflow: hidden;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .menu-item {
   display: flex;
@@ -1262,12 +1319,13 @@ html, body {
 
 /* ─── Tech Profile ─── */
 .tech-profile-card {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 18px;
   margin: 0 15px 12px;
   padding: 22px;
   text-align: center;
   box-shadow: var(--shadow);
+  transition: background 0.3s;
 }
 .tech-profile-photo {
   width: 100px;
@@ -1378,15 +1436,16 @@ html, body {
   animation: fadeIn 0.2s ease;
 }
 .alert-box {
-  background: var(--white);
+  background: var(--card-bg);
   border-radius: 20px;
   padding: 24px;
   width: 85%;
   max-width: 360px;
   box-shadow: 0 10px 40px rgba(0,0,0,0.2);
   animation: slideUp 0.3s ease;
+  transition: background 0.3s;
 }
-.alert-title { font-size: 18px; font-weight: 800; color: #111; margin-bottom: 8px; }
+.alert-title { font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 8px; transition: color 0.3s; }
 .alert-message { font-size: 14px; color: #555; line-height: 20px; margin-bottom: 20px; }
 .alert-btn {
   background: var(--primary);
@@ -1454,7 +1513,7 @@ html, body {
   .bottom-nav { max-width: 100%; }
 }
 @media (min-width: 481px) {
-  body { background: #e0e0e0; }
+  body { background: var(--bg); }
   #app { box-shadow: 0 0 30px rgba(0,0,0,0.1); }
 }
 
@@ -1470,12 +1529,13 @@ html, body {
   transform: translateX(-50%);
   width: 100%;
   max-width: 480px;
-  background: var(--white);
-  border-top: 1px solid #e8e8e8;
+  background: var(--card-bg);
+  border-top: 1px solid var(--nav-border);
   z-index: 1000;
   box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
   padding: 6px 0;
   padding-bottom: max(6px, env(safe-area-inset-bottom, 6px));
+  transition: background 0.3s, border-color 0.3s;
 }
 
 .nav-items {

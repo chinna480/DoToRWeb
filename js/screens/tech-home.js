@@ -55,6 +55,11 @@ Router.register('tech-home', {
         let map = null, custMarker = null, myMarker = null, polyline = null;
         let techPushToken = Store.get('pushToken', '');
 
+        // Request notification permission
+        if ('Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission();
+        }
+
         const techArea = Store.get('techLocation', '').toLowerCase().trim();
         const techPincode = Store.get('techPincode', '').trim();
 
@@ -245,10 +250,17 @@ Router.register('tech-home', {
             if (order.status === 'completed') { completed.push(order); count++; }
           });
 
-          // Notify for new pending jobs
+          // Notify for new pending jobs (browser notification)
           pending.forEach(o => {
             if (!prevPendingIds.has(o.id)) {
-              // Could show browser notification here
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification('🔧 New Repair Job!', {
+                  body: `${o.customerName} needs ${o.repair} on ${o.brand} in ${o.location}`,
+                  icon: '/favicon.ico',
+                  tag: o.id,
+                  requireInteraction: true
+                });
+              }
             }
           });
           prevPendingIds = new Set(pending.map(o => o.id));

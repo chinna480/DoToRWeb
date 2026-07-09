@@ -6,8 +6,7 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-const API_KEY = '    const apiKey = 'RbvyZAWpEo4hTXdiYngCPFLJlweN05cqz7fU3Hja2O6mxK9tBk1xwTlzqNpiFtSEdeJm5uXWKPsvOIDG' // paste your key here
-'
+const API_KEY = 'RbvyZAWpEo4hTXdiYngCPFLJlweN05cqz7fU3Hja2O6mxK9tBk1xwTlzqNpiFtSEdeJm5uXWKPsvOIDG'
 
 app.post('/send-otp', async (req, res) => {
   const { phone, otp } = req.body

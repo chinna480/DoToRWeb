@@ -135,6 +135,13 @@ function formatDate(ts) {
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good Morning! 🌅';
+  if (h < 17) return 'Good Afternoon! ☀️';
+  return 'Good Evening! 🌙';
+}
+
 // ─── GeoLocation ──────────────────────────────────────────────
 let gpsWatchId = null;
 let currentPosition = { lat: 17.3850, lng: 78.4867 };
@@ -205,11 +212,21 @@ const NavBar = {
 
   show(screen) {
     const nav = document.getElementById('bottomNav');
+    const app = document.getElementById('app');
     if (!nav) return;
 
-    // Always render and show the nav bar on every screen
+    // Screens where nav should be hidden
+    const hiddenScreens = ['splash', 'role', 'customer-login', 'tech-login'];
+    if (hiddenScreens.includes(screen)) {
+      nav.style.display = 'none';
+      if (app) app.style.paddingBottom = '0';
+      this.visible = false;
+      return;
+    }
+
     this.render(screen);
     nav.style.display = 'block';
+    if (app) app.style.paddingBottom = '';
     this.visible = true;
   },
 
@@ -258,6 +275,23 @@ const NavBar = {
     }
   }
 };
+
+// ─── Dark Mode Toggle ────────────────────────────────────
+function toggleDarkMode() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const newTheme = isDark ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', newTheme);
+  Store.set('theme', newTheme);
+  return newTheme === 'dark';
+}
+
+function initTheme() {
+  const theme = Store.get('theme', 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+}
+
+// Initialize theme early
+initTheme();
 
 // ─── Download App Banner ─────────────────────────────────────
 window.downloadApp = () => {
