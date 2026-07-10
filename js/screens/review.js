@@ -1,4 +1,4 @@
-// Review Screen - Rate the service
+// Review Screen - Rate the service - Bento Glass
 Router.register('review', {
   render() {
     return {
@@ -9,24 +9,24 @@ Router.register('review', {
             <div class="review-sub">How was your repair service?</div>
           </div>
           <div class="scroll-content">
-            <div class="card" style="margin-top:15px">
+            <div class="glass" style="margin-top:15px;padding:18px">
               <div class="card-title">Tap to rate</div>
               <div class="review-stars" id="starContainer">
                 ${[1,2,3,4,5].map(s => `<button class="review-star" data-star="${s}" onclick="window.setRating(${s})">★</button>`).join('')}
               </div>
               <div class="review-rating-label" id="ratingLabel">No rating yet</div>
             </div>
-            <div class="card">
-              <div class="card-title">Write a comment (optional)</div>
+            <div class="glass" style="margin-top:12px;padding:18px">
+              <div class="card-title">✍️ Write a comment (optional)</div>
               <textarea class="form-textarea" id="reviewComment" placeholder="Tell us about your experience..."></textarea>
             </div>
-            <button class="btn btn-primary btn-block" onclick="window.submitReview()">Submit Review →</button>
+            <button class="btn btn-primary btn-block" style="margin-top:12px" onclick="window.submitReview()">⭐ Submit Review →</button>
           </div>
         </div>
       `,
       init() {
         let rating = 0;
-        const labels = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent!'];
+        const labels = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent! ✨'];
 
         window.setRating = (r) => {
           rating = r;
@@ -54,8 +54,8 @@ Router.register('review', {
             <div class="screen thank-you">
               <div class="thank-icon">🎉</div>
               <div class="thank-title">Thank You!</div>
-              <div class="thank-sub">Your review helps us improve</div>
-              <button class="btn btn-primary btn-block" style="margin-top:30px" onclick="Router.navigate('home')">Back to Home</button>
+              <div class="thank-sub">Your review helps us improve ✨</div>
+              <button class="btn btn-primary btn-block" style="margin-top:30px" onclick="Router.navigate('home')">🏠 Back to Home</button>
             </div>
           `;
         };

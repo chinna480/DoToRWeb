@@ -3,7 +3,7 @@ const PAYMENT_METHODS = [
   { id: 'upi', name: 'UPI', icon: '📱', desc: 'Google Pay, PhonePe, Paytm', color: '#8B5CF6' },
   { id: 'card', name: 'Credit / Debit Card', icon: '💳', desc: 'Visa, Mastercard, RuPay', color: '#3B82F6' },
   { id: 'wallet', name: 'DoToR Wallet', icon: '💰', desc: 'Pay using wallet balance', color: '#FF6B00' },
-  { id: 'cod', name: 'Cash on Delivery', icon: '💵', desc: 'Pay when technician arrives', color: '#2e7d32' },
+  { id: 'cod', name: 'Cash on Delivery', icon: '💵', desc: 'Pay when service is done', color: '#2e7d32' },
 ];
 
 Router.register('payment', {
@@ -29,15 +29,15 @@ Router.register('payment', {
             <span class="header-title">💳 Payment</span>
             <div style="width:40px"></div>
           </div>
-          <div class="payment-amount-card">
-            <div class="payment-amount-label">Total Amount</div>
+          <div class="payment-amount-card glass-strong">
+            <div class="payment-amount-label">💰 Total Amount</div>
             <div class="payment-amount-value">₹299</div>
             <div class="payment-amount-sub">Repair service charge (inclusive of all taxes)</div>
           </div>
-          <div class="section-title">Select Payment Method</div>
-          <div class="payment-methods">${methodsHtml}</div>
+          <div class="section-title">💳 Select Payment Method</div>
+          <div class="payment-methods glass">${methodsHtml}</div>
           <button class="btn btn-primary btn-block" id="proceedBtn" style="margin:15px;width:calc(100% - 30px)" onclick="window.proceedPayment()" disabled>Proceed to Pay →</button>
-          <div class="payment-security">
+          <div class="payment-security glass" style="padding:12px 18px;margin:15px;border-radius:var(--radius-sm);display:flex;align-items:center;gap:8px;justify-content:center">
             <span style="font-size:16px">🔒</span>
             <span class="payment-security-text">Your payment info is secure. We never store card details.</span>
           </div>
@@ -60,7 +60,7 @@ Router.register('payment', {
           if (!selectedMethod) { showAlert('Select Method', 'Please select a payment method'); return; }
 
           if (selectedMethod === 'cod') {
-            showAlert('✅ Cash on Delivery', 'Pay ₹299 when the technician arrives at your doorstep.', [{ text: 'OK', onPress: () => Router.navigate('home') }]);
+            showAlert('✅ Cash on Delivery', 'Pay ₹299 at your doorstep.', [{ text: 'OK', onPress: () => Router.navigate('home') }]);
             return;
           }
 
@@ -74,11 +74,11 @@ Router.register('payment', {
                   <span class="header-title">📱 UPI Payment</span>
                   <div style="width:40px"></div>
                 </div>
-                <div class="payment-amount-card">
-                  <div class="payment-amount-label">Amount to Pay</div>
+                <div class="payment-amount-card glass-strong">
+                  <div class="payment-amount-label">💰 Amount to Pay</div>
                   <div class="payment-amount-value">₹299</div>
                 </div>
-                <div class="upi-card">
+                <div class="upi-card glass">
                   <div class="upi-label">Scan or enter UPI ID</div>
                   <div class="upi-input-row">
                     <input class="upi-input" id="upiId" value="dotor@upi" />
@@ -107,11 +107,11 @@ Router.register('payment', {
                   <span class="header-title">💳 Card Payment</span>
                   <div style="width:40px"></div>
                 </div>
-                <div class="payment-amount-card">
-                  <div class="payment-amount-label">Amount to Pay</div>
+                <div class="payment-amount-card glass-strong">
+                  <div class="payment-amount-label">💰 Amount to Pay</div>
                   <div class="payment-amount-value">₹299</div>
                 </div>
-                <div class="card-form">
+                <div class="card-form glass">
                   <label class="card-form-label">Card Number</label>
                   <input class="card-form-input" placeholder="1234 5678 9012 3456" maxlength="19" />
                   <div class="card-form-row">

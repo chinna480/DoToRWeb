@@ -1,4 +1,4 @@
-// Customer Profile Screen
+// Customer Profile Screen - Bento Glass
 Router.register('customer-profile', {
   render() {
     const name = Store.get('custName', 'Customer');
@@ -52,12 +52,15 @@ Router.register('customer-profile', {
     return {
       html: `
         <div class="screen">
-          <div class="profile-header">
-            <button class="header-back" onclick="Router.navigate('home')" style="color:var(--dark)">←</button>
-            <span class="header-title" style="color:#111">My Profile</span>
+          <!-- Glass Profile Header -->
+          <div class="profile-header glass-strong">
+            <button class="header-back" onclick="Router.navigate('home')">←</button>
+            <span class="header-title">👤 My Profile</span>
             <div style="width:40px"></div>
           </div>
-          <div class="profile-card">
+          
+          <!-- Profile Card -->
+          <div class="profile-card glass">
             <div class="profile-row">
               <div class="profile-photo-wrap">
                 ${photoHtml}
@@ -73,17 +76,22 @@ Router.register('customer-profile', {
             <div class="profile-divider"></div>
             <div class="profile-rating-row">
               <span class="profile-star-icon">⭐</span>
-              <span class="profile-rating-text">${rating} My Rating</span>
+              <span class="profile-rating-text">${rating} — My Rating</span>
             </div>
           </div>
+
+          <!-- Stats Row -->
           <div class="stats-row-profile">
-            <div class="stat-card"><div class="stat-number" id="custTotalOrders">${totalOrders}</div><div class="stat-label-small">My Orders</div></div>
-            <div class="stat-card"><div class="stat-number" id="custCompleted">${completedOrders}</div><div class="stat-label-small">Completed</div></div>
-            <div class="stat-card"><div class="stat-number" id="custPending">${totalOrders - completedOrders}</div><div class="stat-label-small">Pending</div></div>
+            <div class="stat-card glass"><div class="stat-number" id="custTotalOrders">${totalOrders}</div><div class="stat-label-small">📋 Orders</div></div>
+            <div class="stat-card glass"><div class="stat-number" id="custCompleted">${completedOrders}</div><div class="stat-label-small">✅ Done</div></div>
+            <div class="stat-card glass"><div class="stat-number" id="custPending">${totalOrders - completedOrders}</div><div class="stat-label-small">⏳ Active</div></div>
           </div>
-          <div class="menu-card">${menuHtml}</div>
+
+          <!-- Menu Card -->
+          <div class="menu-card glass">${menuHtml}</div>
+          
           <div class="version-footer">
-            <div class="version-app">🔧 DoToR v1.0.0</div>
+            <div class="version-app">🔧 DoToR <span style="color:var(--primary);font-weight:900">v1.0.0</span></div>
             <div class="version-tag">We are the Doctor of your Device</div>
           </div>
           <div style="height:40px"></div>
@@ -148,7 +156,7 @@ Router.register('customer-profile', {
         window.custLogout = () => {
           showAlert('Logout?', 'Are you sure you want to logout?', [
             { text: 'Cancel' },
-            { text: 'Logout', style: 'destructive', onPress: () => { Store.clear(); Router.navigate('role'); } }
+            { text: 'Logout', style: 'destructive', onPress: () => { Store.clear(); Router.navigate('customer-login'); } }
           ]);
         };
 

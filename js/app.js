@@ -186,10 +186,9 @@ function getCurrentPositionOnce() {
 const NavBar = {
   _customerTabs: [
     { id: 'home', label: 'Home', icon: '🏠', screen: 'home' },
-    { id: 'schedule', label: 'Schedule', icon: '📅', screen: 'schedule' },
+    { id: 'orders', label: 'Orders', icon: '📋', screen: 'schedule' },
     { id: 'download', label: 'App', icon: '📲', screen: null, action: 'download' },
-    { id: 'track', label: 'Track', icon: '🛵', screen: 'tracking' },
-    { id: 'chat', label: 'Chat', icon: '💬', screen: 'chat' },
+    { id: 'notifications', label: 'Alerts', icon: '🔔', screen: 'notifications' },
     { id: 'profile', label: 'Profile', icon: '👤', screen: 'customer-profile' },
   ],
   visible: false,
@@ -202,7 +201,7 @@ const NavBar = {
     if (!nav) return;
 
     // Screens where nav should be hidden
-    const hiddenScreens = ['splash', 'role', 'customer-login'];
+    const hiddenScreens = ['splash', 'customer-login'];
     if (hiddenScreens.includes(screen)) {
       nav.style.display = 'none';
       if (app) app.style.paddingBottom = '0';
@@ -235,17 +234,6 @@ const NavBar = {
 
     if (tab.action === 'download') {
       window.downloadApp();
-    } else if (tab.id === 'chat') {
-      const orderId = Store.get('lastOrderId', '');
-      const myName = Store.get('custName', 'User');
-      Router.navigate('chat', {
-        orderId,
-        role: 'cust',
-        customerName: myName,
-        techName: 'Technician'
-      }).catch(function(e) {
-        console.warn('Nav chat error:', e);
-      });
     } else if (tab.screen) {
       Router.navigate(tab.screen).catch(function(e) {
         console.warn('Nav navigate error:', e);

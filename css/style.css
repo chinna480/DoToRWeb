@@ -2771,7 +2771,7 @@ body::before {
   padding: 6px 0;
   padding-bottom: max(6px, env(safe-area-inset-bottom, 6px));
 }
-.nav-items { display: flex; justify-content: space-around; align-items: center; }
+.nav-items { display: flex; justify-content: center; align-items: center; gap: 5px; }
 .nav-item {
   display: flex;
   flex-direction: column;
@@ -3020,3 +3020,49 @@ body::before {
 .header .splash-logo::before { display: none; }
 .header .splash-logo::after { display: none; }
 .header .splash-logo { box-shadow: var(--clay-sm), 0 0 20px rgba(255,107,0,0.06); }
+
+/* ─── Issue Chips (quick-select on wizard step 3) ─── */
+.issue-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--clay-sm), inset 0 1px 0 var(--glass-border-strong);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+.issue-chip::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--glass-shine);
+  pointer-events: none;
+  border-radius: inherit;
+}
+.issue-chip:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--clay), inset 0 1px 0 rgba(255,255,255,0.6);
+  background: rgba(250, 247, 243, 0.85);
+}
+.issue-chip:active {
+  transform: scale(0.95);
+}
+.issue-chip.active {
+  background: rgba(255, 107, 0, 0.1);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: var(--clay-sm), 0 0 0 3px rgba(255,107,0,0.08);
+}
+.issue-chip > * { position: relative; z-index: 1; }
