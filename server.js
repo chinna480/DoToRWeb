@@ -5,6 +5,7 @@ const fetch = require('node-fetch')
 const app = express()
 app.use(cors())
 app.use(express.json())
+app.use(express.static(__dirname))
 
 const API_KEY = 'RbvyZAWpEo4hTXdiYngCPFLJlweN05cqz7fU3Hja2O6mxK9tBk1xwTlzqNpiFtSEdeJm5uXWKPsvOIDG'
 

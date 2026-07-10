@@ -107,8 +107,7 @@ Router.register('chat', {
         });
 
         window.chatBack = () => {
-          if (role === 'cust') Router.navigate('tracking');
-          else Router.navigate('tech-home');
+          Router.navigate('tracking');
         };
 
         return () => {

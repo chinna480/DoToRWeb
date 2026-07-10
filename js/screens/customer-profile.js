@@ -3,7 +3,6 @@ Router.register('customer-profile', {
   render() {
     const name = Store.get('custName', 'Customer');
     const phone = Store.get('custPhone', '');
-    const email = Store.get('custEmail', '');
     const location = Store.get('custLocation', '');
     const pincode = Store.get('custPincode', '');
     const photo = Store.get('custPhoto', null);
@@ -67,7 +66,6 @@ Router.register('customer-profile', {
               <div class="profile-info">
                 <div class="profile-name-text">${name}</div>
                 <div class="profile-phone-text">${phone ? '+91 ' + phone : 'Add phone number'}</div>
-                ${email ? `<div class="profile-sub-text">${email}</div>` : ''}
                 ${location ? `<div class="profile-sub-text">📍 ${location}</div>` : ''}
                 ${pincode ? `<div class="profile-sub-text">📮 ${pincode}</div>` : ''}
               </div>

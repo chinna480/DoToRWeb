@@ -86,10 +86,16 @@ Router.register('schedule', {
           document.getElementById('summarySection').style.display = 'block';
         };
 
-        window.bookAppointment = () => {
+        window.bookAppointment = async () => {
           if (!selectedDate || !selectedSlot) return;
-          const custLocation = Store.get('custLocation', '');
-          const custPincode = Store.get('custPincode', '');
+          let custLocation = Store.get('custLocation', '');
+          // Get GPS position for more accurate location
+          const pos = await getCurrentPositionOnce();
+          if (pos && pos.lat) {
+            custLocation = `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}`;
+            Store.set('custLocation', custLocation);
+            try { firebase.database().ref('custLocation').set({ lat: pos.lat, lng: pos.lng }); } catch (e) {}
+          }
           const appointment = {
             customerName: custName,
             customerPhone: custPhone,
@@ -98,7 +104,7 @@ Router.register('schedule', {
             timeSlot: selectedSlot,
             status: 'scheduled',
             location: custLocation,
-            pincode: custPincode,
+            pincode: '',
             createdAt: Date.now(),
           };
           firebase.database().ref('appointments').push(appointment).then(ref => {
@@ -109,7 +115,7 @@ Router.register('schedule', {
               customerName: custName,
               customerPhone: custPhone,
               location: custLocation,
-              pincode: custPincode,
+              pincode: '',
               brand: 'Scheduled',
               repair: 'Appointment: ' + selectedSlot,
               status: 'scheduled',
