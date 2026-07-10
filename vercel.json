@@ -3,6 +3,9 @@
   "public": true,
   "cleanUrls": true,
   "trailingSlash": false,
+  "framework": null,
+  "buildCommand": null,
+  "outputDirectory": ".",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
