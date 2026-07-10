@@ -3,10 +3,11 @@
   "name": "dotor-web",
   "version": "1.0.0",
   "description": "DoToR - Door-to-Door Repair Service Website",
-  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "vercel-build": "echo 'Static site - no build required'"
+    "start": "http-server . -p 3000 -c-1"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
   },
   "dependencies": {
     "cors": "^2.8.5",
