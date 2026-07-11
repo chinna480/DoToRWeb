@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'website/**'
   workflow_dispatch:
 
 jobs:
@@ -27,7 +25,7 @@ jobs:
 
       - name: Deploy Website to Vercel (Production)
         run: |
-          vercel deploy ./website \
+          vercel deploy . \
             --prod \
             --yes \
             --scope ramb0s-projects \
