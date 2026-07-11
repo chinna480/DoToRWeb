@@ -188,8 +188,6 @@ const NavBar = {
     { id: 'home', label: 'Home', icon: '🏠', screen: 'home' },
     { id: 'orders', label: 'Orders', icon: '📋', screen: 'schedule' },
     { id: 'download', label: 'App', icon: '📲', screen: null, action: 'download' },
-    { id: 'notifications', label: 'Alerts', icon: '🔔', screen: 'notifications' },
-    { id: 'profile', label: 'Profile', icon: '👤', screen: 'customer-profile' },
   ],
   visible: false,
 
