@@ -274,12 +274,38 @@ Router.register('home', {
               </div>
             </div>
 
-            <!-- Step 7: Apartment / Flat -->
+            <!-- Step 7: Schedule & Apartment / Flat -->
             <div class="wizard-step" id="wizardStep7" style="display:none">
-              <div style="font-size:15px;font-weight:800;color:var(--text);margin:0 18px 12px">🏢 Apartment / Flat</div>
+              <div style="font-size:15px;font-weight:800;color:var(--text);margin:0 18px 12px">📅 Schedule & Location</div>
+              
+              <!-- Schedule Toggle -->
+              <div class="glass" style="margin:0 18px 12px;padding:14px">
+                <div class="form-label" style="margin-bottom:10px">⏰ When do you need service?</div>
+                <div style="display:flex;gap:8px">
+                  <button class="btn" id="scheduleImmediateBtn" onclick="window.selectScheduleMode('immediate')" style="flex:1;padding:10px 8px;border-radius:12px;font-size:13px;font-weight:700;border:2px solid var(--glass-border);background:var(--clay-bg);color:var(--text);cursor:pointer;transition:all 0.2s ease">
+                    ⚡ Do It Now
+                  </button>
+                  <button class="btn" id="scheduleLaterBtn" onclick="window.selectScheduleMode('later')" style="flex:1;padding:10px 8px;border-radius:12px;font-size:13px;font-weight:700;border:2px solid var(--glass-border);background:var(--clay-bg);color:var(--text);cursor:pointer;transition:all 0.2s ease">
+                    📅 Schedule for Later
+                  </button>
+                </div>
+              </div>
+
+              <!-- Date/Time Picker (shown when 'later' is selected) -->
+              <div id="schedulePickerSection" style="display:none;margin:0 18px 12px">
+                <div class="glass" style="padding:14px">
+                  <div class="form-label" style="margin-bottom:8px">📅 Select Date</div>
+                  <div class="date-row" id="wizardDateRow" style="overflow-x:auto;display:flex;gap:6px;padding-bottom:4px"></div>
+                  <div class="form-label" style="margin:12px 0 8px">⏰ Select Time Slot</div>
+                  <div class="slots-grid" id="wizardSlotsGrid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+                  <div id="wizardScheduleSummary" style="display:none;margin-top:10px;padding:10px;background:var(--clay-card);border-radius:10px;font-size:13px;color:var(--primary);font-weight:700;text-align:center"></div>
+                </div>
+              </div>
+
+              <!-- Apartment / Flat -->
               <div class="glass" style="margin:0 18px 12px;padding:14px">
                 <div class="form-label" style="margin-bottom:6px">🏢 Apartment / Society Name</div>
-                <input class="form-input" id="wizardApartment" placeholder="e.g. Sunrise Apartments, Block A" style="width:100%;font-size:14px" />
+                <input class="form-input" id="wizardApartment" placeholder="e.g. Sunrise Apartments, Block A (optional)" style="width:100%;font-size:14px" />
               </div>
               <div class="glass" style="margin:0 18px;padding:14px">
                 <div class="form-label" style="margin-bottom:6px">🚪 Flat / Door Number</div>
@@ -492,12 +518,26 @@ Router.register('home', {
           // Populate issue chips when reaching step 3
           if (step === 3) populateIssueChips();
 
-          // Populate saved apartment/flat values when reaching step 7
+          // Populate saved apartment/flat values and init schedule UI when reaching step 7
           if (step === 7) {
             const aptEl = document.getElementById('wizardApartment');
             const flatEl = document.getElementById('wizardFlat');
             if (aptEl && bookingData.apartment) aptEl.value = bookingData.apartment;
             if (flatEl && bookingData.flat) flatEl.value = bookingData.flat;
+            // Restore schedule mode if previously selected
+            if (bookingData.scheduleMode === 'later') {
+              document.getElementById('scheduleLaterBtn').style.borderColor = 'var(--primary)';
+              document.getElementById('scheduleLaterBtn').style.background = 'var(--primary-light)';
+              document.getElementById('scheduleImmediateBtn').style.borderColor = 'var(--glass-border)';
+              document.getElementById('scheduleImmediateBtn').style.background = 'var(--clay-bg)';
+              document.getElementById('schedulePickerSection').style.display = 'block';
+              initWizardSchedulePicker();
+            } else if (bookingData.scheduleMode === 'immediate') {
+              document.getElementById('scheduleImmediateBtn').style.borderColor = 'var(--primary)';
+              document.getElementById('scheduleImmediateBtn').style.background = 'var(--primary-light)';
+              document.getElementById('scheduleLaterBtn').style.borderColor = 'var(--glass-border)';
+              document.getElementById('scheduleLaterBtn').style.background = 'var(--clay-bg)';
+            }
           }
 
           // Update review when on last step
@@ -554,6 +594,14 @@ Router.register('home', {
             bookingData.apartment = document.getElementById('wizardApartment').value.trim();
             bookingData.flat = document.getElementById('wizardFlat').value.trim();
             // Apartment/flat is optional
+            if (!bookingData.scheduleMode) {
+              showAlert('Select Schedule', 'Please choose "Do It Now" or "Schedule for Later"');
+              return;
+            }
+            if (bookingData.scheduleMode === 'later' && (!bookingData.scheduleDate || !bookingData.scheduleSlot)) {
+              showAlert('Select Date & Time', 'Please select a date and time slot for your scheduled service');
+              return;
+            }
           }
           if (window.currentStep < TOTAL_STEPS) window.goToStep(window.currentStep + 1);
         };
@@ -568,6 +616,7 @@ Router.register('home', {
             if (window.currentStep === 7) {
               bookingData.apartment = document.getElementById('wizardApartment').value.trim();
               bookingData.flat = document.getElementById('wizardFlat').value.trim();
+              // Don't save/sync schedule date/slot from DOM since they may be buttons, not inputs
             }
             window.goToStep(window.currentStep - 1);
           }
@@ -911,6 +960,125 @@ Router.register('home', {
           if (window._mapSearchTimeout) { clearTimeout(window._mapSearchTimeout); window._mapSearchTimeout = null; }
         };
 
+        // ─── Schedule Mode (Step 7) ───────────────────────
+        function initWizardSchedulePicker() {
+          const dateRow = document.getElementById('wizardDateRow');
+          const slotsGrid = document.getElementById('wizardSlotsGrid');
+          if (!dateRow || !slotsGrid) return;
+          
+          // Only populate if not already done
+          if (dateRow.children.length > 0) return;
+
+          const today = new Date();
+          const dates = [];
+          for (let i = 0; i < 14; i++) {
+            const d = new Date(today);
+            d.setDate(d.getDate() + i);
+            dates.push(d);
+          }
+          
+          dateRow.innerHTML = dates.map((d, i) => {
+            const isToday = i === 0;
+            return `
+              <div class="date-card" style="flex-shrink:0;min-width:62px;text-align:center;padding:8px 10px;border-radius:12px;background:var(--clay-card);border:2px solid transparent;cursor:pointer;transition:all 0.2s ease"
+                data-date="${d.toISOString()}" onclick="window.wizardSelectDate('${d.toISOString()}')">
+                <div style="font-size:10px;color:var(--text-secondary);font-weight:600">${DAYS[d.getDay()]}</div>
+                <div style="font-size:16px;font-weight:900;color:var(--text);margin:2px 0">${d.getDate()}</div>
+                <div style="font-size:10px;color:var(--text-secondary)">${MONTHS[d.getMonth()]}</div>
+                ${isToday ? '<div style="font-size:8px;color:var(--primary);font-weight:700">Today</div>' : ''}
+              </div>
+            `;
+          }).join('');
+
+          const TIME_SLOTS = [
+            '09:00 - 10:00', '10:00 - 11:00', '11:00 - 12:00', '12:00 - 13:00',
+            '14:00 - 15:00', '15:00 - 16:00', '16:00 - 17:00', '17:00 - 18:00', '18:00 - 19:00'
+          ];
+          slotsGrid.innerHTML = TIME_SLOTS.map(s =>
+            `<button class="slot-btn" style="padding:8px 14px;border-radius:10px;border:2px solid var(--glass-border);background:var(--clay-bg);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s ease" data-slot="${s}" onclick="window.wizardSelectSlot('${s}')">🕐 ${s}</button>`
+          ).join('');
+
+          // Restore previously selected date/slot if any
+          if (bookingData.scheduleDate) {
+            const cards = dateRow.querySelectorAll('.date-card');
+            cards.forEach(c => {
+              if (c.dataset.date === bookingData.scheduleDate) {
+                c.style.borderColor = 'var(--primary)';
+                c.style.background = 'var(--primary-light)';
+              }
+            });
+          }
+          if (bookingData.scheduleSlot) {
+            const btns = slotsGrid.querySelectorAll('.slot-btn');
+            btns.forEach(b => {
+              if (b.dataset.slot === bookingData.scheduleSlot) {
+                b.style.borderColor = 'var(--primary)';
+                b.style.background = 'var(--primary-light)';
+              }
+            });
+          }
+          if (bookingData.scheduleDate && bookingData.scheduleSlot) {
+            updateWizardScheduleSummary();
+          }
+        }
+
+        window.wizardSelectDate = (dateStr) => {
+          bookingData.scheduleDate = dateStr;
+          const cards = document.querySelectorAll('#wizardDateRow .date-card');
+          cards.forEach(c => {
+            c.style.borderColor = c.dataset.date === dateStr ? 'var(--primary)' : 'transparent';
+            c.style.background = c.dataset.date === dateStr ? 'var(--primary-light)' : 'var(--clay-card)';
+          });
+          updateWizardScheduleSummary();
+        };
+
+        window.wizardSelectSlot = (slot) => {
+          bookingData.scheduleSlot = slot;
+          const btns = document.querySelectorAll('#wizardSlotsGrid .slot-btn');
+          btns.forEach(b => {
+            b.style.borderColor = b.dataset.slot === slot ? 'var(--primary)' : 'var(--glass-border)';
+            b.style.background = b.dataset.slot === slot ? 'var(--primary-light)' : 'var(--clay-bg)';
+          });
+          updateWizardScheduleSummary();
+        };
+
+        function updateWizardScheduleSummary() {
+          const summaryEl = document.getElementById('wizardScheduleSummary');
+          if (!summaryEl) return;
+          if (bookingData.scheduleDate && bookingData.scheduleSlot) {
+            const d = new Date(bookingData.scheduleDate);
+            summaryEl.style.display = 'block';
+            summaryEl.textContent = `📅 ${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]} • 🕐 ${bookingData.scheduleSlot}`;
+          } else {
+            summaryEl.style.display = 'none';
+          }
+        }
+
+        window.selectScheduleMode = (mode) => {
+          bookingData.scheduleMode = mode;
+          const immediateBtn = document.getElementById('scheduleImmediateBtn');
+          const laterBtn = document.getElementById('scheduleLaterBtn');
+          const pickerSection = document.getElementById('schedulePickerSection');
+
+          if (mode === 'immediate') {
+            immediateBtn.style.borderColor = 'var(--primary)';
+            immediateBtn.style.background = 'var(--primary-light)';
+            laterBtn.style.borderColor = 'var(--glass-border)';
+            laterBtn.style.background = 'var(--clay-bg)';
+            pickerSection.style.display = 'none';
+            // Clear schedule data
+            delete bookingData.scheduleDate;
+            delete bookingData.scheduleSlot;
+          } else {
+            laterBtn.style.borderColor = 'var(--primary)';
+            laterBtn.style.background = 'var(--primary-light)';
+            immediateBtn.style.borderColor = 'var(--glass-border)';
+            immediateBtn.style.background = 'var(--clay-bg)';
+            pickerSection.style.display = 'block';
+            initWizardSchedulePicker();
+          }
+        };
+
         // ─── Review & Confirm ─────────────────────────────
         function esc(str) { return str.replace(/[&<>"']/g, function(m) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]; }); }
 
@@ -918,12 +1086,19 @@ Router.register('home', {
           const container = document.getElementById('wizardReviewContent');
           if (!container) return;
           const d = bookingData;
+          // Determine schedule display
+          let scheduleDisplay = '⚡ Immediate';
+          if (d.scheduleMode === 'later' && d.scheduleDate && d.scheduleSlot) {
+            const sd = new Date(d.scheduleDate);
+            scheduleDisplay = `📅 ${DAYS[sd.getDay()]}, ${sd.getDate()} ${MONTHS[sd.getMonth()]} • 🕐 ${d.scheduleSlot}`;
+          }
           const items = [
             ['Service', `${d.icon} ${d.service}`],
             ['Brand', d.brand || '—'],
             ['Model', d.model || '—'],
             ['Issue', d.issue || '—'],
             ['Photos', wizardPhotos.length ? `${wizardPhotos.length} photo(s)` : 'None'],
+            ['⏰ Schedule', scheduleDisplay],
             ['Address', d.address || '—'],
             ['Location', d.location || '—'],
             ['Pincode', d.pincode || '—'],
@@ -964,13 +1139,29 @@ Router.register('home', {
             if (locStr) Store.set('custLocation', locStr);
           }
 
+          // Determine schedule data
+          let scheduleMode = d.scheduleMode || 'immediate';
+          let scheduleDate = '';
+          let scheduleSlot = '';
+          let scheduleDateLabel = '';
+          if (scheduleMode === 'later' && d.scheduleDate && d.scheduleSlot) {
+            const sd = new Date(d.scheduleDate);
+            scheduleDate = sd.toISOString().split('T')[0];
+            scheduleSlot = d.scheduleSlot;
+            scheduleDateLabel = `${DAYS[sd.getDay()]}, ${sd.getDate()} ${MONTHS[sd.getMonth()]}`;
+          }
+
           const order = {
             customerName: name, customerPhone: phone, customerPushToken: pushToken,
             location: locStr, address: address, pincode: pincode, apartment: apartment, flat: flat,
             service: svc.name, brand: brand, model: model,
             issue: issue, photos: wizardPhotos,
-            status: 'pending',
-            time: new Date().toLocaleTimeString(),
+            status: scheduleMode === 'later' ? 'scheduled' : 'pending',
+            scheduleMode: scheduleMode,
+            scheduleDate: scheduleDate,
+            scheduleSlot: scheduleSlot,
+            scheduleDateLabel: scheduleDateLabel,
+            time: scheduleMode === 'later' ? scheduleSlot : new Date().toLocaleTimeString(),
             createdAt: new Date().toISOString()
           };
 
@@ -982,7 +1173,6 @@ Router.register('home', {
             showAlert('✅ Booking Confirmed!', `${detail}\n\nTrack your order?`, [
               { text: 'Track Now', onPress: () => Router.navigate('tracking') },
               { text: '💬 Chat', onPress: () => Router.navigate('chat', { orderId, role: 'cust', customerName: name }) },
-              { text: '💰 Pay', onPress: () => Router.navigate('payment') },
               { text: 'Later' }
             ]);
             window.closeWizard();
@@ -1068,6 +1258,9 @@ Router.register('home', {
           delete window.carouselNext;
           delete window.carouselPrev;
           delete window.carouselGoTo;
+          delete window.selectScheduleMode;
+          delete window.wizardSelectDate;
+          delete window.wizardSelectSlot;
         };
       }
     };
