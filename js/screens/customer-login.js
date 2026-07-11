@@ -156,7 +156,9 @@ Router.register('customer-login', {
             pushToken: Store.get('pushToken'),
             createdAt: new Date().toISOString()
           };
-          firebase.database().ref('users/' + phone).update(userData).catch(() => {});
+          firebase.database().ref('users/' + phone).update(userData).catch(err => {
+            console.error('Failed to save user to Firebase:', err.message);
+          });
 
           // Navigate to home
           Router.navigate('home');

@@ -274,9 +274,9 @@ Router.register('home', {
               </div>
             </div>
 
-            <!-- Step 7: Schedule & Apartment / Flat -->
+            <!-- Step 7: Schedule -->
             <div class="wizard-step" id="wizardStep7" style="display:none">
-              <div style="font-size:15px;font-weight:800;color:var(--text);margin:0 18px 12px">📅 Schedule & Location</div>
+              <div style="font-size:15px;font-weight:800;color:var(--text);margin:0 18px 12px">📅 Schedule</div>
               
               <!-- Schedule Toggle -->
               <div class="glass" style="margin:0 18px 12px;padding:14px">
@@ -302,15 +302,7 @@ Router.register('home', {
                 </div>
               </div>
 
-              <!-- Apartment / Flat -->
-              <div class="glass" style="margin:0 18px 12px;padding:14px">
-                <div class="form-label" style="margin-bottom:6px">🏢 Apartment / Society Name</div>
-                <input class="form-input" id="wizardApartment" placeholder="e.g. Sunrise Apartments, Block A (optional)" style="width:100%;font-size:14px" />
-              </div>
-              <div class="glass" style="margin:0 18px;padding:14px">
-                <div class="form-label" style="margin-bottom:6px">🚪 Flat / Door Number</div>
-                <input class="form-input" id="wizardFlat" placeholder="e.g. 3B, 204, 12/A" style="width:100%;font-size:14px" />
-              </div>
+
               <div class="btn-row" style="margin:15px 18px 0">
                 <button class="btn btn-outline btn-sm" onclick="window.prevStep()" style="flex:1">← Back</button>
                 <button class="btn btn-primary btn-sm" onclick="window.nextStep()" style="flex:1">Next →</button>
@@ -518,12 +510,8 @@ Router.register('home', {
           // Populate issue chips when reaching step 3
           if (step === 3) populateIssueChips();
 
-          // Populate saved apartment/flat values and init schedule UI when reaching step 7
+          // Init schedule UI when reaching step 7
           if (step === 7) {
-            const aptEl = document.getElementById('wizardApartment');
-            const flatEl = document.getElementById('wizardFlat');
-            if (aptEl && bookingData.apartment) aptEl.value = bookingData.apartment;
-            if (flatEl && bookingData.flat) flatEl.value = bookingData.flat;
             // Restore schedule mode if previously selected
             if (bookingData.scheduleMode === 'later') {
               document.getElementById('scheduleLaterBtn').style.borderColor = 'var(--primary)';
@@ -591,9 +579,6 @@ Router.register('home', {
             }
           }
           if (window.currentStep === 7) {
-            bookingData.apartment = document.getElementById('wizardApartment').value.trim();
-            bookingData.flat = document.getElementById('wizardFlat').value.trim();
-            // Apartment/flat is optional
             if (!bookingData.scheduleMode) {
               showAlert('Select Schedule', 'Please choose "Do It Now" or "Schedule for Later"');
               return;
@@ -614,8 +599,6 @@ Router.register('home', {
             if (window.currentStep === 5) bookingData.address = document.getElementById('wizardAddress').value.trim();
             if (window.currentStep === 6) bookingData.pincode = document.getElementById('wizardPincode').value.trim();
             if (window.currentStep === 7) {
-              bookingData.apartment = document.getElementById('wizardApartment').value.trim();
-              bookingData.flat = document.getElementById('wizardFlat').value.trim();
               // Don't save/sync schedule date/slot from DOM since they may be buttons, not inputs
             }
             window.goToStep(window.currentStep - 1);
@@ -1102,8 +1085,7 @@ Router.register('home', {
             ['Address', d.address || '—'],
             ['Location', d.location || '—'],
             ['Pincode', d.pincode || '—'],
-            ['Apartment', d.apartment || '—'],
-            ['Flat / Door', d.flat || '—'],
+
           ];
           container.innerHTML = items.map(([label, value]) => `
             <div class="info-row">
@@ -1126,8 +1108,7 @@ Router.register('home', {
           const address = d.address || '';
           const location = d.location || '';
           const pincode = d.pincode || '';
-          const apartment = d.apartment || '';
-          const flat = d.flat || '';
+
 
           Store.set('lastBrand', brand);
           Store.set('lastService', svc.name);
@@ -1153,7 +1134,7 @@ Router.register('home', {
 
           const order = {
             customerName: name, customerPhone: phone, customerPushToken: pushToken,
-            location: locStr, address: address, pincode: pincode, apartment: apartment, flat: flat,
+            location: locStr, address: address, pincode: pincode,
             service: svc.name, brand: brand, model: model,
             issue: issue, photos: wizardPhotos,
             status: scheduleMode === 'later' ? 'scheduled' : 'pending',
@@ -1166,8 +1147,10 @@ Router.register('home', {
           };
 
           try {
-            const newRef = firebase.database().ref('orders').push(order);
-            const orderId = newRef.key;
+            // Push returns a ThenableReference: key is available synchronously, write is async
+            const pushRef = firebase.database().ref('orders').push(order);
+            const orderId = pushRef.key;
+            await pushRef; // Wait for write to complete so we catch auth/rules errors
             Store.set('lastOrderId', orderId);
             const detail = `${svc.icon} ${svc.name}${brand ? ' • ' + brand : ''}${model ? ' • ' + model : ''}`;
             showAlert('✅ Booking Confirmed!', `${detail}\n\nTrack your order?`, [
@@ -1177,8 +1160,8 @@ Router.register('home', {
             ]);
             window.closeWizard();
           } catch (e) {
-            showAlert('Error', 'Booking failed! Try again.');
             console.error('Booking error:', e);
+            showAlert('❌ Booking Failed', 'Could not save order to Firebase.\n\nError: ' + (e.message || 'Database rules may be blocking writes. Check Firebase Console → Realtime Database → Rules'));
           }
         };
 
