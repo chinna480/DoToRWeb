@@ -1,0 +1,174 @@
+// Orders Screen - View previous orders with Day / Week / Month filters
+Router.register('orders', {
+  render() {
+    return {
+      html: `
+        <div class="screen">
+          <!-- Header -->
+          <div class="header header-dark">
+            <span class="header-title">📋 My Orders</span>
+            <div style="width:40px"></div>
+          </div>
+
+          <!-- Filter Tabs -->
+          <div style="display:flex;gap:8px;padding:15px 15px 5px;overflow-x:auto">
+            <button class="order-filter-btn active" data-filter="day" onclick="window.setOrderFilter('day')">📅 Today</button>
+            <button class="order-filter-btn" data-filter="week" onclick="window.setOrderFilter('week')">📆 This Week</button>
+            <button class="order-filter-btn" data-filter="month" onclick="window.setOrderFilter('month')">🗓️ This Month</button>
+            <button class="order-filter-btn" data-filter="all" onclick="window.setOrderFilter('all')">📋 All</button>
+          </div>
+
+          <!-- Orders List -->
+          <div id="ordersList" style="padding:10px 15px">
+            <div class="empty-card">
+              <div style="font-size:40px;margin-bottom:10px">📦</div>
+              <div class="empty-text">Loading orders...</div>
+            </div>
+          </div>
+
+          <div style="height:40px"></div>
+        </div>
+      `,
+      init() {
+        let currentFilter = 'day';
+        let allOrders = [];
+        let ordersRef = null;
+        let onOrdersCallback = null;
+
+        // Load orders from Firebase
+        const myPhone = Store.get('custPhone', '');
+        if (!myPhone) {
+          document.getElementById('ordersList').innerHTML = `
+            <div class="empty-card">
+              <div style="font-size:40px;margin-bottom:10px">📱</div>
+              <div class="empty-text">Please login to view your orders</div>
+            </div>
+          `;
+          return () => {};
+        }
+
+        function renderOrders(filter) {
+          const container = document.getElementById('ordersList');
+          if (!container) return;
+
+          const now = new Date();
+          const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const startOfWeek = new Date(now);
+          startOfWeek.setDate(now.getDate() - now.getDay());
+          startOfWeek.setHours(0, 0, 0, 0);
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+          let filtered = allOrders.filter(o => {
+            const orderTime = o.createdAt ? new Date(o.createdAt) : null;
+            if (!orderTime) return false;
+            switch (filter) {
+              case 'day': return orderTime >= startOfDay;
+              case 'week': return orderTime >= startOfWeek;
+              case 'month': return orderTime >= startOfMonth;
+              default: return true;
+            }
+          });
+
+          // Sort by newest first
+          filtered.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+          if (!filtered.length) {
+            container.innerHTML = `
+              <div class="empty-card">
+                <div style="font-size:40px;margin-bottom:10px">📭</div>
+                <div class="empty-text">No orders found for this period</div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:6px;font-weight:600">Book a repair to get started!</div>
+              </div>
+            `;
+            return;
+          }
+
+          container.innerHTML = filtered.map((order, idx) => {
+            const svcIcon = order.service && order.service.includes('Mobile') ? '📱'
+              : order.service && order.service.includes('Laptop') ? '💻'
+              : order.service && order.service.includes('TV') ? '📺'
+              : order.service && order.service.includes('AC') ? '❄️'
+              : order.service && order.service.includes('Refrigerator') ? '🧊'
+              : order.service && order.service.includes('Washing') ? '🧺'
+              : order.service && order.service.includes('Electric') ? '🔌'
+              : order.service && order.service.includes('Plumb') ? '🚰'
+              : order.service && order.service.includes('CCTV') ? '📡'
+              : order.service && order.service.includes('Wi-Fi') ? '🌐'
+              : order.service && order.service.includes('RO') ? '💧'
+              : order.service && order.service.includes('Inverter') ? '🔋'
+              : '🛠️';
+
+            const statusColor = order.status === 'completed' ? 'var(--success)'
+              : order.status === 'pending' ? 'var(--primary)'
+              : order.status === 'accepted' || order.status === 'assigned' ? 'var(--dark)'
+              : 'var(--text-secondary)';
+
+            const statusLabel = order.status === 'completed' ? '✅ Done'
+              : order.status === 'pending' ? '⏳ Pending'
+              : order.status === 'accepted' ? '🔧 In Progress'
+              : order.status === 'assigned' ? '🛵 Assigned'
+              : order.status === 'scheduled' ? '📅 Scheduled'
+              : '❓ Unknown';
+
+            const orderDate = order.createdAt
+              ? formatDate(order.createdAt) + ' • ' + formatTime(order.createdAt)
+              : '—';
+
+            const orderId = order._key ? order._key.slice(-5).toUpperCase() : ('#' + (idx + 1));
+
+            return `
+              <div class="job-card ${order.status === 'completed' ? 'completed' : order.status === 'pending' ? 'pending' : 'ongoing'}" onclick="Router.navigate('tracking')" style="cursor:pointer">
+                <div style="display:flex;align-items:center;gap:12px;position:relative;z-index:1">
+                  <div style="font-size:32px">${svcIcon}</div>
+                  <div style="flex:1;min-width:0">
+                    <div class="job-customer">${order.service || 'Repair Service'}${order.brand ? ' • ' + order.brand : ''}</div>
+                    <div class="job-type">${order.repair || order.issue || 'General Service'}</div>
+                    <div class="job-time">🕐 ${orderDate}</div>
+                  </div>
+                  <div style="text-align:right;flex-shrink:0">
+                    <div style="font-size:11px;font-weight:800;color:${statusColor}">${statusLabel}</div>
+                    <div style="font-size:10px;color:var(--text-secondary);margin-top:3px;font-weight:600">#DR${orderId}</div>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        // Set up filter switching
+        window.setOrderFilter = (filter) => {
+          currentFilter = filter;
+          document.querySelectorAll('.order-filter-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.filter === filter);
+          });
+          renderOrders(filter);
+        };
+
+        // Listen for orders
+        ordersRef = firebase.database().ref('orders');
+        onOrdersCallback = (snap) => {
+          if (!snap.exists()) {
+            allOrders = [];
+            renderOrders(currentFilter);
+            return;
+          }
+          allOrders = [];
+          snap.forEach(child => {
+            const order = child.val();
+            if (order.customerPhone === myPhone) {
+              order._key = child.key;
+              allOrders.push(order);
+            }
+          });
+          renderOrders(currentFilter);
+        };
+        ordersRef.on('value', onOrdersCallback);
+
+        return () => {
+          if (ordersRef && onOrdersCallback) ordersRef.off('value', onOrdersCallback);
+          delete window.setOrderFilter;
+        };
+      }
+    };
+  }
+});
