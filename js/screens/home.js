@@ -1137,13 +1137,13 @@ Router.register('home', {
             location: locStr, address: address, pincode: pincode,
             service: svc.name, brand: brand, model: model,
             issue: issue, photos: wizardPhotos,
-            status: scheduleMode === 'later' ? 'scheduled' : 'pending',
+            status: 'pending',
             scheduleMode: scheduleMode,
             scheduleDate: scheduleDate,
             scheduleSlot: scheduleSlot,
             scheduleDateLabel: scheduleDateLabel,
             time: scheduleMode === 'later' ? scheduleSlot : new Date().toLocaleTimeString(),
-            createdAt: new Date().toISOString()
+            createdAt: Date.now()
           };
 
           try {

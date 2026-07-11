@@ -99,16 +99,14 @@ Router.register('orders', {
               : '🛠️';
 
             const statusColor = order.status === 'completed' ? 'var(--success)'
-              : order.status === 'pending' ? 'var(--primary)'
+              : order.status === 'pending' ? (order.scheduleMode === 'later' ? '#7B2FF7' : 'var(--primary)')
               : order.status === 'accepted' || order.status === 'assigned' ? 'var(--dark)'
-              : order.status === 'scheduled' ? '#7B2FF7'
               : 'var(--text-secondary)';
 
             const statusLabel = order.status === 'completed' ? '✅ Done'
-              : order.status === 'pending' ? '⏳ Pending'
+              : order.status === 'pending' ? (order.scheduleMode === 'later' ? '📅 Scheduled' : '⏳ Pending')
               : order.status === 'accepted' ? '🔧 In Progress'
               : order.status === 'assigned' ? '🛵 Assigned'
-              : order.status === 'scheduled' ? '📅 Scheduled'
               : '❓ Unknown';
 
             const orderDate = order.createdAt
@@ -129,8 +127,7 @@ Router.register('orders', {
             const orderId = order._key ? order._key.slice(-5).toUpperCase() : ('#' + (idx + 1));
 
             const cardClass = order.status === 'completed' ? 'completed'
-              : order.status === 'scheduled' ? 'scheduled'
-              : order.status === 'pending' ? 'pending'
+              : order.status === 'pending' ? (order.scheduleMode === 'later' ? 'scheduled' : 'pending')
               : 'ongoing';
 
             return `
