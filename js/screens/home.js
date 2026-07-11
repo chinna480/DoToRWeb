@@ -1132,19 +1132,45 @@ Router.register('home', {
             scheduleDateLabel = `${DAYS[sd.getDay()]}, ${sd.getDate()} ${MONTHS[sd.getMonth()]}`;
           }
 
+          // Parse lat/lng from location string for auto-assignment distance matching
+          let custLat = null, custLng = null;
+          if (locStr) {
+            const parts = locStr.split(',');
+            if (parts.length === 2) {
+              const lat = parseFloat(parts[0].trim());
+              const lng = parseFloat(parts[1].trim());
+              if (!isNaN(lat) && !isNaN(lng)) { custLat = lat; custLng = lng; }
+            }
+          }
+
+          // Determine device label from service
+          const deviceMap = {
+            'mobile': 'Mobile Device', 'laptop': 'Laptop', 'tv': 'TV',
+            'ac': 'AC', 'fridge': 'Refrigerator', 'washing': 'Washing Machine',
+            'electric': 'Electrical', 'plumbing': 'Plumbing', 'cctv': 'CCTV',
+            'wifi': 'Wi-Fi Router', 'ro': 'RO Purifier', 'inverter': 'Inverter/UPS'
+          };
+          const svcId = svc.id || '';
+          const device = deviceMap[svcId] || svc.name;
+
           const order = {
+            // Fields the auto-assignment system expects
             customerName: name, customerPhone: phone, customerPushToken: pushToken,
+            serviceCategory: svcId, serviceLabel: svc.name, device: device,
+            brand: brand, modelName: model, description: issue,
             location: locStr, address: address, pincode: pincode,
-            service: svc.name, brand: brand, model: model,
-            issue: issue, photos: wizardPhotos,
             status: 'pending',
+            time: scheduleMode === 'later' ? scheduleSlot : new Date().toLocaleTimeString(),
+            createdAt: Date.now(),
+            // Extra fields for display (kept alongside standard ones)
+            service: svc.name, model: model, issue: issue, photos: wizardPhotos,
             scheduleMode: scheduleMode,
             scheduleDate: scheduleDate,
             scheduleSlot: scheduleSlot,
             scheduleDateLabel: scheduleDateLabel,
-            time: scheduleMode === 'later' ? scheduleSlot : new Date().toLocaleTimeString(),
-            createdAt: Date.now()
           };
+          // Only add location coords when available (rules require isNumber, not null)
+          if (custLat !== null) { order.custLat = custLat; order.custLng = custLng; }
 
           try {
             // Push returns a ThenableReference: key is available synchronously, write is async
