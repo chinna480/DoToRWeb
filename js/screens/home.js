@@ -32,15 +32,14 @@ const SERVICES = [
   { id: 'inverter', icon: '🔋',    name: 'Inverter & UPS Service',         brands: [],             repairs: INVERTER_ISSUES },
 ];
 
-// Bento glass service categories (8 tiles shown on home screen)
+// Bento glass service categories (show 5 tiles on home screen, rest in "More")
 const BENTO_SERVICES = [
-  { id: 'electric',  icon: '💡', name: 'Electrician',       tint: 'yellow' },
-  { id: 'plumbing',  icon: '🔧', name: 'Plumber',           tint: 'blue' },
-  { id: 'mobile',    icon: '📱', name: 'Mobile Repair',     tint: 'purple' },
-  { id: 'ac',        icon: '❄️', name: 'AC Service',        tint: 'teal' },
-  { id: 'laptop',    icon: '💻', name: 'PC & Laptop Repair', tint: 'orange' },
-  { id: 'tv',        icon: '📺', name: 'TV Repair',          tint: 'pink' },
-  { id: 'more',      icon: '➕', name: 'More',               tint: 'red' },
+  { id: 'mobile',   icon: '📱', name: 'Mobile Device',        tint: 'purple' },
+  { id: 'laptop',   icon: '💻', name: 'Laptop or PC',         tint: 'orange' },
+  { id: 'tv',       icon: '📺', name: 'TV Repair',            tint: 'pink' },
+  { id: 'ac',       icon: '❄️', name: 'AC Service & Repair',  tint: 'teal' },
+  { id: 'washing',  icon: '🧺', name: 'Washing Machine',      tint: 'yellow' },
+  { id: 'more',     icon: '➕', name: 'More',                  tint: 'red' },
 ];
 
 const WHY_DOTOR = [
@@ -50,17 +49,6 @@ const WHY_DOTOR = [
   { icon: '🛡️', title: '30 Day Warranty', desc: 'All repairs covered!' },
   { icon: '💰', title: 'Best Price', desc: 'No hidden charges ever!' },
 ];
-
-// All services HTML (for the full list shown after "More" or when a bento tile is matched)
-function allServicesHtml() {
-  return SERVICES.map(s => `
-    <div class="service-card" data-service="${s.id}" onclick="window.selectService('${s.id}')">
-      <span class="service-card-icon">${s.icon}</span>
-      <div class="service-card-name">${s.name}</div>
-      ${s.brands.length ? '<div class="service-card-sub">Brand/Model</div>' : '<div class="service-card-sub">Book Now</div>'}
-    </div>
-  `).join('');
-}
 
 Router.register('home', {
   render() {
@@ -99,9 +87,7 @@ Router.register('home', {
               <div class="home-loc" id="homeLoc" style="font-size:11px">📍 ${loc || 'Set location...'}</div>
             </div>
             <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
-              <button class="header-icon-btn" onclick="window.bentoTileClick('more')" aria-label="Grid/Menu">⊞</button>
               <button class="header-icon-btn" onclick="window.toggleSearch()" aria-label="Search">🔍</button>
-              <button class="header-icon-btn" onclick="showAlert('📸 Camera', 'Point camera at QR code to auto-book')" aria-label="Camera">📷</button>
               <button class="header-icon-btn" onclick="showAlert('🔔 Notifications', 'No new notifications')" aria-label="Notifications">
                 🔔<span class="notif-badge"></span>
               </button>
@@ -202,21 +188,6 @@ Router.register('home', {
 
             <div class="section-title">⭐ Why DoToR?</div>
             ${whyHtml}
-          </div>
-
-          <!-- Full Service Selection (hidden by default, shown for "More" tile) -->
-          <div id="serviceSection" style="display:none">
-            <div class="step-back-row" onclick="window.backToBento()">← Back</div>
-            <div style="margin:20px 15px 5px;position:relative">
-              <div style="font-size:22px;font-weight:900;color:var(--text)">🔧 All Services</div>
-              <div style="font-size:13px;color:var(--text-secondary);margin-top:4px;font-weight:600">What do you need help with?</div>
-            </div>
-            <!-- Search bar for All Services -->
-            <div class="search-bar" id="servicesSearch" style="margin:8px 15px 12px">
-              <span style="font-size:16px">🔍</span>
-              <input class="form-input" id="servicesSearchInput" placeholder="Search services..." oninput="window.filterServices(event)" />
-            </div>
-            <div class="service-grid" id="serviceGrid">${allServicesHtml()}</div>
           </div>
 
           <!-- ─── Booking Wizard (8-step flow) ─── -->
@@ -329,28 +300,27 @@ Router.register('home', {
           <div style="height:40px"></div>
         </div>
       `,
-      init() {
+      init(params) {
         let selectedService = null;
         let selectedBrand = null;
         let carouselIndex = 0;
         let carouselInterval = null;
         const CAROUSEL_INTERVAL = 4000;
 
+        // ─── Auto-select service (from services page) ────
+        if (params && params.service) {
+          // Small delay to let the DOM render, then auto-open the booking wizard
+          setTimeout(() => {
+            const svc = SERVICES.find(s => s.id === params.service);
+            if (svc) window.selectService(params.service);
+          }, 100);
+        }
+
         // ─── Bento Tile Click ────────────────────────────
         window.bentoTileClick = (tileId) => {
           if (tileId === 'more') {
-            // Hide home content, show full service grid
-            document.getElementById('homeContent').style.display = 'none';
-            document.getElementById('serviceSection').style.display = 'block';
-            // Focus and clear the services search bar
-            const searchInput = document.getElementById('servicesSearchInput');
-            if (searchInput) {
-              searchInput.value = '';
-              searchInput.focus();
-            }
-            // Reset all service cards to visible
-            document.querySelectorAll('#serviceGrid .service-card').forEach(c => c.style.display = '');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            // Navigate to the dedicated All Services page
+            Router.navigate('services');
             return;
           }
           // Map bento tile to a service and start the booking flow
@@ -358,16 +328,6 @@ Router.register('home', {
           if (svc) {
             window.selectService(tileId);
           }
-        };
-
-        // ─── Back to Bento (from full service list) ──────
-        window.backToBento = () => {
-          document.getElementById('homeContent').style.display = 'block';
-          document.getElementById('serviceSection').style.display = 'none';
-          document.getElementById('bookingWizard').style.display = 'none';
-          selectedService = null;
-          selectedBrand = null;
-          bookingData = {};
         };
 
         // ─── Carousel ─────────────────────────────────────
@@ -471,9 +431,8 @@ Router.register('home', {
           bookingData = { service: svc.name, icon: svc.icon };
           wizardPhotos = [];
 
-          // Hide home content + service section, show wizard
+          // Hide home content, show wizard
           document.getElementById('homeContent').style.display = 'none';
-          document.getElementById('serviceSection').style.display = 'none';
           document.getElementById('bookingWizard').style.display = 'block';
           document.getElementById('wizardTitle').textContent = `${svc.icon} ${svc.name}`;
 
@@ -892,15 +851,6 @@ Router.register('home', {
           }
         };
 
-        // ─── Filter Services (for "All Services" search) ──
-        window.filterServices = (e) => {
-          const q = e.target.value.toLowerCase().trim();
-          document.querySelectorAll('#serviceGrid .service-card').forEach(c => {
-            const cName = c.querySelector('.service-card-name')?.textContent?.toLowerCase() || '';
-            c.style.display = (!q || cName.includes(q)) ? '' : 'none';
-          });
-        };
-
         // ─── Filter Home (main page search) ────────────────
         window.filterHome = (e) => {
           const q = e.target.value.toLowerCase().trim();
@@ -943,11 +893,8 @@ Router.register('home', {
           if (window._activeBookingCleanup) { window._activeBookingCleanup(); delete window._activeBookingCleanup; }
           delete window.toggleSearch;
           delete window.filterHome;
-          delete window.filterServices;
           delete window.callTechHome;
           delete window.bentoTileClick;
-          delete window.backToBento;
-          delete window.selectService;
           delete window.selectService;
           delete window.closeWizard;
           delete window.goToStep;
@@ -960,8 +907,8 @@ Router.register('home', {
           delete window.useCurrentLocation;
           delete window.selectOnMap;
           delete window.confirmMapLocation;
-          delete window.closeMapPicker;
           window.closeMapPicker();
+          delete window.closeMapPicker;
           delete window.confirmBooking;
           delete window.carouselNext;
           delete window.carouselPrev;
