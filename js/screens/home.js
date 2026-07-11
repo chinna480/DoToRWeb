@@ -118,13 +118,13 @@ Router.register('home', {
           <div id="homeContent">
             <!-- Bento Grid: 2 large tiles + 8 color-tinted category tiles -->
             <div class="bento-grid">
-              <div class="bento-tile bento-tile-wide glass glass-tint-orange" onclick="Router.navigate('schedule')">
+              <div class="bento-tile bento-tile-wide glass glass-tint-orange" onclick="Router.navigate('services')">
                 <div>
                   <span class="bento-tile-icon" style="display:inline-block;margin-bottom:4px">🛠️🧰</span>
                   <div class="bento-tile-title">Book Repair</div>
-                  <div class="bento-tile-sub">Verified technicians ✓</div>
+                  <div class="bento-tile-sub">Choose your repair type ✓</div>
                 </div>
-                <span style="font-size:32px">📍</span>
+                <span style="font-size:32px">🔧</span>
               </div>
               <div class="bento-tile bento-tile-wide glass glass-tint-blue" onclick="Router.navigate('tracking')">
                 <div>
