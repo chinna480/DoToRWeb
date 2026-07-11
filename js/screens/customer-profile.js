@@ -3,9 +3,12 @@ Router.register('customer-profile', {
   render() {
     const name = Store.get('custName', 'Customer');
     const phone = Store.get('custPhone', '');
+    const googleUser = Store.get('googleUser', {});
+    const email = googleUser.email || '';
+    const googlePhoto = googleUser.photoURL || '';
     const location = Store.get('custLocation', '');
     const pincode = Store.get('custPincode', '');
-    const photo = Store.get('custPhoto', null);
+    const photo = Store.get('custPhoto', null) || googlePhoto;
     const rating = 4.8;
     const totalOrders = 0;
     const completedOrders = 0;
@@ -64,6 +67,7 @@ Router.register('customer-profile', {
               <div class="profile-info">
                 <div class="profile-name-text">${name}</div>
                 <div class="profile-phone-text">${phone ? '+91 ' + phone : 'Add phone number'}</div>
+                ${email ? `<div class="profile-email-text">📧 ${email}</div>` : ''}
                 ${location ? `<div class="profile-sub-text">📍 ${location}</div>` : ''}
                 ${pincode ? `<div class="profile-sub-text">📮 ${pincode}</div>` : ''}
               </div>
@@ -146,7 +150,13 @@ Router.register('customer-profile', {
         window.custLogout = () => {
           showAlert('Logout?', 'Are you sure you want to logout?', [
             { text: 'Cancel' },
-            { text: 'Logout', style: 'destructive', onPress: () => { Store.clear(); Router.navigate('customer-login'); } }
+            { text: 'Logout', style: 'destructive', onPress: async () => {
+              try {
+                await firebase.auth().signOut();
+              } catch (e) {}
+              Store.clear();
+              Router.navigate('customer-login');
+            } }
           ]);
         };
 
