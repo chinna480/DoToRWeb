@@ -1777,6 +1777,7 @@ body::before {
 .job-card.pending { border-left-color: var(--primary); }
 .job-card.ongoing { border-left-color: var(--primary); }
 .job-card.completed { border-left-color: var(--success); }
+.job-card.scheduled { border-left-color: #7B2FF7; }
 .job-new-badge {
   position: absolute;
   top: 12px;

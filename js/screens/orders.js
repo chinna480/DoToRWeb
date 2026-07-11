@@ -101,6 +101,7 @@ Router.register('orders', {
             const statusColor = order.status === 'completed' ? 'var(--success)'
               : order.status === 'pending' ? 'var(--primary)'
               : order.status === 'accepted' || order.status === 'assigned' ? 'var(--dark)'
+              : order.status === 'scheduled' ? '#7B2FF7'
               : 'var(--text-secondary)';
 
             const statusLabel = order.status === 'completed' ? '✅ Done'
@@ -114,15 +115,32 @@ Router.register('orders', {
               ? formatDate(order.createdAt) + ' • ' + formatTime(order.createdAt)
               : '—';
 
+            // For scheduled orders, show the scheduled date/time instead
+            let scheduleInfo = '';
+            if (order.scheduleMode === 'later' && order.scheduleDateLabel && order.scheduleSlot) {
+              scheduleInfo = `
+                <div style="display:flex;align-items:center;gap:6px;margin-top:4px;padding:6px 10px;background:#f3e8ff;border-radius:8px;font-size:12px;font-weight:700;color:#7B2FF7;width:fit-content">
+                  <span>📅</span>
+                  <span>${order.scheduleDateLabel} • 🕐 ${order.scheduleSlot}</span>
+                </div>
+              `;
+            }
+
             const orderId = order._key ? order._key.slice(-5).toUpperCase() : ('#' + (idx + 1));
 
+            const cardClass = order.status === 'completed' ? 'completed'
+              : order.status === 'scheduled' ? 'scheduled'
+              : order.status === 'pending' ? 'pending'
+              : 'ongoing';
+
             return `
-              <div class="job-card ${order.status === 'completed' ? 'completed' : order.status === 'pending' ? 'pending' : 'ongoing'}" onclick="Router.navigate('tracking')" style="cursor:pointer">
+              <div class="job-card ${cardClass}" onclick="Router.navigate('tracking')" style="cursor:pointer">
                 <div style="display:flex;align-items:center;gap:12px;position:relative;z-index:1">
-                  <div style="font-size:32px">${svcIcon}</div>
+                  <div style="font-size:32px">${order.scheduleMode === 'later' ? '📅' : svcIcon}</div>
                   <div style="flex:1;min-width:0">
                     <div class="job-customer">${order.service || 'Repair Service'}${order.brand ? ' • ' + order.brand : ''}</div>
                     <div class="job-type">${order.repair || order.issue || 'General Service'}</div>
+                    ${scheduleInfo}
                     <div class="job-time">🕐 ${orderDate}</div>
                   </div>
                   <div style="text-align:right;flex-shrink:0">

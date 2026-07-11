@@ -16,16 +16,11 @@ Router.register('customer-profile', {
 
     const MENU = [
       { icon: '❓', label: 'Help & Support', sub: null },
-      { icon: '💳', label: 'Payment', sub: 'Pay via UPI, Card, COD' },
-      { icon: '📅', label: 'Schedule', sub: 'Book appointment' },
       { icon: '📋', label: 'My Orders', sub: `${totalOrders} total` },
       { icon: '🛡️', label: 'Safety', sub: null },
       { icon: '🎁', label: 'Refer and Earn', sub: 'Get ₹50' },
       { icon: '🏆', label: 'My Rewards', sub: null },
-      { icon: '🎫', label: 'DoToR Pass', sub: null },
-      { icon: '🪙', label: 'DoToR Coins', sub: null },
       { icon: '🔔', label: 'Notifications', sub: null, toggle: true },
-      { icon: '⚙️', label: 'Settings', sub: null },
       { icon: '📄', label: 'Privacy Policy', sub: null },
       { icon: '📜', label: 'Terms of Service', sub: null },
       { icon: '🚪', label: 'Logout', sub: null, danger: true },
@@ -137,17 +132,12 @@ Router.register('customer-profile', {
 
         window.custMenuAction = (label) => {
           const actions = {
-            'Help & Support': () => showAlert('Help', 'Email: support@dotor.in'),
-            'Payment': () => Router.navigate('payment'),
-            'Schedule': () => Router.navigate('schedule'),
+            'Help & Support': () => { window.location.href = 'mailto:dotor.india@gmail.com'; },
             'My Orders': () => showAlert('Orders', `Check your orders on the home screen.`),
             'Safety': () => showAlert('Safety', 'Your safety is our priority!'),
             'Refer and Earn': () => showAlert('Refer', 'Share DoToR and earn ₹50!'),
             'My Rewards': () => showAlert('Rewards', 'Coming Soon!'),
-            'DoToR Pass': () => showAlert('Pass', 'Coming Soon!'),
-            'DoToR Coins': () => showAlert('Coins', 'Coming Soon!'),
-            'Settings': () => showAlert('Settings', 'Coming Soon!'),
-            'Privacy Policy': () => showAlert('Privacy', 'Your data is secure!'),
+            'Privacy Policy': () => { window.open('https://dotor-privacy.vercel.app/', '_blank'); },
             'Terms of Service': () => showAlert('Terms', 'Use DoToR responsibly!'),
           };
           if (actions[label]) actions[label]();
