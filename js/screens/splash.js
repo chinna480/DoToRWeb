@@ -12,9 +12,11 @@ Router.register('splash', {
         </div>
       `,
       init() {
-        // Check if user is already logged in with Google
+        // Check if user is already logged in with Google (Store + Firebase Auth)
         const googleUser = Store.get('googleUser', null);
-        const targetScreen = (googleUser && googleUser.email) ? 'home' : 'customer-login';
+        const firebaseUser = firebase.auth().currentUser;
+        const isLoggedIn = (googleUser && googleUser.email) || firebaseUser;
+        const targetScreen = isLoggedIn ? 'home' : 'customer-login';
 
         const timer = setTimeout(() => {
           Router.navigate(targetScreen).catch(function(e) {
