@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "984437487718",
+    "firebase_url": "https://dotor-2e4d8-default-rtdb.firebaseio.com",
+    "project_id": "dotor-2e4d8",
+    "storage_bucket": "dotor-2e4d8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:984437487718:android:c323dd93e33ea0889915a7",
+        "android_client_info": {
+          "package_name": "com.dotor.DoToR"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "984437487718-krfj9nb4p2io220famoih0bd65h23p12.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.dotor.DoToR",
+            "certificate_hash": "0ffdcfd34d603cb0b06ce2bd3643e491694e604b"
+          }
+        },
+        {
+          "client_id": "984437487718-ir0ds5v37j80adf7cpvr10v5jqvgjud2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDGzlU-qp5Q_ht8xxIrpyeGNPLgbbKexKs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "984437487718-ir0ds5v37j80adf7cpvr10v5jqvgjud2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

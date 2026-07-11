@@ -12,11 +12,16 @@ Router.register('splash', {
         </div>
       `,
       init() {
+        // Check if user is already logged in with Google
+        const googleUser = Store.get('googleUser', null);
+        const targetScreen = (googleUser && googleUser.email) ? 'home' : 'customer-login';
+
         const timer = setTimeout(() => {
-          Router.navigate('customer-login').catch(function(e) {
+          Router.navigate(targetScreen).catch(function(e) {
             console.warn('Splash navigate error:', e);
           });
-        }, 3000);
+        }, 2500); // Slightly faster splash for returning users
+
         return () => clearTimeout(timer);
       }
     };
