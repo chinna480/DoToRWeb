@@ -46,7 +46,6 @@ const WHY_DOTOR = [
   { icon: '🏠', title: 'Doorstep Service', desc: 'Repair at your doorstep!' },
   { icon: '👀', title: 'Repair in Front of You', desc: '100% transparent process!' },
   { icon: '⚡', title: 'Fast Service', desc: 'Arrives within 60 mins!' },
-  { icon: '🛡️', title: '30 Day Warranty', desc: 'All repairs covered!' },
   { icon: '💰', title: 'Best Price', desc: 'No hidden charges ever!' },
 ];
 
@@ -70,6 +69,18 @@ Router.register('home', {
       <div class="bento-tile glass glass-tint-${s.tint}" onclick="window.bentoTileClick('${s.id}')">
         <span class="bento-tile-icon">${s.icon}</span>
         <div class="bento-tile-title">${s.name}</div>
+      </div>
+    `).join('');
+
+    // Carousel slides: all 12 services auto-rotating (service IDs are plain alphanumeric, no esc needed)
+    const carouselSlidesHtml = SERVICES.map(s => `
+      <div class="carousel-slide carousel-slide-gradient" onclick="window.bentoTileClick('${s.id}')">
+        <div class="carousel-text">
+          <div style="font-size:36px;margin-bottom:4px">${s.icon}</div>
+          <div class="carousel-title">${s.name}</div>
+          <div class="carousel-sub">Tap to book — Verified technicians ✓</div>
+        </div>
+        <div class="carousel-cta">📅 Book Now</div>
       </div>
     `).join('');
 
@@ -126,31 +137,11 @@ Router.register('home', {
               ${bentoTilesHtml}
             </div>
 
-            <!-- Promo Carousel -->
+            <!-- Services Carousel (all 12 services auto-rotating) -->
             <div class="carousel-wrapper" id="carouselWrapper">
               <div class="glass carousel-container">
                 <div class="carousel-track" id="carouselTrack">
-                  <div class="carousel-slide carousel-slide-gradient" onclick="Router.navigate('schedule')">
-                    <div class="carousel-text">
-                      <div class="carousel-title">🎉 First Repair Offer!</div>
-                      <div class="carousel-sub">10% off — Use code <strong>DOTOR10</strong> 🔥</div>
-                    </div>
-                    <div class="carousel-cta">🚀 Get Started</div>
-                  </div>
-                  <div class="carousel-slide carousel-slide-dark" onclick="Router.navigate('tracking')">
-                    <div class="carousel-text">
-                      <div class="carousel-title">✨ Live Tracking</div>
-                      <div class="carousel-sub">Track your order in real-time 📍</div>
-                    </div>
-                    <div class="carousel-cta">📍 Track Now</div>
-                  </div>
-                  <div class="carousel-slide carousel-slide-gradient" onclick="showAlert('🎫 DoToR Pass', 'Get priority service with our DoToR Pass! Starting at ₹99/month')">
-                    <div class="carousel-text">
-                      <div class="carousel-title">🎫 DoToR Pass</div>
-                      <div class="carousel-sub">Priority service & exclusive discounts ✨</div>
-                    </div>
-                    <div class="carousel-cta">🔥 Learn More</div>
-                  </div>
+                  ${carouselSlidesHtml}
                 </div>
               </div>
               <div class="carousel-arrows" id="carouselArrows">
@@ -283,8 +274,25 @@ Router.register('home', {
               </div>
             </div>
 
-            <!-- Step 7: Review & Confirm -->
+            <!-- Step 7: Apartment / Flat -->
             <div class="wizard-step" id="wizardStep7" style="display:none">
+              <div style="font-size:15px;font-weight:800;color:var(--text);margin:0 18px 12px">🏢 Apartment / Flat</div>
+              <div class="glass" style="margin:0 18px 12px;padding:14px">
+                <div class="form-label" style="margin-bottom:6px">🏢 Apartment / Society Name</div>
+                <input class="form-input" id="wizardApartment" placeholder="e.g. Sunrise Apartments, Block A" style="width:100%;font-size:14px" />
+              </div>
+              <div class="glass" style="margin:0 18px;padding:14px">
+                <div class="form-label" style="margin-bottom:6px">🚪 Flat / Door Number</div>
+                <input class="form-input" id="wizardFlat" placeholder="e.g. 3B, 204, 12/A" style="width:100%;font-size:14px" />
+              </div>
+              <div class="btn-row" style="margin:15px 18px 0">
+                <button class="btn btn-outline btn-sm" onclick="window.prevStep()" style="flex:1">← Back</button>
+                <button class="btn btn-primary btn-sm" onclick="window.nextStep()" style="flex:1">Next →</button>
+              </div>
+            </div>
+
+            <!-- Step 8: Review & Confirm -->
+            <div class="wizard-step" id="wizardStep8" style="display:none">
               <div style="font-size:15px;font-weight:800;color:var(--text);margin:0 18px 12px">✅ Review & Confirm</div>
               <div class="glass" style="margin:0 18px;padding:16px">
                 <div id="wizardReviewContent"></div>
@@ -422,7 +430,7 @@ Router.register('home', {
         // ─── Booking Wizard ──────────────────────────────
         let bookingData = {};
         let wizardPhotos = [];
-        const TOTAL_STEPS = 7;
+        const TOTAL_STEPS = 8;
 
         window.selectService = (id) => {
           const svc = SERVICES.find(s => s.id === id);
@@ -484,6 +492,14 @@ Router.register('home', {
           // Populate issue chips when reaching step 3
           if (step === 3) populateIssueChips();
 
+          // Populate saved apartment/flat values when reaching step 7
+          if (step === 7) {
+            const aptEl = document.getElementById('wizardApartment');
+            const flatEl = document.getElementById('wizardFlat');
+            if (aptEl && bookingData.apartment) aptEl.value = bookingData.apartment;
+            if (flatEl && bookingData.flat) flatEl.value = bookingData.flat;
+          }
+
           // Update review when on last step
           if (step === TOTAL_STEPS) updateReview();
 
@@ -534,6 +550,11 @@ Router.register('home', {
               return;
             }
           }
+          if (window.currentStep === 7) {
+            bookingData.apartment = document.getElementById('wizardApartment').value.trim();
+            bookingData.flat = document.getElementById('wizardFlat').value.trim();
+            // Apartment/flat is optional
+          }
           if (window.currentStep < TOTAL_STEPS) window.goToStep(window.currentStep + 1);
         };
 
@@ -544,6 +565,10 @@ Router.register('home', {
             if (window.currentStep === 3) bookingData.issue = document.getElementById('wizardIssue').value.trim();
             if (window.currentStep === 5) bookingData.address = document.getElementById('wizardAddress').value.trim();
             if (window.currentStep === 6) bookingData.pincode = document.getElementById('wizardPincode').value.trim();
+            if (window.currentStep === 7) {
+              bookingData.apartment = document.getElementById('wizardApartment').value.trim();
+              bookingData.flat = document.getElementById('wizardFlat').value.trim();
+            }
             window.goToStep(window.currentStep - 1);
           }
         };
@@ -651,29 +676,43 @@ Router.register('home', {
           });
         };
 
-        // ─── Map Picker (Leaflet) ─────────────────────────
+        // ─── Map Picker with Search & Autocomplete (Leaflet) ─
         window.selectOnMap = () => {
           // Create full-screen map overlay
           const overlay = document.createElement('div');
           overlay.id = 'mapPickerOverlay';
           overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:10000;background:rgba(0,0,0,0.6);display:flex;flex-direction:column;animation:clayFadeIn 0.2s ease';
 
-          // Header bar
+          // Header bar with back button + title
           const header = document.createElement('div');
-          header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:12px 16px;padding-top:50px;background:var(--dark);color:#fff;flex-shrink:0';
+          header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;padding-top:50px;background:var(--dark);color:#fff;flex-shrink:0';
           header.innerHTML = '<button onclick="window.closeMapPicker()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;font-weight:700">←</button><div style="font-size:16px;font-weight:800">🗺️ Select Location</div><div style="width:40px"></div>';
+
+          // Search bar (below header, above map)
+          const searchWrap = document.createElement('div');
+          searchWrap.id = 'mapSearchWrap';
+          searchWrap.style.cssText = 'position:relative;flex-shrink:0;background:var(--white);padding:8px 12px';
+          searchWrap.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;background:var(--clay-bg);border:1px solid var(--glass-border);border-radius:12px;padding:10px 14px;box-shadow:var(--clay-inset)">
+              <span style="font-size:16px;flex-shrink:0">🔍</span>
+              <input id="mapSearchInput" type="text" placeholder="Search area, pincode or landmark..." autocomplete="off" style="flex:1;border:none;outline:none;font-size:14px;font-weight:600;color:var(--text);background:transparent;font-family:inherit" />
+              <span id="mapSearchSpinner" style="font-size:14px;display:none">⏳</span>
+            </div>
+            <div id="mapSuggestions" style="position:absolute;top:100%;left:12px;right:12px;z-index:10001;background:var(--white);border:1px solid var(--glass-border);border-radius:12px;box-shadow:var(--clay-lg);max-height:220px;overflow-y:auto;display:none"></div>
+          `;
 
           // Map container
           const mapDiv = document.createElement('div');
           mapDiv.id = 'mapPickerMap';
-          mapDiv.style.cssText = 'flex:1;min-height:0';
+          mapDiv.style.cssText = 'flex:1;min-height:0;z-index:1';
 
           // Bottom bar
           const bottomBar = document.createElement('div');
           bottomBar.style.cssText = 'padding:12px 16px;padding-bottom:max(12px,env(safe-area-inset-bottom));background:var(--glass-bg);backdrop-filter:var(--glass-blur-strong);border-top:1px solid var(--glass-border);flex-shrink:0';
-          bottomBar.innerHTML = '<div id="mapPickerInfo" style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;text-align:center">👆 Tap on the map to pin your location</div><button class="btn btn-primary btn-block btn-sm" id="mapPickerConfirm" onclick="window.confirmMapLocation()" disabled>📍 Confirm Location</button>';
+          bottomBar.innerHTML = '<div id="mapPickerInfo" style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;text-align:center">👆 Tap on the map or search above to pin your location</div><button class="btn btn-primary btn-block btn-sm" id="mapPickerConfirm" onclick="window.confirmMapLocation()" disabled>📍 Confirm Location</button>';
 
           overlay.appendChild(header);
+          overlay.appendChild(searchWrap);
           overlay.appendChild(mapDiv);
           overlay.appendChild(bottomBar);
           document.body.appendChild(overlay);
@@ -691,11 +730,119 @@ Router.register('home', {
           window._mapPickerLng = null;
           window._mapPickerAddress = '';
           let marker = null;
+          let searchTimeout = null;
+          window._mapSearchTimeout = null;
 
           // Try to center on user location
           getCurrentPositionOnce().then(pos => {
             if (pos && pos.lat) map.setView([pos.lat, pos.lng], 15);
           }).catch(() => {});
+
+          // ─── Search with autocomplete ─────────────────────
+          const searchInput = document.getElementById('mapSearchInput');
+          const suggestionsList = document.getElementById('mapSuggestions');
+          const searchSpinner = document.getElementById('mapSearchSpinner');
+
+          searchInput.addEventListener('input', () => {
+            const q = searchInput.value.trim();
+            if (q.length < 3) {
+              suggestionsList.style.display = 'none';
+              suggestionsList.innerHTML = '';
+              return;
+            }
+            // Debounce: wait 400ms after user stops typing
+            if (searchTimeout) clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => fetchSuggestions(q), 400);
+            window._mapSearchTimeout = searchTimeout;
+          });
+
+          // Close suggestions on blur (with delay for click)
+          searchInput.addEventListener('blur', () => {
+            setTimeout(() => { suggestionsList.style.display = 'none'; }, 200);
+          });
+          searchInput.addEventListener('focus', () => {
+            if (suggestionsList.children.length) suggestionsList.style.display = 'block';
+          });
+
+          function fetchSuggestions(query) {
+            searchSpinner.style.display = 'inline';
+            // Use Nominatim Search API (free, no key needed)
+            fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&limit=6&addressdetails=1`)
+              .then(r => r.json())
+              .then(data => {
+                searchSpinner.style.display = 'none';
+                if (!data || !data.length) {
+                  suggestionsList.innerHTML = '<div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:13px;font-weight:600">No results found</div>';
+                  suggestionsList.style.display = 'block';
+                  return;
+                }
+                suggestionsList.innerHTML = data.map((item, idx) => {
+                  // Extract a short display label from the full address
+                  const displayLabel = item.display_name ? item.display_name.split(',').slice(0, 3).join(',') : item.display_name;
+                  const icon = item.type === 'postcode' ? '📮'
+                    : item.type === 'city' || item.type === 'town' || item.type === 'village' ? '🏘️'
+                    : item.type === 'road' || item.type === 'street' ? '🛣️'
+                    : item.type === 'suburb' || item.type === 'neighbourhood' ? '📍'
+                    : '📍';
+                  return `<div class="map-suggestion-item" data-idx="${idx}" style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;border-bottom:1px solid rgba(0,0,0,0.04);transition:background 0.15s ease"
+                    onmouseover="this.style.background='var(--clay-card-hover)'" onmouseout="this.style.background=''" onclick="window.selectMapSuggestion(${idx})">
+                    <span style="font-size:18px;flex-shrink:0">${icon}</span>
+                    <div style="flex:1;min-width:0">
+                      <div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.display_name ? item.display_name.split(',').slice(0, 2).join(',') : ''}</div>
+                      <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.display_name || ''}</div>
+                    </div>
+                    <span style="font-size:12px;color:var(--primary);font-weight:700;flex-shrink:0">${(item.lat && item.lon) ? ((item.type === 'postcode' ? '📮' : '') + ' Select') : ''}</span>
+                  </div>`;
+                }).join('');
+                suggestionsList.style.display = 'block';
+
+                // Store results for click handler
+                window._mapSearchResults = data;
+              })
+              .catch(() => {
+                searchSpinner.style.display = 'none';
+                suggestionsList.innerHTML = '<div style="padding:14px;text-align:center;color:var(--text-secondary);font-size:13px">Search failed. Try again.</div>';
+                suggestionsList.style.display = 'block';
+              });
+          }
+
+          // When a suggestion is clicked: update map + marker + address
+          window.selectMapSuggestion = (idx) => {
+            const results = window._mapSearchResults;
+            if (!results || !results[idx]) return;
+            const item = results[idx];
+            const lat = parseFloat(item.lat);
+            const lng = parseFloat(item.lon);
+            if (isNaN(lat) || isNaN(lng)) return;
+
+            // Hide suggestions
+            suggestionsList.style.display = 'none';
+            searchInput.value = item.display_name ? item.display_name.split(',').slice(0, 2).join(',') : '';
+
+            // Update state
+            window._mapPickerLat = lat;
+            window._mapPickerLng = lng;
+            window._mapPickerAddress = item.display_name || '';
+
+            // Center map and place marker
+            map.setView([lat, lng], 16);
+            if (marker) map.removeLayer(marker);
+            marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+            marker.on('dragend', () => {
+              const pos = marker.getLatLng();
+              window._mapPickerLat = pos.lat;
+              window._mapPickerLng = pos.lng;
+              reverseGeocode(pos.lat, pos.lng);
+            });
+
+            // Enable confirm button
+            document.getElementById('mapPickerConfirm').disabled = false;
+
+            // Show address in bottom info
+            const info = document.getElementById('mapPickerInfo');
+            info.textContent = `📍 ${(item.display_name || '').substring(0, 120)}`;
+            info.style.color = 'var(--primary)';
+          };
 
           // Click to place/update marker
           map.on('click', (e) => {
@@ -726,7 +873,7 @@ Router.register('home', {
               .then(data => {
                 if (data && data.display_name) {
                   window._mapPickerAddress = data.display_name;
-                  info.textContent = `📍 ${data.display_name.substring(0, 100)}`;
+                  info.textContent = `📍 ${data.display_name.substring(0, 120)}`;
                   info.style.color = 'var(--primary)';
                 } else {
                   info.textContent = `📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
@@ -761,6 +908,7 @@ Router.register('home', {
           const overlay = document.getElementById('mapPickerOverlay');
           if (overlay) overlay.remove();
           if (window._mapPickerMap) { window._mapPickerMap.remove(); window._mapPickerMap = null; }
+          if (window._mapSearchTimeout) { clearTimeout(window._mapSearchTimeout); window._mapSearchTimeout = null; }
         };
 
         // ─── Review & Confirm ─────────────────────────────
@@ -779,6 +927,8 @@ Router.register('home', {
             ['Address', d.address || '—'],
             ['Location', d.location || '—'],
             ['Pincode', d.pincode || '—'],
+            ['Apartment', d.apartment || '—'],
+            ['Flat / Door', d.flat || '—'],
           ];
           container.innerHTML = items.map(([label, value]) => `
             <div class="info-row">
@@ -801,6 +951,8 @@ Router.register('home', {
           const address = d.address || '';
           const location = d.location || '';
           const pincode = d.pincode || '';
+          const apartment = d.apartment || '';
+          const flat = d.flat || '';
 
           Store.set('lastBrand', brand);
           Store.set('lastService', svc.name);
@@ -814,7 +966,7 @@ Router.register('home', {
 
           const order = {
             customerName: name, customerPhone: phone, customerPushToken: pushToken,
-            location: locStr, address: address, pincode: pincode,
+            location: locStr, address: address, pincode: pincode, apartment: apartment, flat: flat,
             service: svc.name, brand: brand, model: model,
             issue: issue, photos: wizardPhotos,
             status: 'pending',
@@ -906,6 +1058,9 @@ Router.register('home', {
           delete window.removePhoto;
           delete window.useCurrentLocation;
           delete window.selectOnMap;
+          delete window.selectMapSuggestion;
+          delete window._mapSearchResults;
+          delete window._mapSearchTimeout;
           delete window.confirmMapLocation;
           window.closeMapPicker();
           delete window.closeMapPicker;

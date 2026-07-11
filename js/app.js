@@ -186,7 +186,7 @@ function getCurrentPositionOnce() {
 const NavBar = {
   _customerTabs: [
     { id: 'home', label: 'Home', icon: '🏠', screen: 'home' },
-    { id: 'orders', label: 'Orders', icon: '📋', screen: 'schedule' },
+    { id: 'orders', label: 'Orders', icon: '📋', screen: 'orders' },
     { id: 'download', label: 'App', icon: '📲', screen: null, action: 'download' },
   ],
   visible: false,
