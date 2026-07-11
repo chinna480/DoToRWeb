@@ -1,0 +1,77 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# Node modules
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+autolinking-output.json
+package-lock.json
+expo-server.log
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# Firebase
+firebase-debug.log
+.firebase/
+
+# local env files
+.env
+.env*.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# stray tarballs
+*.tgz
+
+# typescript
+*.tsbuildinfo
+
+app-example
+
+# generated native folders
+/ios
+
+# stray files
+nul
+null
+exclude.txt
+
+# OS files
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+.vercel
+
+# Firebase cloud functions (not part of the app)
+functions/
