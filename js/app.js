@@ -15,6 +15,46 @@ const Store = {
   }
 };
 
+// ─── Reverse Geocode for Display ─────────────────────────────
+// Converts lat/lng to a short area/city name using Nominatim (cache-friendly)
+function reverseGeocodeForDisplay(lat, lng) {
+  // Check if coordinates changed significantly (>~150m) from cached
+  const cached = Store.get('_geoCache', {});
+  if (cached.lat && cached.name) {
+    const dLat = Math.abs(cached.lat - lat);
+    const dLng = Math.abs(cached.lng - lng);
+    // ~0.001 deg ≈ 100m — if close enough, reuse cached name
+    if (dLat < 0.002 && dLng < 0.002) {
+      Store.set('custAreaName', cached.name);
+      return Promise.resolve(cached.name);
+    }
+  }
+
+  return fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=16`)
+    .then(r => r.json())
+    .then(data => {
+      if (data && data.display_name) {
+        // Extract a short area/city name: take first 2-3 meaningful parts
+        const parts = data.display_name.split(',').map(s => s.trim()).filter(Boolean);
+        // Skip the first part (often the full address / house number) if it looks like a number
+        let startIdx = 0;
+        if (parts.length > 3 && /^\d+/.test(parts[0])) startIdx = 1;
+        // Take up to 3 parts for a nice short name: e.g. "Madhapur, Hyderabad, Telangana"
+        const shortName = parts.slice(startIdx, startIdx + 3).join(', ');
+        
+        Store.set('custAreaName', shortName);
+        Store.set('_geoCache', { lat, lng, name: shortName });
+        return shortName;
+      }
+      return '';
+    })
+    .catch(() => {
+      // On error, fall back to a formatted coordinate string (but shorter)
+      const fallback = `${lat.toFixed(2)}, ${lng.toFixed(2)}`;
+      return fallback;
+    });
+}
+
 // ─── Custom Alert ─────────────────────────────────────────────
 function showAlert(title, message, buttons) {
   const overlay = document.createElement('div');

@@ -3,7 +3,8 @@ Router.register('tracking', {
   render() {
     const brand = Store.get('lastBrand', '-');
     const repair = Store.get('lastRepair', '-');
-    const location = Store.get('custLocation', '-');
+    const areaName = Store.get('custAreaName', '');
+    const location = areaName || Store.get('custLocation', '-');
     return {
       html: `
         <div class="screen">
@@ -141,27 +142,68 @@ Router.register('tracking', {
           }
         }
 
+        // Track previous statuses to detect changes
+        let prevStatuses = {};
+
         // Listen for order updates
         const ordersRef = firebase.database().ref('orders');
         const onOrders = (snap) => {
           if (!snap.exists()) return;
           snap.forEach(child => {
             const order = child.val();
-            
+            const orderKey = child.key;
+            const myPhone = Store.get('custPhone', '');
+            const prevStatus = prevStatuses[orderKey];
+            const currentStatus = order.status;
+
             // Update technician info card whenever any order changes
             updateTechCard(order);
 
-            if (order.status === 'assigned') {
+            // Only send notifications for the current customer's orders
+            if (order.customerPhone === myPhone && prevStatus && prevStatus !== currentStatus) {
+              // Status changed — notify customer
+              const notifData = { screen: 'tracking', orderId: orderKey };
+              if (currentStatus === 'assigned') {
+                const techName = order.techName || 'a technician';
+                PushNotifications.writeToCustomer(
+                  myPhone,
+                  '🛵 Technician Assigned',
+                  `${techName} has been assigned to your ${order.service || 'repair'} order`,
+                  'assigned',
+                  notifData
+                );
+              } else if (currentStatus === 'accepted') {
+                PushNotifications.writeToCustomer(
+                  myPhone,
+                  '🔧 Repair Started',
+                  `Your ${order.service || 'repair'} is now in progress`,
+                  'in_progress',
+                  notifData
+                );
+              } else if (currentStatus === 'completed') {
+                PushNotifications.writeToCustomer(
+                  myPhone,
+                  '✅ Repair Completed!',
+                  `Your ${order.service || 'repair'} has been completed. Please rate your experience!`,
+                  'completed',
+                  { screen: 'review', orderId: orderKey }
+                );
+              }
+            }
+            prevStatuses[orderKey] = currentStatus;
+
+            // Update UI
+            if (currentStatus === 'assigned') {
               document.getElementById('stepAssigned').className = 'dot dot-done';
             }
-            if (order.status === 'accepted' || order.status === 'assigned') {
+            if (currentStatus === 'accepted' || currentStatus === 'assigned') {
               document.getElementById('trackStatus').textContent = '🔧 Repair In Progress';
               document.getElementById('trackPill').style.background = 'rgba(255,107,0,0.3)';
               document.getElementById('trackPillText').textContent = '🟢 Active';
               document.getElementById('stepAssigned').className = 'dot dot-done';
               document.getElementById('stepInProgress').className = 'dot dot-done';
             }
-            if (order.status === 'completed') {
+            if (currentStatus === 'completed') {
               jobDone = true;
               document.getElementById('trackStatus').textContent = '✅ Repair Completed!';
               document.getElementById('trackPill').style.background = 'rgba(46,125,50,0.3)';

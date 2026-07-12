@@ -17,6 +17,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
 
   <!-- Leaflet for Maps -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -28,6 +29,7 @@
   <!-- App Scripts -->
   <script src="js/firebase-config.js"></script>
   <script src="js/utils/distance.js"></script>
+  <script src="js/utils/push-notifications.js"></script>
   <script src="js/app.js"></script>
 
   <!-- Screen Scripts (must load after app.js for Router) -->
@@ -98,6 +100,19 @@
   <nav id="bottomNav" class="bottom-nav" style="display:none">
     <div class="nav-items" id="navItems"></div>
   </nav>
+
+  <!-- Register Service Worker for Push Notifications -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/firebase-messaging-sw.js')
+        .then(function(registration) {
+          console.log('Service Worker registered:', registration.scope);
+        })
+        .catch(function(err) {
+          console.error('Service Worker registration failed:', err);
+        });
+    }
+  </script>
 
   <!-- Initialize the app -->
   <script>

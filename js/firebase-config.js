@@ -6,7 +6,8 @@ const firebaseConfig = {
   projectId: 'dotor-2e4d8',
   storageBucket: 'dotor-2e4d8.firebasestorage.app',
   messagingSenderId: '984437487718',
-  appId: '1:984437487718:android:c323dd93e33ea0889915a7',
+  appId: '1:984437487718:web:3d279fdf6e720f119915a7',
+  measurementId: 'G-DKXZK0MKFS',
 };
 
 firebase.initializeApp(firebaseConfig);

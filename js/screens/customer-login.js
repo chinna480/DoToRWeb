@@ -162,6 +162,11 @@ Router.register('customer-login', {
 
           // Navigate to home
           Router.navigate('home');
+
+          // Initialize push notifications after successful login
+          setTimeout(() => {
+            PushNotifications.init();
+          }, 1000);
         };
 
         return () => {

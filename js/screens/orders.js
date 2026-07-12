@@ -169,6 +169,9 @@ Router.register('orders', {
           }).join('');
         }
 
+        // Track previous statuses for notification on change
+        let prevOrderStatuses = {};
+
         // Set up filter switching
         window.setOrderFilter = (filter) => {
           currentFilter = filter;
@@ -192,6 +195,41 @@ Router.register('orders', {
             if (order.customerPhone === myPhone) {
               order._key = child.key;
               allOrders.push(order);
+
+              // Detect status changes and notify customer
+              const key = child.key;
+              const prev = prevOrderStatuses[key];
+              const curr = order.status;
+              if (prev && prev !== curr) {
+                const notifData = { screen: 'tracking', orderId: key };
+                if (curr === 'assigned') {
+                  const techName = order.techName || 'a technician';
+                  PushNotifications.writeToCustomer(
+                    myPhone,
+                    '🛵 Technician Assigned',
+                    `${techName} has been assigned to your ${order.service || 'repair'}`,
+                    'assigned',
+                    notifData
+                  );
+                } else if (curr === 'accepted') {
+                  PushNotifications.writeToCustomer(
+                    myPhone,
+                    '🔧 Repair In Progress',
+                    `Your ${order.service || 'repair'} is now being worked on`,
+                    'in_progress',
+                    notifData
+                  );
+                } else if (curr === 'completed') {
+                  PushNotifications.writeToCustomer(
+                    myPhone,
+                    '✅ Repair Completed!',
+                    `Your ${order.service || 'repair'} is done. Please rate your experience!`,
+                    'completed',
+                    { screen: 'review', orderId: key }
+                  );
+                }
+              }
+              prevOrderStatuses[key] = curr;
             }
           });
           renderOrders(currentFilter);
