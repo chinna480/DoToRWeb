@@ -32,13 +32,14 @@ const SERVICES = [
   { id: 'inverter', icon: '🔋',    name: 'Inverter & UPS Service',         brands: [],             repairs: INVERTER_ISSUES },
 ];
 
-// Bento glass service categories (show 5 tiles on home screen, rest in "More")
+// Bento glass service categories (show first 6 service tiles, then "More")
 const BENTO_SERVICES = [
   { id: 'mobile',   icon: '📱', name: 'Mobile Device',        tint: 'purple' },
   { id: 'laptop',   icon: '💻', name: 'Laptop or PC',         tint: 'orange' },
   { id: 'tv',       icon: '📺', name: 'TV Repair',            tint: 'pink' },
   { id: 'ac',       icon: '❄️', name: 'AC Service & Repair',  tint: 'teal' },
   { id: 'washing',  icon: '🧺', name: 'Washing Machine',      tint: 'yellow' },
+  { id: 'electric', icon: '🔌', name: 'Electrical Services',   tint: 'green' },
   { id: 'more',     icon: '➕', name: 'More',                  tint: 'red' },
 ];
 
@@ -75,12 +76,12 @@ Router.register('home', {
     // Carousel slides: all 12 services auto-rotating (service IDs are plain alphanumeric, no esc needed)
     const carouselSlidesHtml = SERVICES.map(s => `
       <div class="carousel-slide carousel-slide-gradient" onclick="window.bentoTileClick('${s.id}')">
-        <div class="carousel-text">
-          <div style="font-size:36px;margin-bottom:4px">${s.icon}</div>
+        <div class="carousel-slide-inner">
+          <div class="carousel-icon">${s.icon}</div>
           <div class="carousel-title">${s.name}</div>
           <div class="carousel-sub">Tap to book — Verified technicians ✓</div>
+          <div class="carousel-cta">📅 Book Now</div>
         </div>
-        <div class="carousel-cta">📅 Book Now</div>
       </div>
     `).join('');
 
@@ -1153,30 +1154,77 @@ Router.register('home', {
           const svcId = svc.id || '';
           const device = deviceMap[svcId] || svc.name;
 
-          const order = {
-            // Fields the auto-assignment system expects
-            customerName: name, customerPhone: phone, customerPushToken: pushToken,
-            serviceCategory: svcId, serviceLabel: svc.name, device: device,
-            brand: brand, modelName: model, description: issue,
-            location: locStr, address: address, pincode: pincode,
-            status: 'pending',
-            time: scheduleMode === 'later' ? scheduleSlot : new Date().toLocaleTimeString(),
-            createdAt: Date.now(),
-            // Extra fields for display (kept alongside standard ones)
-            service: svc.name, model: model, issue: issue, photos: wizardPhotos,
-            scheduleMode: scheduleMode,
-            scheduleDate: scheduleDate,
-            scheduleSlot: scheduleSlot,
-            scheduleDateLabel: scheduleDateLabel,
-          };
-          // Only add location coords when available (rules require isNumber, not null)
-          if (custLat !== null) { order.custLat = custLat; order.custLng = custLng; }
-
           try {
-            // Push returns a ThenableReference: key is available synchronously, write is async
+            let orderId = null;
+
+            // ─── Upload photos to Firebase Storage FIRST (before saving order) ───
+            let photoUrls = [];
+            if (wizardPhotos.length > 0 && firebase.storage) {
+              // Generate a temporary order ID for the Storage path
+              const tempRef = firebase.database().ref('orders').push();
+              orderId = tempRef.key;
+
+              // Show upload progress to the user
+              showAlert('⏳ Uploading Photos',
+                `Uploading ${wizardPhotos.length} photo(s) to your order...\n\nPlease wait — this may take a moment for large images.`);
+
+              const storage = firebase.storage();
+              const uploadPromises = wizardPhotos.map((dataUrl, idx) => {
+                // Convert base64 data URL to a Blob for upload
+                const byteString = atob(dataUrl.split(',')[1]);
+                const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+                const ab = new ArrayBuffer(byteString.length);
+                const ia = new Uint8Array(ab);
+                for (let i = 0; i < byteString.length; i++) {
+                  ia[i] = byteString.charCodeAt(i);
+                }
+                const blob = new Blob([ab], { type: mimeString });
+
+                // Upload to: orders/{orderId}/photos/photo_{idx}
+                const photoPath = `orders/${orderId}/photos/photo_${idx}`;
+                const ref = storage.ref(photoPath);
+                return ref.put(blob).then(snapshot => snapshot.ref.getDownloadURL());
+              });
+
+              // Use allSettled so one bad upload doesn't break the entire booking
+              const results = await Promise.allSettled(uploadPromises);
+              photoUrls = results
+                .filter(r => r.status === 'fulfilled')
+                .map(r => r.value);
+              const failed = results.filter(r => r.status === 'rejected').length;
+              if (failed > 0) {
+                console.warn(`${failed} photo(s) failed to upload to Firebase Storage`);
+              }
+            }
+
+            // Build the complete order object with photo URLs
+            const order = {
+              // Fields the auto-assignment system expects
+              customerName: name, customerPhone: phone, customerPushToken: pushToken,
+              serviceCategory: svcId, serviceLabel: svc.name, device: device,
+              brand: brand, modelName: model, description: issue,
+              location: locStr, address: address, pincode: pincode,
+              status: 'pending',
+              time: scheduleMode === 'later' ? scheduleSlot : new Date().toLocaleTimeString(),
+              createdAt: Date.now(),
+              // Extra fields for display (kept alongside standard ones)
+              service: svc.name, model: model, issue: issue,
+              // Store photo URLs from Firebase Storage (or empty if no photos)
+              photos: photoUrls,
+              photoCount: photoUrls.length,
+              scheduleMode: scheduleMode,
+              scheduleDate: scheduleDate,
+              scheduleSlot: scheduleSlot,
+              scheduleDateLabel: scheduleDateLabel,
+            };
+            // Only add location coords when available (rules require isNumber, not null)
+            if (custLat !== null) { order.custLat = custLat; order.custLng = custLng; }
+
+            // Push the complete order in ONE atomic write
             const pushRef = firebase.database().ref('orders').push(order);
-            const orderId = pushRef.key;
-            await pushRef; // Wait for write to complete so we catch auth/rules errors
+            orderId = pushRef.key;
+            await pushRef;
+
             Store.set('lastOrderId', orderId);
             const detail = `${svc.icon} ${svc.name}${brand ? ' • ' + brand : ''}${model ? ' • ' + model : ''}`;
             showAlert('✅ Booking Confirmed!', `${detail}\n\nTrack your order?`, [

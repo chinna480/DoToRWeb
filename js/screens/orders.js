@@ -130,6 +130,24 @@ Router.register('orders', {
               : order.status === 'pending' ? (order.scheduleMode === 'later' ? 'scheduled' : 'pending')
               : 'ongoing';
 
+            // Generate photo thumbnails if order has photos
+            let photoThumbsHtml = '';
+            if (order.photos && order.photos.length > 0) {
+              const MAX_VISIBLE = 3;
+              const visible = order.photos.slice(0, MAX_VISIBLE);
+              const remaining = order.photos.length - MAX_VISIBLE;
+              photoThumbsHtml = `
+                <div class="order-photo-strip" style="position:relative;z-index:1">
+                  ${visible.map(url => `
+                    <div class="order-photo-thumb" onclick="event.stopPropagation();Router.navigate('tracking')">
+                      <img src="${url}" alt="Order photo" loading="lazy" />
+                    </div>
+                  `).join('')}
+                  ${remaining > 0 ? `<div class="order-photo-more" onclick="event.stopPropagation();Router.navigate('tracking')">+${remaining}</div>` : ''}
+                </div>
+              `;
+            }
+
             return `
               <div class="job-card ${cardClass}" onclick="Router.navigate('tracking')" style="cursor:pointer">
                 <div style="display:flex;align-items:center;gap:12px;position:relative;z-index:1">
@@ -145,6 +163,7 @@ Router.register('orders', {
                     <div style="font-size:10px;color:var(--text-secondary);margin-top:3px;font-weight:600">#DR${orderId}</div>
                   </div>
                 </div>
+                ${photoThumbsHtml}
               </div>
             `;
           }).join('');
