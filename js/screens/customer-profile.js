@@ -6,7 +6,8 @@ Router.register('customer-profile', {
     const googleUser = Store.get('googleUser', {});
     const email = googleUser.email || '';
     const googlePhoto = googleUser.photoURL || '';
-    const location = Store.get('custLocation', '');
+    const areaName = Store.get('custAreaName', '');
+    const location = areaName || Store.get('custLocation', '');
     const pincode = Store.get('custPincode', '');
     const photo = Store.get('custPhoto', null) || googlePhoto;
     const rating = 4.8;
@@ -41,7 +42,7 @@ Router.register('customer-profile', {
           </div>
         </div>
         ${item.toggle
-          ? `<button class="toggle on" onclick="event.stopPropagation();this.classList.toggle('on')"><div class="toggle-knob"></div></button>`
+          ? `<button class="toggle ${Store.get('notifEnabled', true) ? 'on' : ''}" id="notifToggle" onclick="event.stopPropagation();window.toggleNotif()"><div class="toggle-knob"></div></button>`
           : `<span class="menu-chevron ${item.danger ? 'menu-chevron-danger' : ''}">›</span>`
         }
       </div>
@@ -134,10 +135,35 @@ Router.register('customer-profile', {
           input.click();
         };
 
+        // ─── Notification Toggle ───────────────────────────
+        window.toggleNotif = async () => {
+          const toggle = document.getElementById('notifToggle');
+          const currentlyOn = toggle.classList.contains('on');
+          if (currentlyOn) {
+            // Turn off notifications
+            toggle.classList.remove('on');
+            Store.set('notifEnabled', false);
+            // Try to remove FCM token from user record
+            try {
+              const phone = Store.get('custPhone', '');
+              if (phone) {
+                await firebase.database().ref('users/' + phone).update({ webPushToken: null });
+              }
+            } catch (e) {}
+            showAlert('🔔 Notifications Off', 'You will no longer receive push notifications.');
+          } else {
+            // Turn on notifications
+            toggle.classList.add('on');
+            Store.set('notifEnabled', true);
+            PushNotifications.init();
+            showAlert('🔔 Notifications On', 'You will now receive order updates and alerts.');
+          }
+        };
+
         window.custMenuAction = (label) => {
           const actions = {
             'Help & Support': () => { window.location.href = 'mailto:dotor.india@gmail.com'; },
-            'My Orders': () => showAlert('Orders', `Check your orders on the home screen.`),
+            'My Orders': () => Router.navigate('orders'),
             'Safety': () => showAlert('Safety', 'Your safety is our priority!'),
             'Refer and Earn': () => showAlert('Refer', 'Share DoToR and earn ₹50!'),
             'My Rewards': () => showAlert('Rewards', 'Coming Soon!'),
@@ -165,6 +191,7 @@ Router.register('customer-profile', {
           delete window.custPickPhoto;
           delete window.custMenuAction;
           delete window.custLogout;
+          delete window.toggleNotif;
         };
       }
     };

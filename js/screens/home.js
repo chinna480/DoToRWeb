@@ -54,7 +54,8 @@ const WHY_DOTOR = [
 Router.register('home', {
   render() {
     const name = Store.get('custName', 'Customer');
-    const loc = Store.get('custLocation', '');
+    const areaName = Store.get('custAreaName', '');
+    const loc = areaName || Store.get('custLocation', '');
     const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || '👤';
     const whyHtml = WHY_DOTOR.map(w => `
       <div class="why-item">
@@ -101,8 +102,8 @@ Router.register('home', {
             </div>
             <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
               <button class="header-icon-btn" onclick="window.toggleSearch()" aria-label="Search">🔍</button>
-              <button class="header-icon-btn" onclick="showAlert('🔔 Notifications', 'No new notifications')" aria-label="Notifications">
-                🔔<span class="notif-badge"></span>
+              <button class="header-icon-btn" onclick="Router.navigate('notifications')" aria-label="Notifications" id="notifBellBtn">
+                🔔<span class="notif-badge" id="notifBadge"></span>
               </button>
               <div class="home-avatar" onclick="Router.navigate('customer-profile')" style="width:40px;height:40px;border-radius:20px;font-size:13px;font-weight:800;color:var(--white)">
                 ${initials}
@@ -141,7 +142,7 @@ Router.register('home', {
 
             <!-- Active Booking Slide (carousel-style, above the promo carousel) -->
             <div id="activeBookingContainer" style="display:none;margin:0 15px 5px;border-radius:var(--radius);overflow:hidden">
-              <div class="carousel-slide carousel-slide-gradient" id="activeBookingSlide" onclick="Router.navigate('tracking')" style="cursor:pointer;min-height:120px">
+              <div class="carousel-slide carousel-slide-green" id="activeBookingSlide" onclick="Router.navigate('tracking')" style="cursor:pointer;min-height:120px">
                 <div class="carousel-slide-inner" style="max-width:100%;width:100%">
                   <div style="display:flex;align-items:center;gap:8px;width:100%">
                     <span class="active-slide-badge" id="activeBookingBadge">📦 Active</span>
@@ -697,18 +698,37 @@ Router.register('home', {
           getCurrentPositionOnce().then(pos => {
             if (pos && pos.lat) {
               bookingData.location = `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}`;
-              info.textContent = `📍 Location set: ${bookingData.location}`;
-              info.style.color = 'var(--primary)';
               Store.set('custLocation', bookingData.location);
-              // Try to fill address from coordinates using reverse geocode
+              info.textContent = `⏳ Getting area name...`;
+              info.style.color = 'var(--text-secondary)';
+
+              // Single Nominatim call: get area name AND fill address
               fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${pos.lat}&lon=${pos.lng}`)
                 .then(r => r.json())
                 .then(data => {
                   if (data && data.display_name) {
+                    // Fill the address field with full address
                     const addrEl = document.getElementById('wizardAddress');
                     if (addrEl && !addrEl.value) addrEl.value = data.display_name;
+
+                    // Extract and store a short area/city name for display
+                    const parts = data.display_name.split(',').map(s => s.trim()).filter(Boolean);
+                    let startIdx = 0;
+                    if (parts.length > 3 && /^\d+/.test(parts[0])) startIdx = 1;
+                    const shortName = parts.slice(startIdx, startIdx + 3).join(', ');
+                    Store.set('custAreaName', shortName);
+                    Store.set('_geoCache', { lat: pos.lat, lng: pos.lng, name: shortName });
+                    info.textContent = `📍 ${shortName}`;
+                  } else {
+                    info.textContent = `📍 ${bookingData.location}`;
                   }
-                }).catch(() => {});
+                })
+                .catch(() => {
+                  info.textContent = `📍 ${bookingData.location}`;
+                })
+                .finally(() => {
+                  info.style.color = 'var(--primary)';
+                });
             } else {
               info.textContent = '❌ Could not get location. Please enter address manually.';
               info.style.color = 'var(--danger)';
@@ -934,16 +954,30 @@ Router.register('home', {
 
         window.confirmMapLocation = () => {
           if (!window._mapPickerLat) { showAlert('Select Location', 'Please tap on the map first'); return; }
-          bookingData.location = `${window._mapPickerLat.toFixed(4)}, ${window._mapPickerLng.toFixed(4)}`;
+          const lat = window._mapPickerLat;
+          const lng = window._mapPickerLng;
+          bookingData.location = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
           if (window._mapPickerAddress) {
             const addrEl = document.getElementById('wizardAddress');
             if (addrEl && !addrEl.value.trim()) addrEl.value = window._mapPickerAddress;
           }
           const info = document.getElementById('wizardLocationInfo');
           info.style.display = 'block';
-          info.textContent = `📍 Location set from map: ${bookingData.location}`;
-          info.style.color = 'var(--primary)';
           Store.set('custLocation', bookingData.location);
+
+          // Parse short area name from the already-available address (no extra API call)
+          if (window._mapPickerAddress) {
+            const parts = window._mapPickerAddress.split(',').map(s => s.trim()).filter(Boolean);
+            let startIdx = 0;
+            if (parts.length > 3 && /^\d+/.test(parts[0])) startIdx = 1;
+            const shortName = parts.slice(startIdx, startIdx + 3).join(', ');
+            Store.set('custAreaName', shortName);
+            Store.set('_geoCache', { lat, lng, name: shortName });
+            info.textContent = `📍 ${shortName}`;
+          } else {
+            info.textContent = `📍 ${bookingData.location}`;
+          }
+          info.style.color = 'var(--primary)';
           window.closeMapPicker();
         };
 
@@ -953,6 +987,57 @@ Router.register('home', {
           if (window._mapPickerMap) { window._mapPickerMap.remove(); window._mapPickerMap = null; }
           if (window._mapSearchTimeout) { clearTimeout(window._mapSearchTimeout); window._mapSearchTimeout = null; }
         };
+
+        // ─── Non-blocking Upload Toast ────────────────────────
+        function createUploadToast(count) {
+          // Remove any existing upload toast first
+          const existing = document.getElementById('uploadToast');
+          if (existing) existing.remove();
+
+          const toast = document.createElement('div');
+          toast.id = 'uploadToast';
+          toast.style.cssText = `
+            position:fixed;top:60px;left:16px;right:16px;z-index:9999;
+            background:var(--glass-bg);backdrop-filter:var(--glass-blur-strong);
+            border:1px solid var(--glass-border);border-radius:16px;
+            padding:16px 18px;box-shadow:var(--clay-lg);
+            display:flex;align-items:center;gap:14px;
+            animation:clayFadeIn 0.25s ease;
+          `;
+          toast.innerHTML = `
+            <div style="flex-shrink:0;width:40px;height:40px;border-radius:20px;background:var(--primary-light);display:flex;align-items:center;justify-content:center;font-size:20px">📷</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:800;color:var(--text)">⏳ Uploading Photos</div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">Uploading ${count} photo(s) &mdash; please wait...</div>
+              <div style="margin-top:8px;height:4px;border-radius:2px;background:var(--clay-dark);overflow:hidden">
+                <div id="uploadToastBar" style="height:100%;width:0;border-radius:2px;background:var(--primary);transition:width 0.4s ease"></div>
+              </div>
+            </div>
+          `;
+          document.body.appendChild(toast);
+
+          // Animate progress bar to show activity
+          const bar = document.getElementById('uploadToastBar');
+          if (bar) {
+            setTimeout(() => { bar.style.width = '60%'; }, 100);
+            setTimeout(() => { bar.style.width = '80%'; }, 1000);
+          }
+
+          return toast;
+        }
+
+        function dismissUploadToast(toast) {
+          const bar = document.getElementById('uploadToastBar');
+          if (bar) bar.style.width = '100%';
+          setTimeout(() => {
+            if (toast && toast.parentNode) {
+              toast.style.opacity = '0';
+              toast.style.transform = 'translateY(-20px)';
+              toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+              setTimeout(() => { if (toast.parentNode) toast.remove(); }, 350);
+            }
+          }, 400);
+        }
 
         // ─── Schedule Mode (Step 7) ───────────────────────
         function initWizardSchedulePicker() {
@@ -1094,7 +1179,7 @@ Router.register('home', {
             ['Photos', wizardPhotos.length ? `${wizardPhotos.length} photo(s)` : 'None'],
             ['⏰ Schedule', scheduleDisplay],
             ['Address', d.address || '—'],
-            ['Location', d.location || '—'],
+            ['Location', Store.get('custAreaName', '') || d.location || '—'],
             ['Pincode', d.pincode || '—'],
 
           ];
@@ -1170,41 +1255,50 @@ Router.register('home', {
             // ─── Upload photos to Firebase Storage FIRST (before saving order) ───
             let photoUrls = [];
             if (wizardPhotos.length > 0 && firebase.storage) {
-              // Generate a temporary order ID for the Storage path
-              const tempRef = firebase.database().ref('orders').push();
-              orderId = tempRef.key;
+              // Show a non-blocking upload toast banner instead of a blocking modal alert
+              const uploadToast = createUploadToast(wizardPhotos.length);
 
-              // Show upload progress to the user
-              showAlert('⏳ Uploading Photos',
-                `Uploading ${wizardPhotos.length} photo(s) to your order...\n\nPlease wait — this may take a moment for large images.`);
+              try {
+                // Generate a temporary order ID for the Storage path
+                const tempRef = firebase.database().ref('orders').push();
+                orderId = tempRef.key;
 
-              const storage = firebase.storage();
-              const uploadPromises = wizardPhotos.map((dataUrl, idx) => {
-                // Convert base64 data URL to a Blob for upload
-                const byteString = atob(dataUrl.split(',')[1]);
-                const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
-                const ab = new ArrayBuffer(byteString.length);
-                const ia = new Uint8Array(ab);
-                for (let i = 0; i < byteString.length; i++) {
-                  ia[i] = byteString.charCodeAt(i);
+                const storage = firebase.storage();
+                const uploadPromises = wizardPhotos.map((dataUrl, idx) => {
+                  // Convert base64 data URL to a Blob for upload
+                  const byteString = atob(dataUrl.split(',')[1]);
+                  const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+                  const ab = new ArrayBuffer(byteString.length);
+                  const ia = new Uint8Array(ab);
+                  for (let i = 0; i < byteString.length; i++) {
+                    ia[i] = byteString.charCodeAt(i);
+                  }
+                  const blob = new Blob([ab], { type: mimeString });
+
+                  // Upload to: orders/{orderId}/photos/photo_{idx}
+                  const photoPath = `orders/${orderId}/photos/photo_${idx}`;
+                  const ref = storage.ref(photoPath);
+                  return ref.put(blob).then(snapshot => snapshot.ref.getDownloadURL());
+                });
+
+                // Use allSettled so one bad upload doesn't break the entire booking
+                const results = await Promise.allSettled(uploadPromises);
+                photoUrls = results
+                  .filter(r => r.status === 'fulfilled')
+                  .map(r => r.value);
+                const failed = results.filter(r => r.status === 'rejected').length;
+                if (failed > 0) {
+                  console.warn(`${failed} photo(s) failed to upload to Firebase Storage`);
                 }
-                const blob = new Blob([ab], { type: mimeString });
-
-                // Upload to: orders/{orderId}/photos/photo_{idx}
-                const photoPath = `orders/${orderId}/photos/photo_${idx}`;
-                const ref = storage.ref(photoPath);
-                return ref.put(blob).then(snapshot => snapshot.ref.getDownloadURL());
-              });
-
-              // Use allSettled so one bad upload doesn't break the entire booking
-              const results = await Promise.allSettled(uploadPromises);
-              photoUrls = results
-                .filter(r => r.status === 'fulfilled')
-                .map(r => r.value);
-              const failed = results.filter(r => r.status === 'rejected').length;
-              if (failed > 0) {
-                console.warn(`${failed} photo(s) failed to upload to Firebase Storage`);
+              } catch (uploadError) {
+                console.error('Photo upload error:', uploadError);
+                // Don't block the booking — proceed without photos
+              } finally {
+                // Auto-dismiss the upload toast
+                dismissUploadToast(uploadToast);
               }
+            } else if (wizardPhotos.length > 0) {
+              console.warn('Firebase Storage is not initialized — skipping photo upload');
             }
 
             // Build the complete order object with photo URLs
@@ -1237,6 +1331,24 @@ Router.register('home', {
 
             Store.set('lastOrderId', orderId);
             const detail = `${svc.icon} ${svc.name}${brand ? ' • ' + brand : ''}${model ? ' • ' + model : ''}`;
+
+            // Show push notification to customer (Firebase history + browser)
+            PushNotifications.writeToCustomer(
+              phone,
+              '✅ Order Placed!',
+              `Your ${svc.name} booking request has been received`,
+              'order',
+              { screen: 'orders', orderId }
+            );
+
+            // Also notify technicians about the new order
+            PushNotifications.writeToTechnicians(
+              '🆕 New Order Received',
+              `${name} • ${svc.name}${brand ? ' • ' + brand : ''} • ₹${pincode || '?'}`,
+              'new_order',
+              { orderId, customerPhone: phone, service: svc.name, location: locStr }
+            );
+
             showAlert('✅ Booking Confirmed!', `${detail}\n\nTrack your order?`, [
               { text: 'Track Now', onPress: () => Router.navigate('tracking') },
               { text: '💬 Chat', onPress: () => Router.navigate('chat', { orderId, role: 'cust', customerName: name }) },
@@ -1288,18 +1400,48 @@ Router.register('home', {
           });
         };
 
+        // ─── Unread Notification Badge ─────────────────────
+        function initNotifBadge() {
+          const myPhone = Store.get('custPhone', '');
+          if (!myPhone) return;
+          const badge = document.getElementById('notifBadge');
+          if (!badge) return;
+          const ref = firebase.database().ref('notifications/' + myPhone);
+          const onCount = (snap) => {
+            if (!snap.exists()) { badge.style.display = 'none'; return; }
+            let count = 0;
+            snap.forEach(child => { if (!child.val().read) count++; });
+            if (count > 0) {
+              badge.textContent = count > 9 ? '9+' : count;
+              badge.style.display = 'inline-flex';
+            } else {
+              badge.style.display = 'none';
+            }
+          };
+          ref.on('value', onCount);
+          window._notifBadgeCleanup = () => ref.off('value', onCount);
+        }
+        initNotifBadge();
+
         // ─── GPS & Location ───────────────────────────────
-        startGPS((lat, lng) => {
+        startGPS(async (lat, lng) => {
           const locStr = lat ? `${lat.toFixed(4)}, ${lng.toFixed(4)}` : '';
           const locEl = document.getElementById('homeLoc');
-          if (locEl) locEl.textContent = '📍 ' + locStr;
-          Store.set('custLocation', locStr);
+          if (locStr) {
+            Store.set('custLocation', locStr);
+            // Reverse geocode to display area/city name
+            const areaName = await reverseGeocodeForDisplay(lat, lng);
+            if (locEl) locEl.textContent = '📍 ' + (areaName || locStr);
+          } else if (locEl) {
+            locEl.textContent = '📍 Set location...';
+          }
         });
 
         return () => {
           stopGPS();
           stopCarouselAuto();
           if (window._activeBookingCleanup) { window._activeBookingCleanup(); delete window._activeBookingCleanup; }
+          if (window._notifBadgeCleanup) { window._notifBadgeCleanup(); delete window._notifBadgeCleanup; }
           delete window.toggleSearch;
           delete window.filterHome;
           delete window.callTechHome;
