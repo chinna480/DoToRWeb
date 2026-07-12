@@ -39,6 +39,25 @@ Router.register('tracking', {
               <div class="info-row"><span class="info-label">📍 Location</span><span class="info-value">${location}</span></div>
             </div>
 
+            <!-- Technician Info Card (hidden until assigned) -->
+            <div id="techInfoCard" class="tech-info-card glass" style="display:none;margin-bottom:12px">
+              <div class="card-title">👨‍🔧 YOUR TECHNICIAN</div>
+              <div class="tech-info-row">
+                <div class="tech-photo-wrap" id="techPhotoWrap">
+                  <img id="techPhotoImg" class="tech-photo" src="" alt="Technician" style="display:none" />
+                  <div id="techPhotoPlaceholder" class="tech-photo-placeholder">🔧</div>
+                </div>
+                <div class="tech-info-details">
+                  <div class="tech-info-name" id="techNameDisplay">—</div>
+                  <div class="tech-info-experience" id="techExperienceDisplay"></div>
+                  <div class="tech-info-rating">⭐ 4.8 • Verified</div>
+                </div>
+                <div class="tech-info-right">
+                  <button class="btn btn-success btn-sm" onclick="window.trackCallTech()">📞 Call</button>
+                </div>
+              </div>
+            </div>
+
             <!-- Progress Stepper Glass Card -->
             <div class="glass" style="padding:18px;margin-bottom:12px">
               <div class="card-title">📦 ORDER STATUS</div>
@@ -88,12 +107,50 @@ Router.register('tracking', {
           map.setView([lat, lng], map.getZoom());
         });
 
+        // Helper to populate technician info card (only for this customer's order)
+        function updateTechCard(order) {
+          const card = document.getElementById('techInfoCard');
+          if (!card) return;
+          // Only show tech card for this customer's own order
+          if (order.customerPhone !== Store.get('custPhone', '')) return;
+          if (order.techName) {
+            card.style.display = 'block';
+            document.getElementById('techNameDisplay').textContent = order.techName;
+            
+            // Show experience if available
+            const expEl = document.getElementById('techExperienceDisplay');
+            if (order.techExperience) {
+              expEl.textContent = `🎓 ${order.techExperience} experience`;
+            } else {
+              expEl.textContent = '✅ Verified Technician';
+            }
+
+            // Show photo if available, otherwise show placeholder
+            const img = document.getElementById('techPhotoImg');
+            const placeholder = document.getElementById('techPhotoPlaceholder');
+            if (order.techPhoto) {
+              img.src = order.techPhoto;
+              img.style.display = 'block';
+              placeholder.style.display = 'none';
+            } else {
+              img.style.display = 'none';
+              placeholder.style.display = 'flex';
+            }
+          } else {
+            card.style.display = 'none';
+          }
+        }
+
         // Listen for order updates
         const ordersRef = firebase.database().ref('orders');
         const onOrders = (snap) => {
           if (!snap.exists()) return;
           snap.forEach(child => {
             const order = child.val();
+            
+            // Update technician info card whenever any order changes
+            updateTechCard(order);
+
             if (order.status === 'assigned') {
               document.getElementById('stepAssigned').className = 'dot dot-done';
             }
