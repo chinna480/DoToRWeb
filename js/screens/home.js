@@ -40,6 +40,7 @@ const BENTO_SERVICES = [
   { id: 'ac',       icon: '❄️', name: 'AC Service & Repair',  tint: 'teal' },
   { id: 'washing',  icon: '🧺', name: 'Washing Machine',      tint: 'yellow' },
   { id: 'electric', icon: '🔌', name: 'Electrical Services',   tint: 'green' },
+  { id: 'plumbing', icon: '🚰', name: 'Plumbing Services',     tint: 'blue' },
   { id: 'more',     icon: '➕', name: 'More',                  tint: 'red' },
 ];
 
@@ -138,6 +139,24 @@ Router.register('home', {
               ${bentoTilesHtml}
             </div>
 
+            <!-- Active Booking Slide (carousel-style, above the promo carousel) -->
+            <div id="activeBookingContainer" style="display:none;margin:0 15px 5px;border-radius:var(--radius);overflow:hidden">
+              <div class="carousel-slide carousel-slide-gradient" id="activeBookingSlide" onclick="Router.navigate('tracking')" style="cursor:pointer;min-height:120px">
+                <div class="carousel-slide-inner" style="max-width:100%;width:100%">
+                  <div style="display:flex;align-items:center;gap:8px;width:100%">
+                    <span class="active-slide-badge" id="activeBookingBadge">📦 Active</span>
+                    <span class="active-slide-order" id="activeBookingOrderId">#DR----</span>
+                  </div>
+                  <div class="active-slide-title" id="activeBookingTitle">📱 Device Repair</div>
+                  <div class="active-slide-tech" id="activeBookingTechName">👤 Technician assigned</div>
+                  <div class="active-slide-actions">
+                    <button class="active-slide-btn" onclick="event.stopPropagation();window.callTechHome()">📞 Call</button>
+                    <button class="active-slide-btn" onclick="event.stopPropagation();window.openActiveBookingChat()">💬 Chat</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Services Carousel (all 12 services auto-rotating) -->
             <div class="carousel-wrapper" id="carouselWrapper">
               <div class="glass carousel-container">
@@ -150,32 +169,6 @@ Router.register('home', {
                 <button class="carousel-arrow" id="carouselNext" onclick="window.carouselNext()">›</button>
               </div>
               <div class="carousel-dots" id="carouselDots"></div>
-            </div>
-
-            <!-- Active Booking Card -->
-            <div id="activeBookingContainer" style="display:none">
-              <div class="active-booking">
-                <div class="active-booking-header">
-                  <span class="active-booking-label">📦 Active Booking</span>
-                  <span class="active-booking-status" id="activeBookingStatus">In Progress</span>
-                </div>
-                <div class="active-booking-title" id="activeBookingTitle">📱 Device Repair</div>
-                <div class="active-booking-sub" id="activeBookingSub">🛵 Order in progress</div>
-                <div class="active-booking-progress">
-                  <div class="progress-bar">
-                    <div class="progress-bar-fill" id="activeBookingProgress" style="width:60%"></div>
-                  </div>
-                  <div class="progress-label">
-                    <span>✅ Booked</span>
-                    <span id="activeBookingStep">🚗 En Route</span>
-                    <span>✅ Done</span>
-                  </div>
-                </div>
-                <div class="active-booking-actions">
-                  <button class="btn btn-success btn-sm" onclick="window.callTechHome()">📞 Call</button>
-                  <button class="btn btn-primary btn-sm" onclick="Router.navigate('tracking')">🛵 Track Order</button>
-                </div>
-              </div>
             </div>
 
             <div class="section-title">⭐ Why DoToR?</div>
@@ -414,12 +407,13 @@ Router.register('home', {
         window.carouselGoTo = (i) => { carouselIndex = i; updateCarousel(); };
         initCarousel();
 
-        // ─── Active Booking Card ───────────────────────────
+        // ─── Active Booking Slide (carousel-style) ────────────
         function initActiveBooking() {
           const container = document.getElementById('activeBookingContainer');
           const orderId = Store.get('lastOrderId', '');
           if (!container || !orderId) return;
           const ordersRef = firebase.database().ref('orders/' + orderId);
+          window._activeOrderId = orderId;
           const onOrder = (snap) => {
             if (!snap.exists()) { container.style.display = 'none'; return; }
             const order = snap.val();
@@ -427,24 +421,40 @@ Router.register('home', {
             if (!activeStatuses.includes(order.status)) { container.style.display = 'none'; return; }
             container.style.display = 'block';
             const shortId = orderId.slice(-5).toUpperCase();
+            document.getElementById('activeBookingOrderId').textContent = `#DR${shortId}`;
             document.getElementById('activeBookingTitle').textContent =
-              `📱 ${order.service || 'Service'}${order.brand ? ' • ' + order.brand : ''}`;
-            const statusMap = {
-              'pending': { label: '⏳ Pending', step: '📋 Confirming', width: '25%' },
-              'accepted': { label: '🛵 In Progress', step: '🔧 Repair in progress', width: '60%' },
-              'assigned': { label: '🛵 In Progress', step: '🔧 Repair in progress', width: '75%' },
+              `${order.icon || '📱'} ${order.service || 'Service'}${order.brand ? ' • ' + order.brand : ''}`;
+            const techName = order.techName || '';
+            const techExp = order.techExperience || '';
+            const techEl = document.getElementById('activeBookingTechName');
+            if (techName) {
+              techEl.textContent = `👤 ${techName}${techExp ? ' • ' + techExp : ''}`;
+            } else {
+              const statusTexts = {
+                'pending': '⏳ Finding a technician...',
+                'accepted': '🛵 Technician on the way',
+                'assigned': '🔧 Technician assigned',
+              };
+              techEl.textContent = statusTexts[order.status] || '⏳ Processing order...';
+            }
+            const badgeEl = document.getElementById('activeBookingBadge');
+            const badgeTexts = {
+              'pending': '⏳ Pending',
+              'accepted': '🛵 On the Way',
+              'assigned': '🔧 In Progress',
             };
-            const info = statusMap[order.status] || { label: '⏳ Pending', step: '📋 Processing', width: '20%' };
-            document.getElementById('activeBookingStatus').textContent = `#DR${shortId}`;
-            document.getElementById('activeBookingSub').textContent =
-              `🛵 ${info.step}${order.location ? ' • 📍 ' + order.location : ''}`;
-            document.getElementById('activeBookingProgress').style.width = info.width;
-            document.getElementById('activeBookingStep').textContent = info.step;
+            badgeEl.textContent = badgeTexts[order.status] || '📦 Active';
           };
           ordersRef.on('value', onOrder);
           window._activeBookingCleanup = () => ordersRef.off('value', onOrder);
         }
         initActiveBooking();
+
+        window.openActiveBookingChat = () => {
+          const orderId = window._activeOrderId || Store.get('lastOrderId', '');
+          const name = Store.get('custName', 'Customer');
+          if (orderId) Router.navigate('chat', { orderId, role: 'cust', customerName: name });
+        };
 
         // ─── Booking Wizard ──────────────────────────────
         let bookingData = {};
@@ -1318,6 +1328,8 @@ Router.register('home', {
           delete window.selectScheduleMode;
           delete window.wizardSelectDate;
           delete window.wizardSelectSlot;
+          delete window.openActiveBookingChat;
+          delete window._activeOrderId;
         };
       }
     };
